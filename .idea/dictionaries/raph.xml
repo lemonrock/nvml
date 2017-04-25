@@ -1,0 +1,27 @@
+<component name="ProjectDictionaryState">
+  <dictionary name="raph">
+    <words>
+      <w>appendv</w>
+      <w>bindgen</w>
+      <w>chunksize</w>
+      <w>edeadlk</w>
+      <w>einval</w>
+      <w>errormsg</w>
+      <w>funcs</w>
+      <w>iovcnt</w>
+      <w>isystem</w>
+      <w>mlogpool</w>
+      <w>musl</w>
+      <w>nbyte</w>
+      <w>nvml</w>
+      <w>pmemlog</w>
+      <w>poolsize</w>
+      <w>pthread</w>
+      <w>rwlock</w>
+      <w>strdup</w>
+      <w>werror</w>
+      <w>whitelist</w>
+      <w>wrlock</w>
+    </words>
+  </dictionary>
+</component>

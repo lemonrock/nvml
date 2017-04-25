@@ -1,0 +1,3 @@
+[submodule "workspace/nvml-sys"]
+	path = workspace/nvml-sys
+	url = https://github.com/lemonrock/nvml-sys.git

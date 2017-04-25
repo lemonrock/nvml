@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/nvml-sys" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/nvml-sys/.cargo" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/nvml-sys/lib/nvml" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/nvml-sys/tools/bindgen-wrapper" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/nvml/.cargo" vcs="Git" />
+  </component>
+</project>
