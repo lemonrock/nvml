@@ -10,18 +10,22 @@ pub trait PersistentMemoryLogPoolPathExt
 	
 	#[inline(always)]
 	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, GenericError>;
+	
+	/// poolSize may be zero OR a value >= PMEMLOG_MIN_POOL
+	#[inline(always)]
+	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, GenericError>;
 }
 
 macro_rules! usePath
 {
-	($self: ident, $function: path) =>
+	($self: ident, $function: path$(,$argument: expr)*) =>
 	{
 		{
 			let osPath = $self.as_os_str();
 			let bytes = osPath.as_bytes();
 			let pointer = bytes.as_ptr() as *const c_char;
 
-			unsafe { $function(pointer) }
+			unsafe { $function(pointer$(,$argument)*) }
 		}
 	}
 }
@@ -76,6 +80,21 @@ impl PersistentMemoryLogPoolPathExt for Path
 		if unlikely(result.is_null())
 		{
 			handleError!(pmemlog_open)
+		}
+		else
+		{
+			Ok(result)
+		}
+	}
+	
+	#[inline(always)]
+	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, GenericError>
+	{
+		let result = usePath!(self, pmemlog_create, poolSize, mode);
+		
+		if unlikely(result.is_null())
+		{
+			handleError!(pmemlog_create)
 		}
 		else
 		{

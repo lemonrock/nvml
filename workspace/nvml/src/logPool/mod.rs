@@ -7,6 +7,8 @@ use ::libc::c_char;
 use ::libc::c_int;
 use ::libc::c_void;
 use ::libc::iovec;
+use ::libc::mode_t;
+use ::libc::size_t;
 pub use ::nvml_sys::*;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
@@ -24,7 +26,8 @@ use ::syscall_alt::constants::E;
 
 include!("AppendError.rs");
 include!("GenericError.rs");
-include!("lastErrorMessageOnThisThread.rs");
+include!("initialiseMemoryFunctions.rs");
 include!("LastErrorMessageOnThisThreadIsInvalidError.rs");
 include!("PersistentMemoryLogPoolPathExt.rs");
 include!("PMEMlogpoolEx.rs");
+include!("WalkCallbackResult.rs");

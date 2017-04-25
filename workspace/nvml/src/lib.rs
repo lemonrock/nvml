@@ -2,7 +2,10 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+#![feature(associated_consts)]
 #![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
+
 
 extern crate errno;
 extern crate libc;

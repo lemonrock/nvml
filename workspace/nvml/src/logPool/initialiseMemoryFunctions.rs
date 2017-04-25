@@ -2,3 +2,23 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+pub fn initialiseMemoryFunctions
+(
+	malloc: extern "C" fn(size: size_t) -> *mut c_void,
+	free: unsafe extern "C" fn(ptr: *mut c_void),
+	realloc: unsafe extern "C" fn(ptr: *mut c_void, size: size_t) -> *mut c_void,
+	strdup: unsafe extern "C" fn(s: *const c_char) -> *mut c_char
+)
+{
+	unsafe { pmemlog_set_funcs(Some(malloc), Some(free), Some(realloc), Some(strdup)) }
+}
+
+/*
+char *__strdup(const char *s)
+{
+	size_t l = strlen(s);
+	char *d = malloc(l+1);
+	if (!d) return NULL;
+	return memcpy(d, s, l+1);
+}
+*/

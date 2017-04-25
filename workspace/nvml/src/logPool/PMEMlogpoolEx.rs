@@ -4,11 +4,31 @@
 
 pub trait PMEMlogpoolEx
 {
+	const StopWalking: WalkCallbackResult = 0;
+	
+	const ContinueWalking: WalkCallbackResult = 1;
+	
+	#[inline(always)]
+	fn close(self);
+	
+	#[inline(always)]
+	fn amountOfUsableSpaceInTheLogPoolInBytes(self) -> usize;
+	
 	#[inline(always)]
 	fn appendAtomically(self, buffer: *const c_void, count: usize) -> Result<(), AppendError>;
 	
 	#[inline(always)]
 	fn appendVectorAtomically(self, buffer: *const iovec, count: u31) -> Result<(), AppendError>;
+	
+	#[inline(always)]
+	fn tell(self) -> i64;
+	
+	#[inline(always)]
+	fn rewind(self);
+	
+	/// chunkSize may be zero, in which case callback is called just once
+	#[inline(always)]
+	fn walk(self, chunkSize: usize, callback: unsafe extern "C" fn(dataInLog: *const c_void, length: usize, callbackArgument: *mut c_void) -> WalkCallbackResult, callbackArgument: *mut c_void);
 }
 
 macro_rules! debug_assert_self_is_not_null
@@ -29,6 +49,18 @@ macro_rules! debug_assert_buffer_is_not_null
 
 impl PMEMlogpoolEx for *mut PMEMlogpool
 {
+	#[inline(always)]
+	fn close(self)
+	{
+		unsafe { pmemlog_close(self) }
+	}
+	
+	#[inline(always)]
+	fn amountOfUsableSpaceInTheLogPoolInBytes(self) -> usize
+	{
+		unsafe { pmemlog_nbyte(self) }
+	}
+	
 	#[inline(always)]
 	fn appendAtomically(self, buffer: *const c_void, count: usize) -> Result<(), AppendError>
 	{
@@ -91,5 +123,29 @@ impl PMEMlogpoolEx for *mut PMEMlogpool
 				unexpected @ _ => panic!("Unexpected error number '{}'", unexpected),
 			}
 		}
+	}
+	
+	#[inline(always)]
+	fn tell(self) -> i64
+	{
+		debug_assert_self_is_not_null!(self);
+		
+		unsafe { pmemlog_tell(self) }
+	}
+	
+	#[inline(always)]
+	fn rewind(self)
+	{
+		debug_assert_self_is_not_null!(self);
+		
+		unsafe { pmemlog_rewind(self) }
+	}
+	
+	#[inline(always)]
+	fn walk(self, chunkSize: usize, processChunkCallback: unsafe extern "C" fn(dataInLog: *const c_void, length: usize, callbackArgument: *mut c_void) -> WalkCallbackResult, callbackArgument: *mut c_void)
+	{
+		debug_assert_self_is_not_null!(self);
+		
+		unsafe { pmemlog_walk(self, chunkSize, Some(processChunkCallback), callbackArgument) }
 	}
 }
