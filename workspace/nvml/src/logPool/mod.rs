@@ -19,8 +19,9 @@ use ::std::ffi::CString;
 use ::std::fmt;
 use ::std::fmt::Display;
 use ::std::fmt::Formatter;
-use ::std::path::Path;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
+use ::std::path::Path;
+use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
 
 
@@ -28,6 +29,8 @@ include!("AppendError.rs");
 include!("GenericError.rs");
 include!("initialiseMemoryFunctions.rs");
 include!("LastErrorMessageOnThisThreadIsInvalidError.rs");
+include!("LogPool.rs");
+include!("LogPoolDropWrapper.rs");
 include!("PersistentMemoryLogPoolPathExt.rs");
 include!("PMEMlogpoolEx.rs");
 include!("WalkCallbackResult.rs");
