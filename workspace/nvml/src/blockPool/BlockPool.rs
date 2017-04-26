@@ -40,4 +40,40 @@ impl BlockPool
 	{
 		poolSetFilePath.createPersistentMemoryBlockPool(blockSize, poolSize, mode).map(Self::fromHandle)
 	}
+	
+	#[inline(always)]
+	pub fn blockSize(self) -> usize
+	{
+		self.0.blockSize()
+	}
+	
+	#[inline(always)]
+	pub fn numberOfBlocksAvailableInBlockPool(self) -> usize
+	{
+		self.0.numberOfBlocksAvailableInBlockPool()
+	}
+	
+	#[inline(always)]
+	pub fn read(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
+	{
+		self.0.read(to, zeroBasedBlockIndex)
+	}
+	
+	#[inline(always)]
+	pub fn write(self, from: *const c_void, zeroBasedBlockIndex: usize)
+	{
+		self.0.write(from, zeroBasedBlockIndex)
+	}
+	
+	#[inline(always)]
+	pub fn setZero(self, zeroBasedBlockIndex: usize)
+	{
+		self.0.setZero(zeroBasedBlockIndex)
+	}
+	
+	#[inline(always)]
+	pub fn setError(self, zeroBasedBlockIndex: usize)
+	{
+		self.0.setError(zeroBasedBlockIndex)
+	}
 }

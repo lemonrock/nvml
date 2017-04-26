@@ -18,6 +18,12 @@ extern crate rust_extra;
 extern crate syscall_alt;
 
 
+use ::libc::c_char;
+use ::libc::c_void;
+use ::libc::size_t;
+
+
+include!("initialiseMemoryFunctions.rs");
 include!("usePath.rs");
 
 

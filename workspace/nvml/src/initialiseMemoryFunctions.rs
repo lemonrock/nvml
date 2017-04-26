@@ -2,24 +2,24 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-use ::errno::errno;
-use ::errors::GenericError;
-use ::libc::c_char;
-use ::libc::c_longlong;
-use ::libc::c_void;
-use ::libc::mode_t;
-use ::libc::size_t;
-use ::nvml_sys::*;
-use ::rust_extra::likely;
-use ::rust_extra::unlikely;
-#[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
-use ::std::path::Path;
-use ::std::sync::Arc;
-use ::syscall_alt::constants::E;
+pub fn initialiseMemoryFunctions
+(
+	malloc: extern "C" fn(size: size_t) -> *mut c_void,
+	free: unsafe extern "C" fn(ptr: *mut c_void),
+	realloc: unsafe extern "C" fn(ptr: *mut c_void, size: size_t) -> *mut c_void,
+	strdup: unsafe extern "C" fn(s: *const c_char) -> *mut c_char
+)
+{
+	::blockPool::initialiseMemoryFunctions(malloc, free, realloc, strdup);
+	::logPool::initialiseMemoryFunctions(malloc, free, realloc, strdup);
+}
 
-
-include!("BlockPool.rs");
-include!("BlockPoolDropWrapper.rs");
-include!("initialiseMemoryFunctions.rs");
-include!("PersistentMemoryBlockPoolPathExt.rs");
-include!("PMEMblkpoolEx.rs");
+/*
+char *__strdup(const char *s)
+{
+	size_t l = strlen(s);
+	char *d = malloc(l+1);
+	if (!d) return NULL;
+	return memcpy(d, s, l+1);
+}
+*/
