@@ -10,6 +10,7 @@ use ::std::ffi::CString;
 use ::std::fmt;
 use ::std::fmt::Display;
 use ::std::fmt::Formatter;
+use ::syscall_alt::constants::E;
 
 
 include!("ErrorFunction.rs");

@@ -21,7 +21,7 @@ extern crate syscall_alt;
 include!("usePath.rs");
 
 
-pub mod block;
+pub mod blockPool;
 pub mod errors;
 pub mod logPool;
 pub mod persistentMemory;

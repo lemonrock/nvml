@@ -4,12 +4,17 @@
 
 use ::errno::errno;
 use ::errors::GenericError;
+use ::libc::c_char;
 use ::libc::c_longlong;
 use ::libc::c_void;
+use ::libc::mode_t;
 use ::nvml_sys::*;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
+#[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
+use ::std::path::Path;
 use ::syscall_alt::constants::E;
 
 
+include!("PersistentMemoryBlockPoolPathExt.rs");
 include!("PMEMblkpoolEx.rs");

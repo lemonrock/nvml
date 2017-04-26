@@ -73,4 +73,10 @@ impl GenericError
 	{
 		panic!("Unexpected or fatal error; {}", self)
 	}
+	
+	#[inline(always)]
+	pub fn isEINVAL(&self) -> bool
+	{
+		self.osErrorNumber == E::EINVAL
+	}
 }
