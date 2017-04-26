@@ -11,23 +11,8 @@ pub trait PersistentMemoryLogPoolPathExt
 	#[inline(always)]
 	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, GenericError>;
 	
-	/// poolSize may be zero OR a value >= PMEMLOG_MIN_POOL
 	#[inline(always)]
 	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, GenericError>;
-}
-
-macro_rules! usePath
-{
-	($self: ident, $function: path$(,$argument: expr)*) =>
-	{
-		{
-			let osPath = $self.as_os_str();
-			let bytes = osPath.as_bytes();
-			let pointer = bytes.as_ptr() as *const c_char;
-
-			unsafe { $function(pointer$(,$argument)*) }
-		}
-	}
 }
 
 macro_rules! handleError
@@ -35,24 +20,9 @@ macro_rules! handleError
 	($function: path) =>
 	{
 		{
-			let errorNumber = errno().0;
-			if likely(errorNumber > 0)
-			{
-				Err(GenericError::new(errorNumber))
-			}
-			else
-			{
-				const functionName: &'static str = stringify!($function);
-				let reason = LastErrorMessageOnThisThreadIsInvalidError::lastErrorMessageOnThisThread();
-				if likely(reason.is_ok())
-				{
-					panic!("Invalid errno value '{}' from {} (last error message was unavailable because '{}')", errorNumber, functionName, reason.unwrap());
-				}
-				else
-				{
-					panic!("Invalid errno value '{}' from {} (last error message was unavailable because '{}')", errorNumber, functionName, reason.unwrap_err());
-				}
-			}
+			let osErrorNumber = errno().0;
+			const functionName: &'static str = stringify!($function);
+			Err(GenericError::new(osErrorNumber, pmempool_errormsg, functionName))
 		}
 	}
 }

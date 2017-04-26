@@ -22,9 +22,9 @@ quick_error!
 impl LastErrorMessageOnThisThreadIsInvalidError
 {
 	#[inline(always)]
-	pub fn lastErrorMessageOnThisThread() -> Result<String, LastErrorMessageOnThisThreadIsInvalidError>
+	pub fn lastErrorMessageOnThisThread(errorFunction: ErrorFunction) -> Result<String, LastErrorMessageOnThisThreadIsInvalidError>
 	{
-		let pointer = unsafe { pmempool_errormsg() };
+		let pointer = unsafe { errorFunction() };
 		if pointer.is_null()
 		{
 			return Err(LastErrorMessageOnThisThreadIsInvalidError::Null)
@@ -38,5 +38,4 @@ impl LastErrorMessageOnThisThreadIsInvalidError
 			Err(_) => Err(LastErrorMessageOnThisThreadIsInvalidError::InvalidUtf8)
 		}
 	}
-	
 }

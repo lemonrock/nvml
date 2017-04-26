@@ -3,10 +3,13 @@
 
 
 #![feature(associated_consts)]
+#![feature(const_fn)]
+#![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
 
+#[macro_use] extern crate bitflags;
 extern crate errno;
 extern crate libc;
 extern crate nvml_sys;
@@ -15,4 +18,9 @@ extern crate rust_extra;
 extern crate syscall_alt;
 
 
+include!("usePath.rs");
+
+
+pub mod errors;
 pub mod logPool;
+pub mod persistentMemory;

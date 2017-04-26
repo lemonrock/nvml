@@ -41,12 +41,28 @@ impl error::Error for GenericError
 impl GenericError
 {
 	#[inline(always)]
-	fn new(osErrorNumber: i32) -> Self
+	pub fn new(osErrorNumber: i32, errorFunction: ErrorFunction, functionName: &'static str) -> Self
 	{
-		Self
+		let lastErrorMessageOnThisThread = LastErrorMessageOnThisThreadIsInvalidError::lastErrorMessageOnThisThread(errorFunction);
+		
+		if likely(osErrorNumber > 0)
 		{
-			osErrorNumber: osErrorNumber,
-			lastErrorMessageOnThisThread: LastErrorMessageOnThisThreadIsInvalidError::lastErrorMessageOnThisThread(),
+			Self
+			{
+				osErrorNumber: osErrorNumber,
+				lastErrorMessageOnThisThread: lastErrorMessageOnThisThread,
+			}
+		}
+		else
+		{
+			if likely(lastErrorMessageOnThisThread.is_ok())
+			{
+				panic!("Invalid errno value '{}' from {} (last error message was '{}')", osErrorNumber, functionName, lastErrorMessageOnThisThread.unwrap());
+			}
+			else
+			{
+				panic!("Invalid errno value '{}' from {} (last error message was unavailable because '{}')", osErrorNumber, functionName, lastErrorMessageOnThisThread.unwrap_err());
+			}
 		}
 	}
 }

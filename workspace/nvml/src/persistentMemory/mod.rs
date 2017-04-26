@@ -5,25 +5,21 @@
 use ::errno::errno;
 use ::errors::GenericError;
 use ::libc::c_char;
-use ::libc::c_int;
 use ::libc::c_void;
-use ::libc::iovec;
 use ::libc::mode_t;
-use ::libc::size_t;
-pub use ::nvml_sys::*;
+use ::nvml_sys::*;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
-use ::rust_extra::u31;
+use ::std::mem::uninitialized;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
-use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
 
 
-include!("AppendError.rs");
-include!("initialiseMemoryFunctions.rs");
-include!("LogPool.rs");
-include!("LogPoolDropWrapper.rs");
-include!("PersistentMemoryLogPoolPathExt.rs");
-include!("PMEMlogpoolEx.rs");
-include!("WalkCallbackResult.rs");
+include!("c_voidConstExt.rs");
+include!("c_voidMutExt.rs");
+include!("DirectlyAccessibleFileBackedMemory.rs");
+include!("FileBackedMemory.rs");
+include!("MappedFileBackedMemory.rs");
+include!("PersistentMemoryPathExt.rs");
+include!("PersistentMemoryFileFlags.rs");

@@ -27,6 +27,7 @@ debug-assertions = false
 codegen-units = 1
 
 [dependencies]
+bitflags = { path = "../bitflags" }
 errno = "0.2"
 libc = "0.2"
 nvml-sys = { path = "../nvml-sys" }
