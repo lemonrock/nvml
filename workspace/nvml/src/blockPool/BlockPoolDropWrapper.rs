@@ -2,22 +2,23 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-use ::errno::errno;
-use ::errors::GenericError;
-use ::libc::c_char;
-use ::libc::c_longlong;
-use ::libc::c_void;
-use ::libc::mode_t;
-use ::nvml_sys::*;
-use ::rust_extra::likely;
-use ::rust_extra::unlikely;
-#[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
-use ::std::path::Path;
-use ::std::sync::Arc;
-use ::syscall_alt::constants::E;
+#[derive(Debug)]
+struct BlockPoolDropWrapper(*mut PMEMblkpool);
 
+impl Drop for BlockPoolDropWrapper
+{
+	#[inline(always)]
+	fn drop(&mut self)
+	{
+		self.0.close()
+	}
+}
 
-include!("BlockPool.rs");
-include!("BlockPoolDropWrapper.rs");
-include!("PersistentMemoryBlockPoolPathExt.rs");
-include!("PMEMblkpoolEx.rs");
+impl BlockPoolDropWrapper
+{
+	#[inline(always)]
+	fn new(handle: *mut PMEMblkpool) -> Arc<Self>
+	{
+		Arc::new(BlockPoolDropWrapper(handle))
+	}
+}

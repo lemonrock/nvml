@@ -11,10 +11,10 @@ pub trait PersistentMemoryBlockPoolPathExt
 	
 	/// blockSize can be zero, in which case it is not explicitly checked for a match; EINVAL occurs in this case
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>;
+	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>;
+	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>;
 }
 
 macro_rules! handleError
@@ -45,7 +45,7 @@ impl PersistentMemoryBlockPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>
+	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>
 	{
 		let result = usePath!(self, pmemblk_open, blockSize);
 		
@@ -60,7 +60,7 @@ impl PersistentMemoryBlockPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>
+	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>
 	{
 		let result = usePath!(self, pmemblk_create, blockSize, poolSize, mode);
 		
