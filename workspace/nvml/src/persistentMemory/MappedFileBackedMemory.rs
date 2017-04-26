@@ -6,7 +6,15 @@
 pub struct MappedFileBackedMemory
 {
 	address: *mut c_void,
-	mappedLength: usize,
+	fileBackedMemoryDropWrapper: Arc<FileBackedMemoryDropWrapper>,
+}
+
+unsafe impl Send for MappedFileBackedMemory
+{
+}
+
+unsafe impl Sync for MappedFileBackedMemory
+{
 }
 
 impl FileBackedMemory for MappedFileBackedMemory
@@ -43,7 +51,7 @@ impl FileBackedMemory for MappedFileBackedMemory
 		Self
 		{
 			address: address,
-			mappedLength: mappedLength,
+			fileBackedMemoryDropWrapper: FileBackedMemoryDropWrapper::new(address, mappedLength)
 		}
 	}
 }

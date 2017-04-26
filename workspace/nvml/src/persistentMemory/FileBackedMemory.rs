@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-pub trait FileBackedMemory : Sized
+pub trait FileBackedMemory : Sized + Send + Sync
 {
 	// Look in bits/limits.h in musl for #define PAGE_SIZE
 	// Is 4096 for all musl architectures, except or1k, where it is 8192 (statement true as of April 25th 2017)

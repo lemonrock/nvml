@@ -13,6 +13,7 @@ use ::rust_extra::unlikely;
 use ::std::mem::uninitialized;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
+use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
 
 
@@ -20,6 +21,7 @@ include!("c_voidConstExt.rs");
 include!("c_voidMutExt.rs");
 include!("DirectlyAccessibleFileBackedMemory.rs");
 include!("FileBackedMemory.rs");
+include!("FileBackedMemoryDropWrapper.rs");
 include!("MappedFileBackedMemory.rs");
 include!("PersistentMemoryPathExt.rs");
 include!("PersistentMemoryFileFlags.rs");

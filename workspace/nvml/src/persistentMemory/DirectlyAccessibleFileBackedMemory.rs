@@ -6,7 +6,15 @@
 pub struct DirectlyAccessibleFileBackedMemory
 {
 	address: *mut c_void,
-	mappedLength: usize,
+	fileBackedMemoryDropWrapper: Arc<FileBackedMemoryDropWrapper>,
+}
+
+unsafe impl Send for DirectlyAccessibleFileBackedMemory
+{
+}
+
+unsafe impl Sync for DirectlyAccessibleFileBackedMemory
+{
 }
 
 impl FileBackedMemory for DirectlyAccessibleFileBackedMemory
@@ -39,7 +47,7 @@ impl FileBackedMemory for DirectlyAccessibleFileBackedMemory
 		Self
 		{
 			address: address,
-			mappedLength: mappedLength,
+			fileBackedMemoryDropWrapper: FileBackedMemoryDropWrapper::new(address, mappedLength)
 		}
 	}
 }
