@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/workspace/bitflags" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/workspace/nvml-sys" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/workspace/nvml-sys/.cargo" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/workspace/nvml-sys/lib/nvml" vcs="Git" />
