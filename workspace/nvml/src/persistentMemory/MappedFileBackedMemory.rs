@@ -54,6 +54,20 @@ impl FileBackedMemory for MappedFileBackedMemory
 			fileBackedMemoryDropWrapper: FileBackedMemoryDropWrapper::new(address, mappedLength)
 		}
 	}
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _address(&self) -> *mut c_void
+	{
+		self.address
+	}
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _mappedLength(&self) -> usize
+	{
+		self.fileBackedMemoryDropWrapper.mappedLength
+	}
 }
 
 impl MappedFileBackedMemory

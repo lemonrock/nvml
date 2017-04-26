@@ -22,6 +22,16 @@ pub trait FileBackedMemory : Sized + Send + Sync
 		Self::_map(persistentMemoryFilePath, length, flags, IrrelevantMode)
 	}
 	
+	/// offset and length will be adjusted to page size granularity
+	#[allow(deprecated)]
+	#[inline(always)]
+	fn persistSlowlyAtPageSizeGranularity(&self, offset: usize, length: usize)
+	{
+		debug_assert!(offset + length <= self._mappedLength(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mappedLength());
+		
+		self._offset(offset).persistOrMsyncRegardlessOfWhetherSelfIsPersistentOrNonPersistentMemory(length)
+	}
+	
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _map(persistentMemoryFilePath: &Path, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<Option<Self>, GenericError>
@@ -34,6 +44,11 @@ pub trait FileBackedMemory : Sized + Send + Sync
 		}
 		
 		let (address, mappedLength, isPersistentMemory) = result.unwrap();
+		
+		if unlikely(address.is_null())
+		{
+			panic!("Mapping returned a null address");
+		}
 		
 		if likely(Self::_finishMappingIfMemoryIsOfCorrectType(isPersistentMemory, address.isPersistentMemoryThatSupportsFlushingWithPersist(mappedLength)))
 		{
@@ -57,4 +72,21 @@ pub trait FileBackedMemory : Sized + Send + Sync
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _new(address: *mut c_void, mappedLength: usize) -> Self;
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _address(&self) -> *mut c_void;
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _mappedLength(&self) -> usize;
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _offset(&self, offset: usize) -> *mut c_void
+	{
+		debug_assert!(offset <= self._mappedLength(), "offset '{}' is greater than mapped length '{}'", offset, self._mappedLength());
+		
+		unsafe { self._address().offset(offset as isize) }
+	}
 }

@@ -50,4 +50,58 @@ impl FileBackedMemory for DirectlyAccessibleFileBackedMemory
 			fileBackedMemoryDropWrapper: FileBackedMemoryDropWrapper::new(address, mappedLength)
 		}
 	}
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _address(&self) -> *mut c_void
+	{
+		self.address
+	}
+	
+	#[doc(hidden)]
+	#[inline(always)]
+	fn _mappedLength(&self) -> usize
+	{
+		self.fileBackedMemoryDropWrapper.mappedLength
+	}
+}
+
+impl DirectlyAccessibleFileBackedMemory
+{
+	/// offset and length will be adjusted to cache line size granularity
+	#[inline(always)]
+	pub fn persistQuicklyAtCacheLineGranularity(&self, offset: usize, length: usize)
+	{
+		debug_assert!(offset + length <= self._mappedLength(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mappedLength());
+		
+		self._offset(offset).persist(length);
+	}
+	
+	/// First 'half' of persistQuicklyAtCacheLineGranularity
+	#[inline(always)]
+	pub fn flush(&self, offset: usize, length: usize)
+	{
+		debug_assert!(offset + length <= self._mappedLength(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mappedLength());
+		
+		self._offset(offset).flush(length);
+	}
+	
+	/// Second 'half' of persistQuicklyAtCacheLineGranularity
+	#[inline(always)]
+	pub fn drainAfterFlush()
+	{
+		unsafe { pmem_drain() }
+	}
+	
+	#[inline(always)]
+	pub fn persistOnDropFrom<'a>(&'a self, offset: usize) -> PersistOnDrop<'a>
+	{
+		PersistOnDrop(self._offset(offset), PhantomData)
+	}
+	
+	#[inline(always)]
+	pub fn persistOnDrop<'a>(&'a self) -> PersistOnDrop<'a>
+	{
+		PersistOnDrop(self.address, PhantomData)
+	}
 }

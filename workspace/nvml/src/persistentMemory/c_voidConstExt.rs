@@ -40,13 +40,6 @@ pub trait c_voidConstExt
 	#[inline(always)]
 	fn flush(self, length: usize);
 	
-	/// Second 'half' of pmem_persist
-	#[inline(always)]
-	fn drainAfterFlush()
-	{
-		unsafe { pmem_drain() }
-	}
-	
 	#[deprecated(note = "Always false, and not useful to know as a fence is still needed, ie calls to drainAfterFlush() can not be avoided")]
 	#[inline(always)]
 	fn hasHardwareDrainInstruction() -> bool
