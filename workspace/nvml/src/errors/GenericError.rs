@@ -7,6 +7,7 @@ pub struct GenericError
 {
 	osErrorNumber: i32,
 	lastErrorMessageOnThisThread: Result<String, LastErrorMessageOnThisThreadIsInvalidError>,
+	functionName: &'static str,
 }
 
 impl Display for GenericError
@@ -51,6 +52,7 @@ impl GenericError
 			{
 				osErrorNumber: osErrorNumber,
 				lastErrorMessageOnThisThread: lastErrorMessageOnThisThread,
+				functionName: functionName,
 			}
 		}
 		else
@@ -64,5 +66,11 @@ impl GenericError
 				panic!("Invalid errno value '{}' from {} (last error message was unavailable because '{}')", osErrorNumber, functionName, lastErrorMessageOnThisThread.unwrap_err());
 			}
 		}
+	}
+	
+	#[inline(always)]
+	pub fn panic(self) -> !
+	{
+		panic!("Unexpected or fatal error; {}", self)
 	}
 }
