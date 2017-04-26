@@ -129,7 +129,7 @@ impl c_voidConstExt for *const c_void
 				E::EBUSY => panic!("EBUSY should be impossible for pmem_sync()"),
 				E::EINVAL => panic!("EINVAL should be impossible for pmem_sync()"),
 				
-				illegal @ _ => panic!("Error number '{}' should not occure for pmem_sync()", illegal),
+				illegal @ _ => panic!("Error number '{}' should not occur for pmem_sync()", illegal),
 			}
 		}
 		else
