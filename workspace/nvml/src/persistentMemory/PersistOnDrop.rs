@@ -27,4 +27,29 @@ impl<'a> PersistOnDrop<'a>
 	{
 		self.0.flush(length);
 	}
+	
+	// aka 'memmove' in C
+	#[inline(always)]
+	pub fn copy_then_flush(&self, length: usize, from: *const c_void)
+	{
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memmove_nodrain(self.0, from, length) };
+	}
+	
+	// aka 'memcpy' in C
+	#[inline(always)]
+	pub fn copy_nonoverlapping_then_flush(&self, length: usize, from: *const c_void)
+	{
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memcpy_nodrain(self.0, from, length) };
+	}
+	
+	// aka 'memset' in C
+	#[inline(always)]
+	pub fn write_bytes_then_flush(&self, count: usize, value: u8)
+	{
+		unsafe { pmem_memset_nodrain(self.0, value as i32, count) };
+	}
 }

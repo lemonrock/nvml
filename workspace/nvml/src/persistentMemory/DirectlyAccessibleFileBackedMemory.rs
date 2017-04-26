@@ -104,4 +104,33 @@ impl DirectlyAccessibleFileBackedMemory
 	{
 		PersistOnDrop(self.address, PhantomData)
 	}
+	
+	// aka 'memmove' in C
+	#[inline(always)]
+	pub fn copy_then_persistQuicklyAtCacheLineGranularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self._mappedLength(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mappedLength());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memmove_persist(self._offset(offset), from, length) };
+	}
+	
+	// aka 'memcpy' in C
+	#[inline(always)]
+	pub fn copy_nonoverlapping_then_persistQuicklyAtCacheLineGranularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self._mappedLength(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mappedLength());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memcpy_persist(self._offset(offset), from, length) };
+	}
+	
+	// aka 'memset' in C
+	#[inline(always)]
+	pub fn write_bytes_then_persistQuicklyAtCacheLineGranularity(&self, offset: usize, count: usize, value: u8)
+	{
+		debug_assert!(offset + count <= self._mappedLength(), "offset '{}' + count '{}' is greater than mapped length '{}'", offset, count, self._mappedLength());
+		
+		unsafe { pmem_memset_persist(self._offset(offset), value as i32, count) };
+	}
 }
