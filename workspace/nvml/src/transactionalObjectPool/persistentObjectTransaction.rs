@@ -3,11 +3,12 @@
 
 
 /// Please note that work() may not ever be called - in which case, the next logic called is onAbort()
+#[inline(always)]
 pub fn persistentObjectTransaction<Committed: Sized, Aborted: Sized, W: Fn() -> c_int, C: Fn() -> Committed, A: Fn() -> Aborted>(pop: *mut PMEMobjpool, work: W, onCommit: C, onAbort: A) -> Result<Committed, Aborted>
 {
 	// Must be used as a function, to prevent the volatile restrictions of setjmp leaking out
 	#[inline(never)]
-	fn internal
+	unsafe fn internal
 	<
 		Committed: Sized,
 		Aborted: Sized,
@@ -24,20 +25,19 @@ pub fn persistentObjectTransaction<Committed: Sized, Aborted: Sized, W: Fn() -> 
 		functionResult: &mut Option<Result<Committed, Aborted>>
 	)
 	{
-		let mut txSetJmpEnvironment: jmp_buf = unsafe { zeroed() };
+		let txSetJmpEnvironment = zeroed();
 		{
-			let txSetJmpEnvironmentPointer = txSetJmpEnvironment.as_mut_ptr();
 			// setjmp returns a non-zero value if returning from longjmp()
-			if setjmp(txSetJmpEnvironmentPointer) == 0
+			if setjmp(txSetJmpEnvironment) == 0
 			{
-				setErrorNumberIfNecessary(pmemobj_tx_begin(pop, txSetJmpEnvironmentPointer, TX_PARAM_NONE, TX_PARAM_NONE));
+				setErrorNumberIfNecessary(pmemobj_tx_begin(pop, txSetJmpEnvironment, TX_PARAM_NONE, TX_PARAM_NONE));
 			}
 			else
 			{
 				setErrorNumberIfNecessary(pmemobj_tx_errno());
 			}
 	
-			let mut stage: pobj_tx_stage;
+			let mut stage;
 			while
 			{
 				stage = pmemobj_tx_stage();
@@ -135,7 +135,7 @@ pub fn persistentObjectTransaction<Committed: Sized, Aborted: Sized, W: Fn() -> 
 	let mut panicPayload = None;
 	let mut functionResult = None;
 	
-	internal(pop, work, onCommit, onAbort, &mut panicPayload, &mut functionResult);
+	unsafe { internal(pop, work, onCommit, onAbort, &mut panicPayload, &mut functionResult) };
 	
 	if let Some(payload) = panicPayload
 	{
