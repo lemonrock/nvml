@@ -2,10 +2,23 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+use ::errno::Errno;
+use ::errno::set_errno;
 use ::libc::c_char;
+use ::libc::c_int;
 use ::libc::c_void;
 use ::libc::size_t;
 use ::nvml_sys::*;
+use ::nvml_sys::pobj_tx_param::TX_PARAM_NONE;
+use ::rust_extra::likely;
+use ::rust_extra::unlikely;
+use ::std::any::Any;
+use ::std::mem::zeroed;
+use ::std::panic::AssertUnwindSafe;
+use ::std::panic::catch_unwind;
+use ::std::panic::resume_unwind;
+use ::syscall_alt::constants::E;
 
 
 include!("initialiseMemoryFunctions.rs");
+include!("persistentObjectTransaction.rs");
