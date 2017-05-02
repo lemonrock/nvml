@@ -4,7 +4,7 @@
 
 pub fn initialiseMemoryFunctions
 (
-	malloc: extern "C" fn(size: size_t) -> *mut c_void,
+	malloc: unsafe extern "C" fn(size: size_t) -> *mut c_void,
 	free: unsafe extern "C" fn(ptr: *mut c_void),
 	realloc: unsafe extern "C" fn(ptr: *mut c_void, size: size_t) -> *mut c_void,
 	strdup: unsafe extern "C" fn(s: *const c_char) -> *mut c_char

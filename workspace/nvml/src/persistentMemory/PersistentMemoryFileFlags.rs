@@ -6,9 +6,9 @@ bitflags!
 {
 	pub flags PersistentMemoryFileFlags: i32
 	{
-		const Create = PMEM_FILE_CREATE,
-		const Exclusive = PMEM_FILE_EXCL,
-		const Sparse = PMEM_FILE_SPARSE,
-		const TmpFile = PMEM_FILE_TMPFILE,
+		const Create = PMEM_FILE_CREATE as i32,
+		const Exclusive = PMEM_FILE_EXCL as i32,
+		const Sparse = PMEM_FILE_SPARSE as i32,
+		const TmpFile = PMEM_FILE_TMPFILE as i32,
 	}
 }
