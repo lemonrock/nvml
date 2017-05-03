@@ -85,7 +85,10 @@ fn layoutAsRawPointer(layoutName: Option<&str>) -> *const c_char
 {
 	if let Some(layoutName) = layoutName
 	{
+		debug_assert!(layoutName.len() + 1 <= PMEMOBJ_MAX_ALLOC_SIZE as usize, "layoutName length '{}' + 1 is greater than PMEMOBJ_MAX_ALLOC_SIZE '{}'", layoutName.len(), PMEMOBJ_MAX_ALLOC_SIZE);
+		
 		let cString = CString::new(layoutName).expect("Invalid layout name");
+		
 		cString.into_raw()
 	}
 	else

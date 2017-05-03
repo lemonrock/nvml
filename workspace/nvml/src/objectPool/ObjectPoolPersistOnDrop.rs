@@ -3,9 +3,9 @@
 
 
 #[derive(Debug)]
-pub struct ObjectPoolPersistOnDrop(*mut PMEMobjpool, *mut c_void);
+pub struct ObjectPoolPersistOnDrop<'a>(*mut PMEMobjpool, *mut c_void, PhantomData<&'a ObjectPool>);
 
-impl Drop for ObjectPoolPersistOnDrop
+impl<'a> Drop for ObjectPoolPersistOnDrop<'a>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -14,12 +14,12 @@ impl Drop for ObjectPoolPersistOnDrop
 	}
 }
 
-impl ObjectPoolPersistOnDrop
+impl<'a> ObjectPoolPersistOnDrop<'a>
 {
 	#[inline(always)]
 	pub fn new(objectPool: *mut PMEMobjpool, address: *mut c_void) -> Self
 	{
-		ObjectPoolPersistOnDrop(objectPool, address)
+		ObjectPoolPersistOnDrop(objectPool, address, PhantomData)
 	}
 	
 	#[inline(always)]

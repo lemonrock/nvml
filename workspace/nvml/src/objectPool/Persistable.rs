@@ -9,9 +9,12 @@ pub trait Persistable: Sized
 	#[inline(always)]
 	fn size() -> size_t
 	{
-		size_of::<Self>() as size_t
+		let size = size_of::<Self>() as size_t;
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+		size
 	}
 	
+	#[deprecated(note = "inefficient; access via OidWrapper")]
 	#[inline(always)]
 	fn oid(&self) -> PMEMoid
 	{
@@ -21,6 +24,7 @@ pub trait Persistable: Sized
 		oid
 	}
 	
+	#[deprecated(note = "inefficient; access via OidWrapper")]
 	#[inline(always)]
 	fn persistentObjectPool(&self) -> *mut PMEMobjpool
 	{
@@ -61,33 +65,6 @@ pub trait Persistable: Sized
 	fn allocateZeroedInTransactionWithoutFlush(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
 	{
 		transaction.allocateZeroedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
-	}
-	
-	#[inline(always)]
-	fn free(self, transaction: Transaction) -> c_int
-	{
-		transaction.free(self.oid())
-	}
-	
-	/// size can be zero
-	#[inline(always)]
-	fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
-	{
-		debug_assert!(offset + size as u64 <= Self::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, Self::size());
-		
-		transaction.addRangeSnapshotInTransaction(self.oid(), offset, size)
-	}
-
-	/// Can only be called from a work() function
-	/// If returns !=0 then the transaction will have been aborted; return immediately from work() function
-	/// No checks are made for offset or size
-	/// size can be zero
-	#[inline(always)]
-	fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
-	{
-		debug_assert!(offset + size as u64 <= Self::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, Self::size());
-		
-		transaction.addRangeSnapshotInTransactionWithoutFlush(self.oid(), offset, size)
 	}
 }
 

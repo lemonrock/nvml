@@ -47,6 +47,25 @@ impl<T: Persistable> OID for OidWrapper<T>
 	{
 		self.oid.address()
 	}
+	
+	#[inline(always)]
+	fn next(&self) -> Self
+	{
+		let mut next;
+		while
+		{
+			next = self.oid.next();
+			!next.is_null() && next.typeNumber() != T::TypeNumber
+		}
+		{
+		}
+		
+		OidWrapper
+		{
+			oid: next,
+			phantomData: PhantomData,
+		}
+	}
 }
 
 /// It is possible to violate aliasing rules
@@ -91,5 +110,40 @@ impl<T: Persistable> OidWrapper<T>
 	pub fn as_ptr(&self) -> *mut T
 	{
 		self.address() as *mut _
+	}
+	
+	#[inline(always)]
+	fn persistentObjectPool(&self) -> *mut PMEMobjpool
+	{
+		let persistentObjectPool = self.oid.persistentObjectPool();
+		debug_assert!(!persistentObjectPool.is_null(), "This object does not have a valid OID");
+		persistentObjectPool
+	}
+	
+	#[inline(always)]
+	pub fn free(self, transaction: Transaction) -> c_int
+	{
+		transaction.free(self.oid)
+	}
+	
+	/// size can be zero
+	#[inline(always)]
+	pub fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
+	{
+		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
+		
+		transaction.addRangeSnapshotInTransaction(self.oid, offset, size)
+	}
+	
+	/// Can only be called from a work() function
+	/// If returns !=0 then the transaction will have been aborted; return immediately from work() function
+	/// No checks are made for offset or size
+	/// size can be zero
+	#[inline(always)]
+	pub fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
+	{
+		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
+		
+		transaction.addRangeSnapshotInTransactionWithoutFlush(self.oid, offset, size)
 	}
 }

@@ -156,6 +156,7 @@ impl Transaction
 	pub fn allocateUninitializedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		let result = unsafe { pmemobj_tx_alloc(size, typeNumber) };
 		if unlikely(result.is_null())
@@ -174,6 +175,7 @@ impl Transaction
 	pub fn allocateUninitializedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		let result = unsafe { pmemobj_tx_xalloc(size, typeNumber, POBJ_XALLOC_NO_FLUSH) };
 		if unlikely(result.is_null())
@@ -192,6 +194,7 @@ impl Transaction
 	pub fn allocateZeroedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		let result = unsafe { pmemobj_tx_zalloc(size, typeNumber) };
 		if unlikely(result.is_null())
@@ -210,6 +213,7 @@ impl Transaction
 	pub fn allocateZeroedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		const Flags: u64 = POBJ_XALLOC_ZERO | POBJ_XALLOC_NO_FLUSH;
 		
@@ -237,6 +241,7 @@ impl Transaction
 	fn addRangeSnapshotInTransaction(self, oid: PMEMoid, offset: u64, size: size_t) -> c_int
 	{
 		debug_assert!(!oid.is_null(), "oid is null");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		if unlikely(size == 0)
 		{
@@ -252,6 +257,7 @@ impl Transaction
 	fn addRangeSnapshotInTransactionWithoutFlush(self, oid: PMEMoid, offset: u64, size: size_t) -> c_int
 	{
 		debug_assert!(!oid.is_null(), "oid is null");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		if unlikely(size == 0)
 		{

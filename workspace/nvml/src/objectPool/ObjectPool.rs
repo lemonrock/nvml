@@ -58,4 +58,16 @@ impl ObjectPool
 	{
 		self.0.write_bytes_then_persist(address, count, value)
 	}
+	
+	#[inline(always)]
+	pub fn persistOnDrop<'a>(&'a self, address: *mut c_void) -> ObjectPoolPersistOnDrop<'a>
+	{
+		ObjectPoolPersistOnDrop(self.0, address, PhantomData)
+	}
+	
+	#[inline(always)]
+	pub fn first(&self) -> PMEMoid
+	{
+		unsafe { pmemobj_first(self.0) }
+	}
 }

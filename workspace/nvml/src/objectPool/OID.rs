@@ -2,18 +2,6 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-#[inline(always)]
-pub fn OID_IS_NULL(o: &PMEMoid) -> bool
-{
-	o.off == 0
-}
-
-#[inline(always)]
-pub fn OID_EQUALS(lhs: &PMEMoid, rhs: &PMEMoid) -> bool
-{
-	lhs.off == rhs.off && lhs.pool_uuid_lo == rhs.pool_uuid_lo
-}
-
 pub trait OID
 {
 	#[inline(always)]
@@ -22,7 +10,7 @@ pub trait OID
 	#[inline(always)]
 	fn equals(&self, right: &Self) -> bool;
 	
-	/// Can be NULL
+	/// Can be NULL, but only if is_null() is true
 	#[inline(always)]
 	fn persistentObjectPool(&self) -> *mut PMEMobjpool;
 	
@@ -32,9 +20,13 @@ pub trait OID
 	#[inline(always)]
 	fn typeNumber(&self) -> TypeNumber;
 	
-	/// Can be NULL
+	/// Can be NULL, but only if is_null() is true
 	#[inline(always)]
 	fn address(&self) -> *mut c_void;
+	
+	/// Can be NULL
+	#[inline(always)]
+	fn next(&self) -> Self;
 }
 
 impl OID for PMEMoid
@@ -74,4 +66,22 @@ impl OID for PMEMoid
 	{
 		unsafe { pmemobj_direct(*self) }
 	}
+	
+	#[inline(always)]
+	fn next(&self) -> Self
+	{
+		unsafe { pmemobj_next(*self) }
+	}
+}
+
+#[inline(always)]
+fn OID_IS_NULL(o: &PMEMoid) -> bool
+{
+	o.off == 0
+}
+
+#[inline(always)]
+fn OID_EQUALS(lhs: &PMEMoid, rhs: &PMEMoid) -> bool
+{
+	lhs.off == rhs.off && lhs.pool_uuid_lo == rhs.pool_uuid_lo
 }
