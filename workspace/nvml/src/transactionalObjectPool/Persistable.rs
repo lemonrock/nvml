@@ -4,8 +4,7 @@
 
 pub trait Persistable: Sized
 {
-	#[inline(always)]
-	fn typeNumber() -> TypeNumber;
+	const TypeNumber: TypeNumber;
 	
 	#[inline(always)]
 	fn size() -> size_t
@@ -18,24 +17,34 @@ pub trait Persistable: Sized
 	{
 		let pointer = self as *const _ as *const c_void;
 		let oid = pointer.oid();
-		debug_assert!(!oid.is_null(), "This is not a Persistable");
+		debug_assert!(!oid.is_null(), "This object is not a Persistable");
 		oid
 	}
 	
+	#[inline(always)]
+	fn persistentObjectPool(&self) -> *mut PMEMobjpool
+	{
+		let persistentObjectPool = self.oid().persistentObjectPool();
+		debug_assert!(!persistentObjectPool.is_null(), "This object does not have a valid OID");
+		persistentObjectPool
+	}
+	
+	/// It is important to now zero-initialise all PMEMmutex, etc types; all OIDs are invalid
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
 	fn allocateUninitializedInTransaction(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
 	{
-		transaction.allocateUninitializedInTransaction::<Self>(Self::size(), Self::typeNumber())
+		transaction.allocateUninitializedInTransaction::<Self>(Self::size(), Self::TypeNumber)
 	}
 	
+	/// It is important to now zero-initialise all PMEMmutex, etc types; all OIDs are invalid
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
 	fn allocateUninitializedInTransactionWithoutFlush(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
 	{
-		transaction.allocateUninitializedInTransactionWithoutFlush::<Self>(Self::size(), Self::typeNumber())
+		transaction.allocateUninitializedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
 	}
 	
 	/// Zero-sized allocations are not supported
@@ -43,7 +52,7 @@ pub trait Persistable: Sized
 	#[inline(always)]
 	fn allocateZeroedInTransaction(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
 	{
-		transaction.allocateZeroedInTransaction::<Self>(Self::size(), Self::typeNumber())
+		transaction.allocateZeroedInTransaction::<Self>(Self::size(), Self::TypeNumber)
 	}
 	
 	/// Zero-sized allocations are not supported
@@ -51,7 +60,7 @@ pub trait Persistable: Sized
 	#[inline(always)]
 	fn allocateZeroedInTransactionWithoutFlush(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
 	{
-		transaction.allocateZeroedInTransactionWithoutFlush::<Self>(Self::size(), Self::typeNumber())
+		transaction.allocateZeroedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
 	}
 	
 	#[inline(always)]
@@ -82,187 +91,56 @@ pub trait Persistable: Sized
 	}
 }
 
-#[macro_export]
-macro_rules! persistent_struct
+#[repr(C)]
+pub struct root
 {
-	($typeNumber: expr, $name: ident, $($element: ident: $type: ty),+) =>
+	node: OidWrapper<node>,
+}
+
+impl Persistable for root
+{
+	const TypeNumber: TypeNumber = 0;
+}
+
+#[repr(C)]
+pub struct node
+{
+	mutex: PMEMmutex,
+	next: OidWrapper<node>,
+	foo: OidWrapper<foo>,
+	data: u32,
+}
+
+impl Persistable for node
+{
+	const TypeNumber: TypeNumber = 1;
+}
+
+impl MutexLockablePersistentObjectMemory for node
+{
+	#[inline(always)]
+	fn _pmemMutex(&mut self) -> &mut PMEMmutex
 	{
-		interpolate_idents!
-		{
-			//pub type [$name _toid_type_num] = [u8; $typeNumber + 1];
-			
-			#[derive(Copy, Clone)]
-			#[repr(C)]
-			pub struct $name
-			{
-				$(
-					pub $element: $type,
-				)*
-			}
-			
-			impl Persistable for $name
-			{
-				#[inline(always)]
-				fn typeNumber() -> TypeNumber
-				{
-					$typeNumber
-				}
-			}
-		}
+		&mut self.mutex
 	}
 }
 
-persistent_struct!(0, root, node: u64);
-persistent_struct!(1, node, next: OidWrapper<node>, foo: OidWrapper<foo>);
-persistent_struct!(2, foo, _address: u8);
-
-
-// Maximum layout name incl \0
-// #define PMEMOBJ_MAX_LAYOUT ((size_t)1024)
-
-
-
-
-/*
-
-BEGIN
-typedef uint8_t _pobj_layout_mylayout_ref[0 + 1];
-pub type _pobj_layout_mylayout_ref = [u8; 1usize];
-
-
-
-ROOT
-typedef uint8_t root_toid_type_num[(0) + 1];
-pub type root_toid_type_num = [u8; 1usize];
-
-union root_toid
+impl node
 {
-	PMEMoid oid;
-	struct root * _type;
-	root_toid_type_num * _type_num;
-}
-#[repr(C)]
-#[derive(Copy)]
-pub union root_toid
-{
-    pub oid: PMEMoid,
-    pub _type: *mut root,
-    pub _type_num: *mut root_toid_type_num,
-}
-
-
-TOID
-typedef uint8_t node_toid_type_num[((1 + 1 - (sizeof(_pobj_layout_mylayout_ref)))) + 1];
-pub type node_toid_type_num = [u8; 2usize];
-
-union node_toid
-{
-	PMEMoid oid;
-	struct node *_type;
-	node_toid_type_num *_type_num;
-};
-#[repr(C)]
-#[derive(Copy)]
-pub union node_toid
-{
-    pub oid: PMEMoid,
-    pub _type: *mut node,
-    pub _type_num: *mut node_toid_type_num,
-}
-
-
-TOID
-typedef uint8_t foo_toid_type_num[((2 + 1 - (sizeof(_pobj_layout_mylayout_ref)))) + 1];
-pub type foo_toid_type_num = [u8; 3usize];
-
-union foo_toid
-{
-	PMEMoid oid;
-	struct foo *_type;
-	foo_toid_type_num *_type_num;
-};
-
-#[repr(C)]
-#[derive(Copy)]
-pub union foo_toid
-{
-    pub oid: PMEMoid,
-    pub _type: *mut foo,
-    pub _type_num: *mut foo_toid_type_num,
-}
-
-END
-typedef char _pobj_layout_mylayout_cnt[3 + 1 - (sizeof(_pobj_layout_mylayout_ref))];
-pub type _pobj_layout_mylayout_cnt = [::std::os::raw::c_char; 3usize];
-
-
-
-
-struct root
-{
-	union node_toid node;
-}
-#[repr(C)]
-#[derive(Copy)]
-pub struct root
-{
-    pub node: node_toid,
-}
-
-struct node
-{
-	union node_toid next;
-	union foo_toid foo;
-}
-#[repr(C)]
-#[derive(Copy)]
-pub struct node
-{
-    pub next: node_toid,
-    pub foo: foo_toid,
+	pub fn manipulate(&mut self)
+	{
+		let mut lock = self.lock();
+		lock.data = 45;
+	}
 }
 
 #[repr(C)]
-#[derive(Debug, Copy)]
-pub struct foo {
-    pub _address: u8,
+pub struct foo
+{
+	address: u8,
 }
 
-const char *layout_name = "mylayout";
-pub const layout_name: &'static [u8; 9usize] = b"mylayout\x00";
-
-int num_of_types = (sizeof(_pobj_layout_mylayout_cnt) - 1);
-pub const num_of_types: ::std::os::raw::c_int = 2;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-impl Clone for root {
-    fn clone(&self) -> Self { *self }
+impl Persistable for foo
+{
+	const TypeNumber: TypeNumber = 2;
 }
-
-
-
-impl Clone for node {
-    fn clone(&self) -> Self { *self }
-}
-
-
-
-
-impl Clone for foo {
-    fn clone(&self) -> Self { *self }
-}
-
-*/

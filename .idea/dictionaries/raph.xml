@@ -4,6 +4,7 @@
       <w>appendv</w>
       <w>bindgen</w>
       <w>chunksize</w>
+      <w>eagain</w>
       <w>ebusy</w>
       <w>edeadlk</w>
       <w>einval</w>
@@ -14,6 +15,7 @@
       <w>iovec</w>
       <w>isystem</w>
       <w>libpmem</w>
+      <w>libpmemobj</w>
       <w>longjmp</w>
       <w>mblkpool</w>
       <w>mcond</w>
