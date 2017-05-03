@@ -3,6 +3,7 @@
 
 
 use ::errno::Errno;
+use ::errno::errno;
 use ::errno::set_errno;
 use ::libc::c_char;
 use ::libc::c_int;
@@ -13,6 +14,8 @@ use ::nvml_sys::pobj_tx_param::TX_PARAM_NONE;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
 use ::std::any::Any;
+use ::std::marker::PhantomData;
+use ::std::mem::size_of;
 use ::std::mem::zeroed;
 use ::std::panic::AssertUnwindSafe;
 use ::std::panic::catch_unwind;
@@ -21,4 +24,10 @@ use ::syscall_alt::constants::E;
 
 
 include!("initialiseMemoryFunctions.rs");
-include!("persistentObjectTransaction.rs");
+include!("OID.rs");
+include!("OidWrapper.rs");
+include!("Persistable.rs");
+include!("PersistentObjectMemory.rs");
+include!("PMEMobjpoolEx.rs");
+include!("TypeNumber.rs");
+include!("Transaction.rs");

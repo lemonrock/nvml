@@ -21,6 +21,7 @@ version = "0.0.0"
 [dependencies]
 bitflags = { path = "../bitflags" }
 errno = "0.2"
+interpolate_idents = { git = "https://github.com/lemonrock/interpolate_idents", branch = "rust-nightly-as-of-May-1st-2017" }
 libc = "0.2"
 nvml-sys = { path = "../nvml-sys" }
 quick-error = "1.2.0"
