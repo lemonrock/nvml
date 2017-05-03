@@ -26,6 +26,8 @@ use ::std::panic::resume_unwind;
 use ::syscall_alt::constants::E;
 
 
+include!("ConditionVariable.rs");
+include!("ConditionVariableMutexLockablePersistentObjectMemory.rs");
 include!("initialiseMemoryFunctions.rs");
 include!("MutexLock.rs");
 include!("MutexLockablePersistentObjectMemory.rs");

@@ -105,7 +105,9 @@ impl Persistable for root
 #[repr(C)]
 pub struct node
 {
+	readWriteLock: PMEMrwlock,
 	mutex: PMEMmutex,
+	conditionVariable: PMEMcond,
 	next: OidWrapper<node>,
 	foo: OidWrapper<foo>,
 	data: u32,
@@ -114,6 +116,15 @@ pub struct node
 impl Persistable for node
 {
 	const TypeNumber: TypeNumber = 1;
+}
+
+impl ReadWriteLockablePersistentObjectMemory for node
+{
+	#[inline(always)]
+	fn _pmemReadWriteLock(&mut self) -> &mut PMEMrwlock
+	{
+		&mut self.readWriteLock
+	}
 }
 
 impl MutexLockablePersistentObjectMemory for node
@@ -125,12 +136,27 @@ impl MutexLockablePersistentObjectMemory for node
 	}
 }
 
+impl ConditionVariableMutexLockablePersistentObjectMemory for node
+{
+	#[inline(always)]
+	fn _pmemConditionVariable(&mut self) -> &mut PMEMcond
+	{
+		&mut self.conditionVariable
+	}
+}
+
 impl node
 {
 	pub fn manipulate(&mut self)
 	{
-		let mut lock = self.lock();
-		lock.data = 45;
+		{
+			let mut lock = self.lock();
+			lock.data = 45;
+		}
+		{
+			let mut lock = self.writeLock();
+			lock.data = 34;
+		}
 	}
 }
 
