@@ -18,6 +18,8 @@ impl BlockPool
 	#[inline(always)]
 	fn fromHandle(handle: *mut PMEMblkpool) -> Self
 	{
+		debug_assert!(!handle.is_null(), "PMEMblkpool handle is null");
+		
 		BlockPool(handle, BlockPoolDropWrapper::new(handle))
 	}
 	

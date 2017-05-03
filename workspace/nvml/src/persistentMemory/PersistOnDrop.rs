@@ -17,9 +17,10 @@ impl<'a> Drop for PersistOnDrop<'a>
 impl<'a> PersistOnDrop<'a>
 {
 	#[inline(always)]
-	pub fn offset(&mut self, offset: usize)
+	pub fn offset(mut self, offset: usize) -> Self
 	{
 		self.0 = unsafe { self.0.offset(offset as isize) };
+		self
 	}
 	
 	#[inline(always)]

@@ -18,6 +18,8 @@ impl LogPool
 	#[inline(always)]
 	fn fromHandle(handle: *mut PMEMlogpool) -> Self
 	{
+		debug_assert!(!handle.is_null(), "PMEMlogpool handle is null");
+		
 		LogPool(handle, LogPoolDropWrapper::new(handle))
 	}
 	
