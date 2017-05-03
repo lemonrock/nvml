@@ -29,4 +29,4 @@ pub mod blockPool;
 pub mod errors;
 pub mod logPool;
 pub mod persistentMemory;
-pub mod transactionalObjectPool;
+pub mod objectPool;
