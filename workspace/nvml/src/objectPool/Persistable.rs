@@ -3,23 +3,9 @@
 
 
 /// Persistable MUST NOT implement Drop, Copy or Clone
-pub trait Persistable : Sized
+pub trait Persistable : Initializable
 {
 	const TypeNumber: TypeNumber;
-	
-	/// # Arguments
-	/// - pointerToUninitializedMemoryToUseForFields is always non-null
-	/// - objectPool is always non-null
-	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool);
-	
-	#[inline(always)]
-	fn size() -> size_t
-	{
-		let size = size_of::<Self>() as size_t;
-		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
-		size
-	}
 	
 	#[deprecated(note = "inefficient; access via PersistentObject")]
 	#[inline(always)]
@@ -75,7 +61,10 @@ pub struct root
 impl Persistable for root
 {
 	const TypeNumber: TypeNumber = 0;
-	
+}
+
+impl Initializable for root
+{
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
 	{
@@ -101,7 +90,10 @@ pub struct node
 impl Persistable for node
 {
 	const TypeNumber: TypeNumber = 1;
-	
+}
+
+impl Initializable for node
+{
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
 	{
@@ -171,7 +163,10 @@ pub struct foo
 impl Persistable for foo
 {
 	const TypeNumber: TypeNumber = 2;
-	
+}
+
+impl Initializable for foo
+{
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
 	{
