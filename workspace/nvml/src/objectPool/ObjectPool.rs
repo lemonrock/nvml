@@ -103,6 +103,20 @@ impl ObjectPool
 	}
 	
 	#[inline(always)]
+	pub fn rootObjectSize(&self) -> Option<size_t>
+	{
+		let result = unsafe { pmemobj_root_size(self.0) } as size_t;
+		if unlikely(result == 0)
+		{
+			None
+		}
+		else
+		{
+			Some(result)
+		}
+	}
+	
+	#[inline(always)]
 	pub fn allocateZeroedOrReturnExistingRootObject<T: Persistable>(&mut self) -> PersistentObject<T>
 	{
 		let size = T::size();

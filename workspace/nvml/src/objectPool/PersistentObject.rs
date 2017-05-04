@@ -332,7 +332,7 @@ impl<T: Persistable> PersistentObject<T>
 {
 	/*
 		pub fn pmemobj_root_construct(pop: *mut PMEMobjpool, size: usize, constructor: pmemobj_constr, arg: *mut c_void) -> PMEMoid;
-		pub fn pmemobj_root_size(pop: *mut PMEMobjpool) -> usize;
+		
 	*/
 	
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
