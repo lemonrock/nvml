@@ -2,12 +2,54 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 #[repr(C)]
 pub struct PersistentObject<T: Persistable>
 {
 	oid: PMEMoid,
 	phantomData: PhantomData<T>
+}
+
+impl<T: Persistable> PartialOrd for PersistentObject<T>
+{
+	#[inline(always)]
+	fn partial_cmp(&self, other: &PersistentObject<T>) -> Option<Ordering>
+	{
+		Some(self.cmp(other))
+	}
+}
+
+impl<T: Persistable> Ord for PersistentObject<T>
+{
+	#[inline(always)]
+	fn cmp(&self, other: &PersistentObject<T>) -> Ordering
+	{
+		let ourOid = self.oid;
+		let otherOid = other.oid;
+		ourOid.pool_uuid_lo.cmp(&otherOid.pool_uuid_lo).then_with(|| ourOid.off.cmp(&otherOid.off))
+	}
+}
+
+impl<T: Persistable> PartialEq for PersistentObject<T>
+{
+	#[inline(always)]
+	fn eq(&self, other: &PersistentObject<T>) -> bool
+	{
+		self.oid.equals(&other.oid)
+	}
+}
+
+impl<T: Persistable> Eq for PersistentObject<T>
+{
+}
+
+impl<T: Persistable> Hash for PersistentObject<T>
+{
+	fn hash<H: Hasher>(&self, state: &mut H)
+	{
+		self.oid.pool_uuid_lo.hash(state);
+		self.oid.off.hash(state);
+	}
 }
 
 impl<T: Persistable> OID for PersistentObject<T>
@@ -19,9 +61,9 @@ impl<T: Persistable> OID for PersistentObject<T>
 	}
 	
 	#[inline(always)]
-	fn equals(&self, right: &Self) -> bool
+	fn equals(&self, other: &Self) -> bool
 	{
-		self.oid.equals(&right.oid)
+		self.oid.equals(&other.oid)
 	}
 	
 	#[inline(always)]

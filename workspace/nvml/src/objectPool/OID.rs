@@ -8,7 +8,7 @@ pub trait OID
 	fn is_null(&self) -> bool;
 	
 	#[inline(always)]
-	fn equals(&self, right: &Self) -> bool;
+	fn equals(&self, other: &Self) -> bool;
 	
 	/// Can be NULL, but only if is_null() is true
 	#[inline(always)]
@@ -38,9 +38,9 @@ impl OID for PMEMoid
 	}
 	
 	#[inline(always)]
-	fn equals(&self, right: &Self) -> bool
+	fn equals(&self, other: &Self) -> bool
 	{
-		OID_EQUALS(self, right)
+		OID_EQUALS(self, other)
 	}
 	
 	#[inline(always)]
