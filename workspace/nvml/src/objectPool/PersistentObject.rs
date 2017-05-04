@@ -102,6 +102,32 @@ where T: Display
 	}
 }
 
+/// It is possible to violate aliasing rules
+impl<T: Persistable> Deref for PersistentObject<T>
+{
+	type Target = T;
+	
+	#[inline(always)]
+	fn deref(&self) -> &T
+	{
+		debug_assert!(!self.oid.is_null(), "oid is null");
+		
+		unsafe { &*self.as_ptr() }
+	}
+}
+
+/// It is possible to violate aliasing rules
+impl<T: Persistable> DerefMut for PersistentObject<T>
+{
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut T
+	{
+		debug_assert!(!self.oid.is_null(), "oid is null");
+		
+		unsafe { &mut *self.as_ptr() }
+	}
+}
+
 impl<T: Persistable> OID for PersistentObject<T>
 {
 	#[inline(always)]
@@ -175,32 +201,6 @@ impl<T: Persistable> OID for PersistentObject<T>
 			oid: next,
 			phantomData: PhantomData,
 		}
-	}
-}
-
-/// It is possible to violate aliasing rules
-impl<T: Persistable> Deref for PersistentObject<T>
-{
-	type Target = T;
-	
-	#[inline(always)]
-	fn deref(&self) -> &T
-	{
-		debug_assert!(!self.oid.is_null(), "oid is null");
-		
-		unsafe { &*self.as_ptr() }
-	}
-}
-
-/// It is possible to violate aliasing rules
-impl<T: Persistable> DerefMut for PersistentObject<T>
-{
-	#[inline(always)]
-	fn deref_mut(&mut self) -> &mut T
-	{
-		debug_assert!(!self.oid.is_null(), "oid is null");
-		
-		unsafe { &mut *self.as_ptr() }
 	}
 }
 
