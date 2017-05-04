@@ -145,14 +145,7 @@ impl<T: Persistable> Iterator for PersistentObject<T>
 			// Not necessarily true, but if we're treating a pool as a vectored list then we ought to optimise for this branch
 			if likely(next.typeNumber() == T::TypeNumber)
 			{
-				return Some
-				(
-					PersistentObject
-					{
-						oid: self.oid,
-						phantomData: PhantomData,
-					}
-				);
+				return Some(PersistentObject::new(self.oid));
 			}
 		}
 	}
