@@ -27,7 +27,10 @@ impl<T: Persistable> OID for PersistentObject<T>
 	#[inline(always)]
 	fn persistentObjectPool(&self) -> *mut PMEMobjpool
 	{
-		self.oid.persistentObjectPool()
+		debug_assert!(!self.is_null(), "Null; unallocated");
+		let objectPool = self.oid.persistentObjectPool();
+		debug_assert!(!objectPool.is_null(), "How is the objectPool null for an allocated object?");
+		objectPool
 	}
 	
 	#[inline(always)]
@@ -39,18 +42,33 @@ impl<T: Persistable> OID for PersistentObject<T>
 	#[inline(always)]
 	fn typeNumber(&self) -> TypeNumber
 	{
+		debug_assert!(!self.is_null(), "Null; unallocated");
+		
 		self.oid.typeNumber()
 	}
 	
 	#[inline(always)]
 	fn address(&self) -> *mut c_void
 	{
-		self.oid.address()
+		debug_assert!(!self.is_null(), "Null; unallocated");
+		
+		let address = self.oid.address();
+		debug_assert!(!address.is_null(), "How is the address null for an allocated object?");
+		address
 	}
 	
 	#[inline(always)]
 	fn next(&self) -> Self
 	{
+		if unlikely(self.is_null())
+		{
+			return PersistentObject
+			{
+				oid: self.oid,
+				phantomData: PhantomData,
+			};
+		}
+		
 		let mut next;
 		while
 		{
