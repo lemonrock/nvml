@@ -332,46 +332,46 @@ impl<T: Persistable> PersistentObject<T>
 {
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstructRootObject(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstructRootObject(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
 	{
 		debug_assert!(T::TypeNumber == 0, "This is not a root type, ie type number is '{}'");
 		
 		#[inline(always)]
-		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr) -> bool
+		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr, arguments: *mut c_void) -> bool
 		{
 			let size = T::size();
 			debug_assert!(size != 0, "size can not be zero");
 			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 			
-			let oid = unsafe { pmemobj_root_construct(objectPool, size, constructor, null_mut()) };
+			let oid = unsafe { pmemobj_root_construct(objectPool, size, constructor, arguments) };
 			*oidPointer = oid;
 			oid.is_null()
 		}
 		
-		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>))
+		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>), arguments)
 	}
 	
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
 	{
 		#[inline(always)]
-		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr) -> bool
+		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr, arguments: *mut c_void) -> bool
 		{
 			let size = T::size();
 			debug_assert!(size != 0, "size can not be zero");
 			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 			
-			let result = unsafe { pmemobj_alloc(objectPool, oidPointer, size, T::TypeNumber, constructor, null_mut()) };
+			let result = unsafe { pmemobj_alloc(objectPool, oidPointer, size, T::TypeNumber, constructor, arguments) };
 			debug_assert!(result == 0 || result == -1, "result was '{}'", result);
 			result == -1
 		}
 		
-		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>))
+		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>), arguments)
 	}
 	
 	#[inline(always)]
-	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr) -> bool>(objectPool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A) -> Result<(), GenericError>
+	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr, *mut c_void) -> bool>(objectPool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A, arguments: &mut T::Arguments) -> Result<(), GenericError>
 	{
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
@@ -387,9 +387,9 @@ impl<T: Persistable> PersistentObject<T>
 			{
 				debug_assert!(!pop.is_null(), "pop is null");
 				debug_assert!(!ptr.is_null(), "ptr is null");
-				debug_assert!(arg.is_null(), "arg is not null");
+				debug_assert!(!arg.is_null(), "arg is null");
 				
-				T::initialize(ptr as *mut T, pop)
+				T::initialize(ptr as *mut T, pop, &mut *(arg as *mut T::Arguments))
 			}));
 			
 			match result
@@ -404,7 +404,7 @@ impl<T: Persistable> PersistentObject<T>
 			}
 		}
 		
-		if unlikely(allocate(objectPool, oid, Some(constructor::<T>)))
+		if unlikely(allocate(objectPool, oid, Some(constructor::<T>), arguments as *mut _ as *mut _))
 		{
 			let osErrorNumber = errno().0;
 			match osErrorNumber
@@ -433,34 +433,6 @@ impl<T: Persistable> PersistentObject<T>
 			Ok(())
 		}
 	}
-	
-//	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
-//	#[inline(always)]
-//	fn allocateZeroed(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
-//	{
-//		debug_assert!(!objectPool.is_null(), "objectPool is null");
-//
-//		let size = T::size();
-//		debug_assert!(size != 0, "size can not be zero");
-//		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
-//
-//		let typeNumber = T::TypeNumber;
-//		debug_assert!(typeNumber != 0, "typeNumber can not be zero, ie root, for this call");
-//
-//		let result = unsafe { pmemobj_zalloc(objectPool, &mut self.oid, size, typeNumber) };
-//		if likely(result == 0)
-//		{
-//			Ok(())
-//		}
-//		else if likely(result == -1)
-//		{
-//			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_zalloc"))
-//		}
-//		else
-//		{
-//			panic!("pmemobj_zalloc() failed with unexpected result '{}'", result);
-//		}
-//	}
 	
 	#[inline(always)]
 	fn null() -> Self

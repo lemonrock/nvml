@@ -3,9 +3,25 @@
 
 
 /// Persistable MUST NOT implement Drop, Copy or Clone
-pub trait Persistable : Initializable
+pub trait Persistable: Sized
 {
 	const TypeNumber: TypeNumber;
+	
+	type Arguments;
+	
+	/// # Arguments
+	/// - pointerToUninitializedMemoryToUseForFields is always non-null
+	/// - objectPool is always non-null
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments);
+	
+	#[inline(always)]
+	fn size() -> size_t
+	{
+		let size = size_of::<Self>() as size_t;
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+		size
+	}
 	
 	#[deprecated(note = "inefficient; access via PersistentObject")]
 	#[inline(always)]
@@ -61,18 +77,17 @@ pub struct root
 impl Persistable for root
 {
 	const TypeNumber: TypeNumber = 0;
-}
-
-impl Initializable for root
-{
+	
+	type Arguments = ();
+	
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
 		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
-		instance.node.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for node");
+		instance.node.allocateUninitializedAndConstruct(objectPool, &mut ()).expect("Allocation failed for node");
 	}
 }
 
@@ -90,12 +105,11 @@ pub struct node
 impl Persistable for node
 {
 	const TypeNumber: TypeNumber = 1;
-}
-
-impl Initializable for node
-{
+	
+	type Arguments = ();
+	
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
@@ -106,8 +120,8 @@ impl Initializable for node
 		(&mut instance.mutex as *mut _).zero(objectPool);
 		(&mut instance.conditionVariable as *mut _).zero(objectPool);
 		
-		instance.next.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for next");
-		instance.foo.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for foo");
+		instance.next.allocateUninitializedAndConstruct(objectPool, &mut ()).expect("Allocation failed for next");
+		instance.foo.allocateUninitializedAndConstruct(objectPool, &mut (11)).expect("Allocation failed for foo");
 		instance.data = 0;
 	}
 }
@@ -163,17 +177,16 @@ pub struct foo
 impl Persistable for foo
 {
 	const TypeNumber: TypeNumber = 2;
-}
-
-impl Initializable for foo
-{
+	
+	type Arguments = (u8);
+	
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
 		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
-		instance.address = 0;
+		instance.address = *arguments;
 	}
 }

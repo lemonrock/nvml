@@ -70,6 +70,94 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 	}
 	
 	#[inline(always)]
+	pub fn allocateAndInsertAtHead(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, GenericError>
+	{
+		self.allocateAndInsert(objectPool, arguments, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
+	}
+	
+	#[inline(always)]
+	pub fn allocateAndInsertBefore(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, GenericError>
+	{
+		self.allocateAndInsert(objectPool, arguments, index, POBJ_LIST_DEST_HEAD as i32)
+	}
+	
+	#[inline(always)]
+	pub fn allocateAndInsertAfter(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, GenericError>
+	{
+		self.allocateAndInsert(objectPool, arguments, index, POBJ_LIST_DEST_TAIL as i32)
+	}
+	
+	#[inline(always)]
+	pub fn allocateAndInsertAtTail(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, GenericError>
+	{
+		self.allocateAndInsert(objectPool, arguments, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
+	}
+	
+	#[inline(always)]
+	fn allocateAndInsert(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>, directionTowards: c_int) -> Result<PersistentObject<T>, GenericError>
+	{
+		let size = T::size();
+		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
+		
+		unsafe extern "C" fn constructor<T: Persistable>(pop: *mut PMEMobjpool, ptr: *mut c_void, arg: *mut c_void) -> c_int
+		{
+			let result = catch_unwind(AssertUnwindSafe(||
+			{
+				debug_assert!(!pop.is_null(), "pop is null");
+				debug_assert!(!ptr.is_null(), "ptr is null");
+				debug_assert!(!arg.is_null(), "arg is null");
+				
+				T::initialize(ptr as *mut T, pop, &mut *(arg as *mut T::Arguments))
+			}));
+			
+			match result
+			{
+				Ok(()) => 0,
+				
+				Err(panicPayload) =>
+				{
+					CapturedPanic = Some(panicPayload);
+					-1
+				},
+			}
+		}
+		
+		let result = unsafe { pmemobj_list_insert_new(objectPool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, directionTowards, T::size(), T::TypeNumber, Some(constructor::<T>), arguments as *mut _ as * mut _) };
+		
+		if unlikely(result.is_null())
+		{
+			let osErrorNumber = errno().0;
+			match osErrorNumber
+			{
+				E::ECANCELED =>
+				{
+					if let Some(capturedPanic) = unsafe { replace(&mut CapturedPanic, None) }
+					{
+						resume_unwind(capturedPanic);
+					}
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
+				},
+				
+				_ =>
+				{
+					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", osErrorNumber);
+					
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_list_insert_new"))
+				}
+			}
+		}
+		else
+		{
+			debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set yet result was 0 (Ok)");
+			
+			Ok(PersistentObject::new(result))
+		}
+	}
+	
+	#[inline(always)]
 	pub fn remove(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), GenericError>
 	{
 		self.removeInternal(objectPool, index, 0)

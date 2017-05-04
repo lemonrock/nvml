@@ -37,7 +37,6 @@ use ::std::panic::resume_unwind;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
 use ::std::ptr::null;
-use ::std::ptr::null_mut;
 use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
 

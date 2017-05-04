@@ -68,6 +68,20 @@ pub struct fooListEntry
 impl Persistable for fooListEntry
 {
 	const TypeNumber: TypeNumber = 2;
+	
+	type Arguments = (u32);
+	
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
+	{
+		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
+		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		
+		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		PersistentCircularDoublyLinkedListEntry::initialize(&mut instance.LIST_ENTRY_FIELD, objectPool);
+		
+		instance.someData = *arguments;
+	}
 }
 
 impl ListEntryPersistable for fooListEntry
@@ -76,20 +90,5 @@ impl ListEntryPersistable for fooListEntry
 	fn listEntryField(&self) -> &PersistentCircularDoublyLinkedListEntry<Self>
 	{
 		&self.LIST_ENTRY_FIELD
-	}
-}
-
-impl Initializable for fooListEntry
-{
-	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
-	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
-		
-		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
-		PersistentCircularDoublyLinkedListEntry::initialize(&mut instance.LIST_ENTRY_FIELD, objectPool);
-		
-		instance.someData = 0;
 	}
 }
