@@ -29,13 +29,6 @@ impl<'a, T: Persistable> ReadWriteLock<'a, T>
 		}
 	}
 	
-	/// Only needed if initial allocation of its parent wasn't done by zero-ing memory
-	#[inline(always)]
-	pub fn zero(self)
-	{
-		unsafe { pmemobj_rwlock_zero(self.objectPool, self.readWriteLock) };
-	}
-	
 	#[inline(always)]
 	pub fn readLock(self) -> ReadLockUnlock<'a, T>
 	{

@@ -25,13 +25,6 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 		}
 	}
 	
-	/// Only needed if initial allocation of its parent wasn't done by zero-ing memory
-	#[inline(always)]
-	pub fn zero(self)
-	{
-		unsafe { pmemobj_mutex_zero(self.objectPool, self.mutex) };
-	}
-	
 	#[allow(unused_variables)]
 	#[inline(always)]
 	pub fn lockInTransaction(self, transaction: Transaction)

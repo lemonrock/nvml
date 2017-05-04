@@ -2,9 +2,16 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-pub trait Persistable: Sized
+/// Persistable MUST NOT implement Drop, Copy or Clone
+pub trait Persistable : Sized
 {
 	const TypeNumber: TypeNumber;
+	
+	/// # Arguments
+	/// - pointerToUninitializedMemoryToUseForFields is always non-null
+	/// - objectPool is always non-null
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool);
 	
 	#[inline(always)]
 	fn size() -> size_t
@@ -68,6 +75,16 @@ pub struct root
 impl Persistable for root
 {
 	const TypeNumber: TypeNumber = 0;
+	
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	{
+		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
+		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		
+		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		instance.node.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for node");
+	}
 }
 
 #[repr(C)]
@@ -84,6 +101,23 @@ pub struct node
 impl Persistable for node
 {
 	const TypeNumber: TypeNumber = 1;
+	
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	{
+		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
+		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		
+		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		
+		(&mut instance.readWriteLock as *mut _).zero(objectPool);
+		(&mut instance.mutex as *mut _).zero(objectPool);
+		(&mut instance.conditionVariable as *mut _).zero(objectPool);
+		
+		instance.next.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for next");
+		instance.foo.allocateUninitializedAndConstruct(objectPool).expect("Allocation failed for foo");
+		instance.data = 0;
+	}
 }
 
 impl ReadWriteLockablePersistable for node
@@ -137,4 +171,14 @@ pub struct foo
 impl Persistable for foo
 {
 	const TypeNumber: TypeNumber = 2;
+	
+	#[inline(always)]
+	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	{
+		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
+		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		
+		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		instance.address = 0;
+	}
 }

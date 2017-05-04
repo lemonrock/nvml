@@ -52,83 +52,83 @@ impl Transaction
 					match stage
 					{
 						pobj_tx_stage::TX_STAGE_WORK =>
+						{
+							let PanicOsErrorNumber: c_int = E::ENOTSUP;
+							
+							match catch_unwind(AssertUnwindSafe(|| work(Transaction)))
 							{
-								let PanicOsErrorNumber: c_int = E::ENOTSUP;
-								
-								match catch_unwind(AssertUnwindSafe(|| work(Transaction)))
+								Ok(someOsErrorNumberForAbort) =>
 								{
-									Ok(someOsErrorNumberForAbort) =>
-										{
-											if likely(someOsErrorNumberForAbort == 0)
-											{
-												pmemobj_tx_commit();
-											}
-											else
-											{
-												pmemobj_tx_abort(PanicOsErrorNumber);
-											}
-										},
-									Err(payload) =>
-										{
-											pmemobj_tx_abort(PanicOsErrorNumber);
-											*panicPayload = Some(payload);
-										},
-								};
-								
-								pmemobj_tx_process();
-							},
+									if likely(someOsErrorNumberForAbort == 0)
+									{
+										pmemobj_tx_commit();
+									}
+									else
+									{
+										pmemobj_tx_abort(PanicOsErrorNumber);
+									}
+								},
+								Err(payload) =>
+								{
+									pmemobj_tx_abort(PanicOsErrorNumber);
+									*panicPayload = Some(payload);
+								},
+							};
+							
+							pmemobj_tx_process();
+						},
 						
 						pobj_tx_stage::TX_STAGE_ONCOMMIT =>
+						{
+							match catch_unwind(AssertUnwindSafe(|| onCommit()))
 							{
-								match catch_unwind(AssertUnwindSafe(|| onCommit()))
+								Ok(result) =>
 								{
-									Ok(result) =>
-										{
-											*functionResult = Some(Ok(result))
-										},
-									
-									Err(payload) =>
-										{
-											if panicPayload.is_none()
-											{
-												*panicPayload = Some(payload)
-											}
-										}
-								};
+									*functionResult = Some(Ok(result))
+								},
 								
-								pmemobj_tx_process();
-							},
+								Err(payload) =>
+								{
+									if panicPayload.is_none()
+									{
+										*panicPayload = Some(payload)
+									}
+								}
+							};
+							
+							pmemobj_tx_process();
+						},
 						
 						pobj_tx_stage::TX_STAGE_ONABORT =>
+						{
+							match catch_unwind(AssertUnwindSafe(|| onAbort()))
 							{
-								match catch_unwind(AssertUnwindSafe(|| onAbort()))
+								Ok(result) =>
 								{
-									Ok(result) =>
-										{
-											*functionResult = Some(Err(result))
-										},
-									
-									Err(payload) =>
-										{
-											if panicPayload.is_none()
-											{
-												*panicPayload = Some(payload)
-											}
-										}
-								};
+									*functionResult = Some(Err(result))
+								},
 								
-								pmemobj_tx_process();
-							},
+								Err(payload) =>
+								{
+									if panicPayload.is_none()
+									{
+										*panicPayload = Some(payload)
+									}
+								}
+							};
+							
+							pmemobj_tx_process();
+						},
 						
 						pobj_tx_stage::TX_STAGE_FINALLY =>
-							{
-								pmemobj_tx_process();
-							},
+						{
+							pmemobj_tx_process();
+						},
 						
 						_ =>
-							{
-								pmemobj_tx_process();
-							},
+						{
+							pmemobj_tx_process();
+						},
 					}
 				}
 				

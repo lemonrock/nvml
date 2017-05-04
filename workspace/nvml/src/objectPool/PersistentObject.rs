@@ -330,19 +330,114 @@ where T: ConditionVariableMutexLockablePersistable
 
 impl<T: Persistable> PersistentObject<T>
 {
+	/*
+		pub fn pmemobj_root_construct(pop: *mut PMEMobjpool, size: usize, constructor: pmemobj_constr, arg: *mut c_void) -> PMEMoid;
+		pub fn pmemobj_root_size(pop: *mut PMEMobjpool) -> usize;
+	*/
+	
+	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
-	pub fn allocateZeroed(&mut self, objectPool: &ObjectPool)
+	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
 	{
-		debug_assert!(self.oid.is_null(), "We should not be allocating zero'd without free-ing first");
+		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
-		let result = unsafe { pmemobj_zalloc(objectPool.0, &mut self.oid, T::size(), T::TypeNumber) };
-		debug_assert!(result == 0, "result was {}", result);
+		let size = T::size();
+		debug_assert!(size != 0, "size can not be zero");
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
-		objectPool.allocateZeroed::<T>(&mut self.oid)
+		let typeNumber = T::TypeNumber;
+		debug_assert!(typeNumber != 0, "typeNumber can not be zero, ie root, for this call");
+		
+		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
+		
+		unsafe extern "C" fn constructor<T: Persistable>(pop: *mut PMEMobjpool, ptr: *mut c_void, arg: *mut c_void) -> c_int
+		{
+			let result = catch_unwind(AssertUnwindSafe(||
+			{
+				debug_assert!(!pop.is_null(), "pop is null");
+				debug_assert!(!ptr.is_null(), "ptr is null");
+				debug_assert!(arg.is_null(), "arg is not null");
+				
+				T::initialize(ptr as *mut T, pop)
+			}));
+			
+			match result
+			{
+				Ok(()) => 0,
+				
+				Err(panicPayload) =>
+				{
+					CapturedPanic = Some(panicPayload);
+					-1
+				},
+			}
+		}
+		
+		let result = unsafe { pmemobj_alloc(objectPool, &mut self.oid, size, typeNumber, Some(constructor::<T>), null_mut()) };
+		if likely(result == 0)
+		{
+			debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set yet result was 0 (Ok)");
+			
+			Ok(())
+		}
+		else if likely(result == -1)
+		{
+			let osErrorNumber = errno().0;
+			match osErrorNumber
+			{
+				E::ECANCELED =>
+				{
+					if let Some(capturedPanic) = unsafe { replace(&mut CapturedPanic, None) }
+					{
+						resume_unwind(capturedPanic);
+					}
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc"))
+				},
+				
+				_ =>
+				{
+					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", osErrorNumber);
+					
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc"))
+				}
+			}
+		}
+		else
+		{
+			panic!("pmemobj_alloc() failed with unexpected result '{}'", result);
+		}
 	}
 	
+//	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
+//	#[inline(always)]
+//	fn allocateZeroed(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
+//	{
+//		debug_assert!(!objectPool.is_null(), "objectPool is null");
+//
+//		let size = T::size();
+//		debug_assert!(size != 0, "size can not be zero");
+//		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+//
+//		let typeNumber = T::TypeNumber;
+//		debug_assert!(typeNumber != 0, "typeNumber can not be zero, ie root, for this call");
+//
+//		let result = unsafe { pmemobj_zalloc(objectPool, &mut self.oid, size, typeNumber) };
+//		if likely(result == 0)
+//		{
+//			Ok(())
+//		}
+//		else if likely(result == -1)
+//		{
+//			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_zalloc"))
+//		}
+//		else
+//		{
+//			panic!("pmemobj_zalloc() failed with unexpected result '{}'", result);
+//		}
+//	}
+	
 	#[inline(always)]
-	pub fn new(oid: PMEMoid) -> Self
+	fn new(oid: PMEMoid) -> Self
 	{
 		Self
 		{

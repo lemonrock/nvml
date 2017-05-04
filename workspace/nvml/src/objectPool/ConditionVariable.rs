@@ -25,13 +25,6 @@ impl<'a, T: Persistable> ConditionVariable<'a, T>
 		}
 	}
 	
-	/// Only needed if initial allocation of its parent wasn't done by zero-ing memory
-	#[inline(always)]
-	pub fn zero(self)
-	{
-		unsafe { pmemobj_cond_zero(self.objectPool, self.conditionVariable) };
-	}
-	
 	/// Always recheck whatever predicate we were waiting on after this function returns due to spurious wake ups
 	#[inline(always)]
 	pub fn wait(&self, lockedMutex: MutexUnlock<'a, T>) -> MutexUnlock<'a, T>
