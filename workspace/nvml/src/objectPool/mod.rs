@@ -55,6 +55,7 @@ include!("ObjectPoolPersistOnDrop.rs");
 include!("OID.rs");
 include!("PersistentObject.rs");
 include!("Persistable.rs");
+include!("PersistentCircularDoublyLinkedList.rs");
 include!("PersistentMemoryObjectPoolPathExt.rs");
 include!("PMEMobjpoolEx.rs");
 include!("PMEMoidIterator.rs");

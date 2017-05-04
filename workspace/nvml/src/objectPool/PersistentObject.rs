@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PersistentObject<T: Persistable>
 {
@@ -461,6 +461,12 @@ impl<T: Persistable> PersistentObject<T>
 //			panic!("pmemobj_zalloc() failed with unexpected result '{}'", result);
 //		}
 //	}
+	
+	#[inline(always)]
+	fn null() -> Self
+	{
+		Self::new(unsafe { OID_NULL })
+	}
 	
 	#[inline(always)]
 	fn new(oid: PMEMoid) -> Self
