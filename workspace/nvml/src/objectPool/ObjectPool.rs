@@ -65,6 +65,7 @@ impl ObjectPool
 		ObjectPoolPersistOnDrop(self.0, address, PhantomData)
 	}
 	
+	/// Result may be null, use `.is_null()` to check
 	#[inline(always)]
 	pub fn first(&self) -> PMEMoid
 	{
@@ -72,7 +73,7 @@ impl ObjectPool
 	}
 	
 	#[inline(always)]
-	pub fn firstOf<T: Persistable>(&self) -> Option<PersistentObject<T>>
+	pub fn firstOfType<T: Persistable>(&self) -> Option<PersistentObject<T>>
 	{
 		let first = self.first();
 		if unlikely(first.is_null())
@@ -117,18 +118,4 @@ impl ObjectPool
 			Some(result)
 		}
 	}
-	
-//	#[inline(always)]
-//	pub fn allocateZeroedOrReturnExistingRootObject<T: Persistable>(&mut self) -> PersistentObject<T>
-//	{
-//		let size = T::size();
-//		debug_assert!(size != 0, "size can not be zero");
-//		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
-//
-//		debug_assert!(T::TypeNumber == 0, "T is not a root object, as it has a non-zero TypeNumber of '{}'", T::TypeNumber);
-//
-//		let resultantOid = unsafe { pmemobj_root(self.0, size) };
-//		assert!(!resultantOid.is_null(), "Could not re-allocate requested root object size of '{}'", size);
-//		PersistentObject::new(resultantOid)
-//	}
 }

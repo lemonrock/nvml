@@ -330,23 +330,54 @@ where T: ConditionVariableMutexLockablePersistable
 
 impl<T: Persistable> PersistentObject<T>
 {
-	/*
-		pub fn pmemobj_root_construct(pop: *mut PMEMobjpool, size: usize, constructor: pmemobj_constr, arg: *mut c_void) -> PMEMoid;
+	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
+	#[inline(always)]
+	pub fn allocateUninitializedAndConstructRootObject(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
+	{
+		debug_assert!(T::TypeNumber == 0, "This is not a root type, ie type number is '{}'");
 		
-	*/
+		#[inline(always)]
+		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr) -> bool
+		{
+			let size = T::size();
+			debug_assert!(size != 0, "size can not be zero");
+			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+			
+			let oid = unsafe { pmemobj_root_construct(objectPool, size, constructor, null_mut()) };
+			*oidPointer = oid;
+			oid.is_null()
+		}
+		
+		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>))
+	}
 	
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
 	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool) -> Result<(), GenericError>
+	{
+		#[inline(always)]
+		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr) -> bool
+		{
+			let size = T::size();
+			debug_assert!(size != 0, "size can not be zero");
+			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+			
+			let result = unsafe { pmemobj_alloc(objectPool, oidPointer, size, T::TypeNumber, constructor, null_mut()) };
+			debug_assert!(result == 0 || result == -1, "result was '{}'", result);
+			result == -1
+		}
+		
+		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>))
+	}
+	
+	#[inline(always)]
+	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr) -> bool>(objectPool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A) -> Result<(), GenericError>
 	{
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
 		let size = T::size();
 		debug_assert!(size != 0, "size can not be zero");
 		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
-		
-		let typeNumber = T::TypeNumber;
-		debug_assert!(typeNumber != 0, "typeNumber can not be zero, ie root, for this call");
 		
 		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
 		
@@ -373,14 +404,7 @@ impl<T: Persistable> PersistentObject<T>
 			}
 		}
 		
-		let result = unsafe { pmemobj_alloc(objectPool, &mut self.oid, size, typeNumber, Some(constructor::<T>), null_mut()) };
-		if likely(result == 0)
-		{
-			debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set yet result was 0 (Ok)");
-			
-			Ok(())
-		}
-		else if likely(result == -1)
+		if unlikely(allocate(objectPool, oid, Some(constructor::<T>)))
 		{
 			let osErrorNumber = errno().0;
 			match osErrorNumber
@@ -391,20 +415,22 @@ impl<T: Persistable> PersistentObject<T>
 					{
 						resume_unwind(capturedPanic);
 					}
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc"))
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
 				},
 				
 				_ =>
 				{
 					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", osErrorNumber);
 					
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc"))
+					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
 				}
 			}
 		}
 		else
 		{
-			panic!("pmemobj_alloc() failed with unexpected result '{}'", result);
+			debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set yet result was 0 (Ok)");
+			
+			Ok(())
 		}
 	}
 	
