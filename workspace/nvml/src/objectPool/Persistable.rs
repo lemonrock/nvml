@@ -14,30 +14,21 @@ pub trait Persistable: Sized
 		size
 	}
 	
-	#[deprecated(note = "inefficient; access via OidWrapper")]
+	#[deprecated(note = "inefficient; access via PersistentObject")]
 	#[inline(always)]
 	fn oid(&self) -> PMEMoid
 	{
 		let pointer = self as *const _ as *const c_void;
-		let oid = pointer.oid();
+		let oid = unsafe { pmemobj_oid(pointer) };
 		debug_assert!(!oid.is_null(), "This object is not a Persistable");
 		oid
-	}
-	
-	#[deprecated(note = "inefficient; access via OidWrapper")]
-	#[inline(always)]
-	fn persistentObjectPool(&self) -> *mut PMEMobjpool
-	{
-		let persistentObjectPool = self.oid().persistentObjectPool();
-		debug_assert!(!persistentObjectPool.is_null(), "This object does not have a valid OID");
-		persistentObjectPool
 	}
 	
 	/// It is important to now zero-initialise all PMEMmutex, etc types; all OIDs are invalid
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	fn allocateUninitializedInTransaction(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
+	fn allocateUninitializedInTransaction(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
 	{
 		transaction.allocateUninitializedInTransaction::<Self>(Self::size(), Self::TypeNumber)
 	}
@@ -46,7 +37,7 @@ pub trait Persistable: Sized
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	fn allocateUninitializedInTransactionWithoutFlush(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
+	fn allocateUninitializedInTransactionWithoutFlush(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
 	{
 		transaction.allocateUninitializedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
 	}
@@ -54,7 +45,7 @@ pub trait Persistable: Sized
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	fn allocateZeroedInTransaction(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
+	fn allocateZeroedInTransaction(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
 	{
 		transaction.allocateZeroedInTransaction::<Self>(Self::size(), Self::TypeNumber)
 	}
@@ -62,7 +53,7 @@ pub trait Persistable: Sized
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	fn allocateZeroedInTransactionWithoutFlush(transaction: Transaction) -> Result<OidWrapper<Self>, c_int>
+	fn allocateZeroedInTransactionWithoutFlush(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
 	{
 		transaction.allocateZeroedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
 	}
@@ -71,7 +62,7 @@ pub trait Persistable: Sized
 #[repr(C)]
 pub struct root
 {
-	node: OidWrapper<node>,
+	node: PersistentObject<node>,
 }
 
 impl Persistable for root
@@ -85,8 +76,8 @@ pub struct node
 	readWriteLock: PMEMrwlock,
 	mutex: PMEMmutex,
 	conditionVariable: PMEMcond,
-	next: OidWrapper<node>,
-	foo: OidWrapper<foo>,
+	next: PersistentObject<node>,
+	foo: PersistentObject<foo>,
 	data: u32,
 }
 
@@ -95,28 +86,28 @@ impl Persistable for node
 	const TypeNumber: TypeNumber = 1;
 }
 
-impl ReadWriteLockablePersistentObjectMemory for node
+impl ReadWriteLockablePersistable for node
 {
 	#[inline(always)]
-	fn _pmemReadWriteLock(&mut self) -> &mut PMEMrwlock
+	fn pmemReadWriteLock(&mut self) -> &mut PMEMrwlock
 	{
 		&mut self.readWriteLock
 	}
 }
 
-impl MutexLockablePersistentObjectMemory for node
+impl MutexLockablePersistable for node
 {
 	#[inline(always)]
-	fn _pmemMutex(&mut self) -> &mut PMEMmutex
+	fn pmemMutex(&mut self) -> &mut PMEMmutex
 	{
 		&mut self.mutex
 	}
 }
 
-impl ConditionVariableMutexLockablePersistentObjectMemory for node
+impl ConditionVariableMutexLockablePersistable for node
 {
 	#[inline(always)]
-	fn _pmemConditionVariable(&mut self) -> &mut PMEMcond
+	fn pmemConditionVariable(&mut self) -> &mut PMEMcond
 	{
 		&mut self.conditionVariable
 	}
@@ -124,14 +115,14 @@ impl ConditionVariableMutexLockablePersistentObjectMemory for node
 
 impl node
 {
-	pub fn manipulate(&mut self)
+	pub fn manipulate2(this: &mut PersistentObject<Self>)
 	{
 		{
-			let mut lock = self.lock();
+			let mut lock = this.lock();
 			lock.data = 45;
 		}
 		{
-			let mut lock = self.writeLock();
+			let mut lock = this.writeLock();
 			lock.data = 34;
 		}
 	}

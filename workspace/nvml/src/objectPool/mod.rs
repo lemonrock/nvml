@@ -34,20 +34,19 @@ use ::syscall_alt::constants::E;
 
 
 include!("ConditionVariable.rs");
-include!("ConditionVariableMutexLockablePersistentObjectMemory.rs");
+include!("ConditionVariableMutexLockablePersistable.rs");
 include!("initialiseMemoryFunctions.rs");
 include!("MutexLock.rs");
-include!("MutexLockablePersistentObjectMemory.rs");
-include!("ReadWriteLockablePersistentObjectMemory.rs");
+include!("MutexLockablePersistable.rs");
+include!("ReadWriteLockablePersistable.rs");
 include!("MutexUnlock.rs");
 include!("ObjectPool.rs");
 include!("ObjectPoolDropWrapper.rs");
 include!("ObjectPoolPersistOnDrop.rs");
 include!("OID.rs");
-include!("OidWrapper.rs");
+include!("PersistentObject.rs");
 include!("Persistable.rs");
 include!("PersistentMemoryObjectPoolPathExt.rs");
-include!("PersistentObjectMemory.rs");
 include!("PMEMobjpoolEx.rs");
 include!("ReadWriteLock.rs");
 include!("ReadLockUnlock.rs");

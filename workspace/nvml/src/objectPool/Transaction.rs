@@ -153,7 +153,7 @@ impl Transaction
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	pub fn allocateUninitializedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
+	pub fn allocateUninitializedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<PersistentObject<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
 		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
@@ -165,14 +165,14 @@ impl Transaction
 		}
 		else
 		{
-			Ok(OidWrapper::new(result))
+			Ok(PersistentObject::new(result))
 		}
 	}
 	
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	pub fn allocateUninitializedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
+	pub fn allocateUninitializedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<PersistentObject<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
 		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
@@ -184,14 +184,14 @@ impl Transaction
 		}
 		else
 		{
-			Ok(OidWrapper::new(result))
+			Ok(PersistentObject::new(result))
 		}
 	}
 	
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	pub fn allocateZeroedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
+	pub fn allocateZeroedInTransaction<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<PersistentObject<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
 		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
@@ -203,14 +203,14 @@ impl Transaction
 		}
 		else
 		{
-			Ok(OidWrapper::new(result))
+			Ok(PersistentObject::new(result))
 		}
 	}
 	
 	/// Zero-sized allocations are not supported
 	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
 	#[inline(always)]
-	pub fn allocateZeroedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<OidWrapper<T>, c_int>
+	pub fn allocateZeroedInTransactionWithoutFlush<T: Persistable>(self, size: size_t, typeNumber: TypeNumber) -> Result<PersistentObject<T>, c_int>
 	{
 		debug_assert!(size != 0, "size can not be zero");
 		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
@@ -224,7 +224,7 @@ impl Transaction
 		}
 		else
 		{
-			Ok(OidWrapper::new(result))
+			Ok(PersistentObject::new(result))
 		}
 	}
 	

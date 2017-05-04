@@ -70,4 +70,11 @@ impl ObjectPool
 	{
 		unsafe { pmemobj_first(self.0) }
 	}
+	
+	#[inline(always)]
+	fn allocateZeroed<T: Persistable>(&self, oidPointer: &mut PMEMoid)
+	{
+		let result = unsafe { pmemobj_zalloc(self.0, oidPointer, T::size(), T::TypeNumber) };
+		debug_assert!(result == 0, "result was {}", result);
+	}
 }
