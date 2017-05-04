@@ -102,6 +102,8 @@ impl ObjectPool
 		}
 	}
 	
+	/// Returns None if there is no root object
+	/// Never returns Some(0)
 	#[inline(always)]
 	pub fn rootObjectSize(&self) -> Option<size_t>
 	{
