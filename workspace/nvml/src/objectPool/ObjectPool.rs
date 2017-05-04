@@ -118,17 +118,17 @@ impl ObjectPool
 		}
 	}
 	
-	#[inline(always)]
-	pub fn allocateZeroedOrReturnExistingRootObject<T: Persistable>(&mut self) -> PersistentObject<T>
-	{
-		let size = T::size();
-		debug_assert!(size != 0, "size can not be zero");
-		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
-		
-		debug_assert!(T::TypeNumber == 0, "T is not a root object, as it has a non-zero TypeNumber of '{}'", T::TypeNumber);
-		
-		let resultantOid = unsafe { pmemobj_root(self.0, size) };
-		assert!(!resultantOid.is_null(), "Could not re-allocate requested root object size of '{}'", size);
-		PersistentObject::new(resultantOid)
-	}
+//	#[inline(always)]
+//	pub fn allocateZeroedOrReturnExistingRootObject<T: Persistable>(&mut self) -> PersistentObject<T>
+//	{
+//		let size = T::size();
+//		debug_assert!(size != 0, "size can not be zero");
+//		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+//
+//		debug_assert!(T::TypeNumber == 0, "T is not a root object, as it has a non-zero TypeNumber of '{}'", T::TypeNumber);
+//
+//		let resultantOid = unsafe { pmemobj_root(self.0, size) };
+//		assert!(!resultantOid.is_null(), "Could not re-allocate requested root object size of '{}'", size);
+//		PersistentObject::new(resultantOid)
+//	}
 }
