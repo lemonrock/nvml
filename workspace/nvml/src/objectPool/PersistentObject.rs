@@ -128,6 +128,36 @@ impl<T: Persistable> DerefMut for PersistentObject<T>
 	}
 }
 
+impl<T: Persistable> Iterator for PersistentObject<T>
+{
+	type Item = PersistentObject<T>;
+	
+	fn next(&mut self) -> Option<PersistentObject<T>>
+	{
+		loop
+		{
+			// pmemobj_next is safe if self.oid.is_null()
+			let next = unsafe { pmemobj_next(self.oid) };
+			if unlikely(next.is_null())
+			{
+				return None;
+			}
+			// Not necessarily true, but if we're treating a pool as a vectored list then we ought to optimise for this branch
+			if likely(next.typeNumber() == T::TypeNumber)
+			{
+				return Some
+				(
+					PersistentObject
+					{
+						oid: self.oid,
+						phantomData: PhantomData,
+					}
+				);
+			}
+		}
+	}
+}
+
 impl<T: Persistable> OID for PersistentObject<T>
 {
 	#[inline(always)]
@@ -173,34 +203,6 @@ impl<T: Persistable> OID for PersistentObject<T>
 		let address = self.oid.address();
 		debug_assert!(!address.is_null(), "How is the address null for an allocated object?");
 		address
-	}
-	
-	#[inline(always)]
-	fn next(&self) -> Self
-	{
-		if unlikely(self.is_null())
-		{
-			return PersistentObject
-			{
-				oid: self.oid,
-				phantomData: PhantomData,
-			};
-		}
-		
-		let mut next;
-		while
-		{
-			next = self.oid.next();
-			!next.is_null() && next.typeNumber() != T::TypeNumber
-		}
-		{
-		}
-		
-		PersistentObject
-		{
-			oid: next,
-			phantomData: PhantomData,
-		}
 	}
 }
 

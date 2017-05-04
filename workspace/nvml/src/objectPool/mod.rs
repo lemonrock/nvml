@@ -55,6 +55,7 @@ include!("PersistentObject.rs");
 include!("Persistable.rs");
 include!("PersistentMemoryObjectPoolPathExt.rs");
 include!("PMEMobjpoolEx.rs");
+include!("PMEMoidIterator.rs");
 include!("ReadWriteLock.rs");
 include!("ReadLockUnlock.rs");
 include!("TypeNumber.rs");

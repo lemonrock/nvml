@@ -23,10 +23,6 @@ pub trait OID
 	/// Can be NULL, but only if is_null() is true
 	#[inline(always)]
 	fn address(&self) -> *mut c_void;
-	
-	/// Can be NULL
-	#[inline(always)]
-	fn next(&self) -> Self;
 }
 
 impl OID for PMEMoid
@@ -65,12 +61,6 @@ impl OID for PMEMoid
 	fn address(&self) -> *mut c_void
 	{
 		unsafe { pmemobj_direct(*self) }
-	}
-	
-	#[inline(always)]
-	fn next(&self) -> Self
-	{
-		unsafe { pmemobj_next(*self) }
 	}
 }
 
