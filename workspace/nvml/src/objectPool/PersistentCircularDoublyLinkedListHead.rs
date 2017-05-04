@@ -185,6 +185,47 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_insert"))
 		}
 	}
+	
+	#[inline(always)]
+	pub fn removeFromThisListAndInsertNewListAtHead(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeFromThisListAndInsertNewList(objectPool, to, element, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
+	}
+	
+	#[inline(always)]
+	pub fn removeFromThisListAndInsertNewListBefore(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeFromThisListAndInsertNewList(objectPool, to, element, index, POBJ_LIST_DEST_HEAD as i32)
+	}
+	
+	#[inline(always)]
+	pub fn removeFromThisListAndInsertNewListAfter(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeFromThisListAndInsertNewList(objectPool, to, element, index, POBJ_LIST_DEST_TAIL as i32)
+	}
+	
+	#[inline(always)]
+	pub fn removeFromThisListAndInsertNewListAtTail(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeFromThisListAndInsertNewList(objectPool, to, element, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
+	}
+	
+	#[inline(always)]
+	fn removeFromThisListAndInsertNewList(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>, directionTowards: c_int) -> Result<(), GenericError>
+	{
+		debug_assert!(!element.is_null(), "element is null");
+		
+		let result = unsafe { pmemobj_list_move(objectPool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, T::PersistentCircularDoublyLinkedListEntryFieldOffset, to as *mut _ as *mut c_void, index.oid, directionTowards, element.oid) };
+		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
+		if likely(result == 0)
+		{
+			Ok(())
+		}
+		else
+		{
+			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_move"))
+		}
+	}
 }
 
 impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
