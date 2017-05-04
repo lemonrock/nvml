@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Copy, Clone, Default)]
 #[repr(C)]
 pub struct PersistentObject<T: Persistable>
 {
@@ -49,6 +49,56 @@ impl<T: Persistable> Hash for PersistentObject<T>
 	{
 		self.oid.pool_uuid_lo.hash(state);
 		self.oid.off.hash(state);
+	}
+}
+
+impl<T: Persistable> Debug for PersistentObject<T>
+{
+	#[inline(always)]
+	default fn fmt(&self, f: &mut Formatter) -> fmt::Result
+	{
+		if unlikely(self.is_null())
+		{
+			write!(f, "PersistentObject({}, {}, NULL)", T::TypeNumber, self.typeNumber())
+		}
+		else
+		{
+			write!(f, "PersistentObject({}, {}, OID({}, {}))", T::TypeNumber, self.typeNumber(), self.oid.pool_uuid_lo, self.oid.off)
+		}
+	}
+}
+
+impl<T: Persistable> Debug for PersistentObject<T>
+where T: Debug
+{
+	#[inline(always)]
+	fn fmt(&self, f: &mut Formatter) -> fmt::Result
+	{
+		if unlikely(self.is_null())
+		{
+			write!(f, "PersistentObject({}, {}, NULL)", T::TypeNumber, self.typeNumber())
+		}
+		else
+		{
+			write!(f, "PersistentObject({}, {}, {:?})", T::TypeNumber, self.typeNumber(), self.deref())
+		}
+	}
+}
+
+impl<T: Persistable> Display for PersistentObject<T>
+where T: Display
+{
+	#[inline(always)]
+	fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error>
+	{
+		if unlikely(self.is_null())
+		{
+			write!(f, "NULL")
+		}
+		else
+		{
+			self.deref().fmt(f)
+		}
 	}
 }
 

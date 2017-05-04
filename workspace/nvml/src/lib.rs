@@ -5,6 +5,7 @@
 #![feature(associated_consts)]
 #![feature(const_fn)]
 #![feature(plugin)]
+#![feature(specialization)]
 #![feature(untagged_unions)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
