@@ -68,6 +68,35 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_insert"))
 		}
 	}
+	
+	#[inline(always)]
+	pub fn remove(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeInternal(objectPool, index, 0)
+	}
+	
+	#[inline(always)]
+	pub fn removeAndFree(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), GenericError>
+	{
+		self.removeInternal(objectPool, index, 1)
+	}
+	
+	#[inline(always)]
+	fn removeInternal(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>, free: c_int) -> Result<(), GenericError>
+	{
+		debug_assert!(!index.is_null(), "index is null");
+		
+		let result = unsafe { pmemobj_list_remove(objectPool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, free) };
+		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
+		if likely(result == 0)
+		{
+			Ok(())
+		}
+		else
+		{
+			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_insert"))
+		}
+	}
 }
 
 impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
