@@ -72,6 +72,37 @@ impl ObjectPool
 	}
 	
 	#[inline(always)]
+	pub fn firstOf<T: Persistable>(&self) -> Option<PersistentObject<T>>
+	{
+		let first = self.first();
+		if unlikely(first.is_null())
+		{
+			None
+		}
+		else if likely(first.typeNumber() == T::TypeNumber)
+		{
+			Some(PersistentObject::new(first))
+		}
+		else
+		{
+			let mut previous = first;
+			loop
+			{
+				let next = unsafe { pmemobj_next(previous) };
+				if unlikely(next.is_null())
+				{
+					return None
+				}
+				else if likely(next.typeNumber() == T::TypeNumber)
+				{
+					return Some(PersistentObject::new(next))
+				}
+				previous = next;
+			}
+		}
+	}
+	
+	#[inline(always)]
 	fn allocateZeroed<T: Persistable>(&self, oidPointer: &mut PMEMoid)
 	{
 		let size = T::size();
