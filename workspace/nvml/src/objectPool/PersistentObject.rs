@@ -328,6 +328,15 @@ where T: ConditionVariableMutexLockablePersistable
 	}
 }
 
+#[inline(always)]
+fn size<T: Persistable>() -> size_t
+{
+	let size = T::size();
+	debug_assert!(size != 0, "size can not be zero");
+	debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+	size
+}
+
 impl<T: Persistable> PersistentObject<T>
 {
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
@@ -339,13 +348,18 @@ impl<T: Persistable> PersistentObject<T>
 		#[inline(always)]
 		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr, arguments: *mut c_void) -> bool
 		{
-			let size = T::size();
-			debug_assert!(size != 0, "size can not be zero");
-			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+			let size = size::<T>();
 			
 			let oid = unsafe { pmemobj_root_construct(objectPool, size, constructor, arguments) };
-			*oidPointer = oid;
-			oid.is_null()
+			if likely(!oid.is_null())
+			{
+				*oidPointer = oid;
+				false
+			}
+			else
+			{
+				true
+			}
 		}
 		
 		Self::allocateUninitializedAndConstructInternal(objectPool, &mut self.oid, (allocate::<T>), arguments)
@@ -358,9 +372,7 @@ impl<T: Persistable> PersistentObject<T>
 		#[inline(always)]
 		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr, arguments: *mut c_void) -> bool
 		{
-			let size = T::size();
-			debug_assert!(size != 0, "size can not be zero");
-			debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+			let size = size::<T>();
 			
 			let result = unsafe { pmemobj_alloc(objectPool, oidPointer, size, T::TypeNumber, constructor, arguments) };
 			debug_assert!(result == 0 || result == -1, "result was '{}'", result);
@@ -374,10 +386,6 @@ impl<T: Persistable> PersistentObject<T>
 	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr, *mut c_void) -> bool>(objectPool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A, arguments: &mut T::Arguments) -> Result<(), GenericError>
 	{
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
-		
-		let size = T::size();
-		debug_assert!(size != 0, "size can not be zero");
-		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
 		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
 		
@@ -435,6 +443,107 @@ impl<T: Persistable> PersistentObject<T>
 	}
 	
 	#[inline(always)]
+	pub fn free(&mut self)
+	{
+		unsafe { pmemobj_free(&mut self.oid) };
+		self.oid = unsafe { OID_NULL };
+	}
+	
+	/// If returns Err then the transaction will have been aborted; return immediately from work() function
+	/// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
+	#[allow(unused_variables)]
+	#[inline(always)]
+	pub fn allocateUninitializedAndConstructInTransaction(&mut self, transaction: Transaction, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	{
+		self.constructInTransaction(objectPool, arguments, unsafe { pmemobj_tx_alloc(size::<T>(), T::TypeNumber) })
+	}
+	
+	/// If returns Err then the transaction will have been aborted; return immediately from work() function
+	/// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
+	#[allow(unused_variables)]
+	#[inline(always)]
+	pub fn allocateUninitializedAndConstructInTransactionWithoutFlush(&mut self, transaction: Transaction, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	{
+		self.constructInTransaction(objectPool, arguments, unsafe { pmemobj_tx_xalloc(size::<T>(), T::TypeNumber, POBJ_XALLOC_NO_FLUSH) })
+	}
+	
+	/// If returns Err then the transaction will have been aborted; return immediately from work() function
+	#[allow(unused_variables)]
+	#[inline(always)]
+	pub fn freeInTransaction(&mut self, transaction: Transaction) -> Result<(), GenericError>
+	{
+		Self::failureInTransaction(unsafe { pmemobj_tx_free(self.oid) })
+	}
+	
+	/// If returns Err then the transaction will have been aborted; return immediately from work() function
+	/// size can be zero
+	#[allow(unused_variables)]
+	#[inline(always)]
+	pub fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), GenericError>
+	{
+		debug_assert!(!self.oid.is_null(), "oid is null");
+		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		if unlikely(size == 0)
+		{
+			return Ok(())
+		}
+		
+		Self::failureInTransaction(unsafe { pmemobj_tx_add_range(self.oid, offset, size) })
+	}
+	
+	/// If returns Err then the transaction will have been aborted; return immediately from work() function
+	/// size can be zero
+	#[allow(unused_variables)]
+	#[inline(always)]
+	pub fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), GenericError>
+	{
+		debug_assert!(!self.oid.is_null(), "oid is null");
+		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
+		debug_assert!(size <= PMEMOBJ_MAX_ALLOC_SIZE, "size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE '{}'", size, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		if unlikely(size == 0)
+		{
+			return Ok(())
+		}
+		
+		Self::failureInTransaction(unsafe { pmemobj_tx_xadd_range(self.oid, offset, size, POBJ_XADD_NO_FLUSH) })
+	}
+	
+	#[inline(always)]
+	fn constructInTransaction(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments, oid: PMEMoid) -> Result<(), GenericError>
+	{
+		if unlikely(oid.is_null())
+		{
+			let osErrorNumber = errno().0;
+			Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_tx_xalloc"))
+		}
+		else
+		{
+			unsafe { T::initialize(oid.address() as *mut T, objectPool, arguments) };
+			self.oid = oid;
+			Ok(())
+		}
+	}
+	
+	#[inline(always)]
+	fn failureInTransaction(result: c_int) -> Result<(), GenericError>
+	{
+		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
+		
+		if likely(result == 0)
+		{
+			Ok(())
+		}
+		else
+		{
+			let osErrorNumber = errno().0;
+			Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_tx_*"))
+		}
+	}
+	
+	#[inline(always)]
 	fn null() -> Self
 	{
 		Self::new(unsafe { OID_NULL })
@@ -462,39 +571,5 @@ impl<T: Persistable> PersistentObject<T>
 		let persistentObjectPool = self.oid.persistentObjectPool();
 		debug_assert!(!persistentObjectPool.is_null(), "This object does not have a valid OID");
 		persistentObjectPool
-	}
-	
-	#[inline(always)]
-	pub fn free(&mut self)
-	{
-		unsafe { pmemobj_free(&mut self.oid) };
-		self.oid = unsafe { OID_NULL };
-	}
-	
-	#[inline(always)]
-	pub fn freeInTransaction(self, transaction: Transaction) -> c_int
-	{
-		transaction.free(self.oid)
-	}
-	
-	/// size can be zero
-	#[inline(always)]
-	pub fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
-	{
-		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
-		
-		transaction.addRangeSnapshotInTransaction(self.oid, offset, size)
-	}
-	
-	/// Can only be called from a work() function
-	/// If returns !=0 then the transaction will have been aborted; return immediately from work() function
-	/// No checks are made for offset or size
-	/// size can be zero
-	#[inline(always)]
-	pub fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> c_int
-	{
-		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
-		
-		transaction.addRangeSnapshotInTransactionWithoutFlush(self.oid, offset, size)
 	}
 }

@@ -32,40 +32,6 @@ pub trait Persistable: Sized
 		debug_assert!(!oid.is_null(), "This object is not a Persistable");
 		oid
 	}
-	
-	/// It is important to now zero-initialise all PMEMmutex, etc types; all OIDs are invalid
-	/// Zero-sized allocations are not supported
-	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
-	#[inline(always)]
-	fn allocateUninitializedInTransaction(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
-	{
-		transaction.allocateUninitializedInTransaction::<Self>(Self::size(), Self::TypeNumber)
-	}
-	
-	/// It is important to now zero-initialise all PMEMmutex, etc types; all OIDs are invalid
-	/// Zero-sized allocations are not supported
-	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
-	#[inline(always)]
-	fn allocateUninitializedInTransactionWithoutFlush(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
-	{
-		transaction.allocateUninitializedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
-	}
-	
-	/// Zero-sized allocations are not supported
-	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
-	#[inline(always)]
-	fn allocateZeroedInTransaction(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
-	{
-		transaction.allocateZeroedInTransaction::<Self>(Self::size(), Self::TypeNumber)
-	}
-	
-	/// Zero-sized allocations are not supported
-	/// If returns Err(error) then the transaction will have been aborted; return immediately from work() function
-	#[inline(always)]
-	fn allocateZeroedInTransactionWithoutFlush(transaction: Transaction) -> Result<PersistentObject<Self>, c_int>
-	{
-		transaction.allocateZeroedInTransactionWithoutFlush::<Self>(Self::size(), Self::TypeNumber)
-	}
 }
 
 #[repr(C)]
