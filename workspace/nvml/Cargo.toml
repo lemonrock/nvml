@@ -26,4 +26,6 @@ libc = "0.2"
 nvml-sys = { path = "../nvml-sys" }
 quick-error = "1.2.0"
 rust-extra = "0.0.10"
+serde = "1.0"
+serde_derive = "1.0"
 syscall-alt = "0.0.12"

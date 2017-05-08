@@ -42,6 +42,7 @@
       <w>pmemp</w>
       <w>pobj</w>
       <w>poolsize</w>
+      <w>prefault</w>
       <w>pthread</w>
       <w>repr</w>
       <w>rpmem</w>

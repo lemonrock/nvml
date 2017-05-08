@@ -118,4 +118,110 @@ impl ObjectPool
 			Some(result)
 		}
 	}
+	
+	/// Only affects calls to pmemobj_create()
+	#[inline(always)]
+	pub fn getPrefaultAtCreate() -> bool
+	{
+		PrefaultAtCreateKey.get_bool_global()
+	}
+	
+	/// Only affects calls to pmemobj_create()
+	#[inline(always)]
+	pub fn setPrefaultAtCreate(prefaultAtCreate: bool)
+	{
+		PrefaultAtCreateKey.set_bool_global(prefaultAtCreate);
+	}
+	
+	/// Only affects calls to pmemobj_open()
+	#[inline(always)]
+	pub fn getPrefaultAtOpen() -> bool
+	{
+		PrefaultAtOpenKey.get_bool_global()
+	}
+	
+	/// Only affects calls to pmemobj_open()
+	#[inline(always)]
+	pub fn setPrefaultAtOpen(prefaultAtOpen: bool)
+	{
+		PrefaultAtOpenKey.set_bool_global(prefaultAtOpen);
+	}
+	
+	#[inline(always)]
+	pub fn getTransactionDebugSkipExpensiveChecks(&self) -> bool
+	{
+		TransactionDebugSkipExpensiveChecksKey.get_bool(self.0)
+	}
+	
+	#[inline(always)]
+	pub fn setTransactionDebugSkipExpensiveChecks(&self, skipExpensiveChecks: bool)
+	{
+		TransactionDebugSkipExpensiveChecksKey.set_bool(self.0, skipExpensiveChecks);
+	}
+	
+	#[inline(always)]
+	pub fn getTransactionCacheSizeAndThreshold(&self) -> (u64, u64)
+	{
+		(self.getTransactionCacheSize(), self.getTransactionCacheThreshold())
+	}
+	
+	#[inline(always)]
+	pub fn setTransactionCacheSizeAndThreshold(&self, cacheSize: u64, cacheThreshold: u64)
+	{
+		debug_assert!(cacheThreshold <= cacheSize, "cacheThreshold '{}' exceeds cacheSize '{}'", cacheThreshold, cacheSize);
+		
+		self.setTransactionCacheSize(cacheSize);
+		self.setTransactionCacheThreshold(cacheThreshold);
+	}
+	
+	#[inline(always)]
+	fn getTransactionCacheSize(&self) -> u64
+	{
+		let transactionCacheSize = TransactionCacheSizeKey.get_integer(self.0);
+		debug_assert!(transactionCacheSize < 0, "transactionCacheSize '{}' is negative", transactionCacheSize);
+		
+		let transactionCacheSize = transactionCacheSize as u64;
+		debug_assert!(transactionCacheSize <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transactionCacheSize '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transactionCacheSize, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		transactionCacheSize
+	}
+	
+	/// Maximum is 15Gb, PMEMOBJ_MAX_ALLOC_SIZE
+	#[inline(always)]
+	fn setTransactionCacheSize(&self, cacheSize: u64)
+	{
+		debug_assert!(cacheSize <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cacheSize '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cacheSize, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		TransactionCacheSizeKey.set_integer(self.0, cacheSize as i64);
+	}
+	
+	#[inline(always)]
+	fn getTransactionCacheThreshold(&self) -> u64
+	{
+		let transactionCacheThreshold = TransactionCacheThresholdKey.get_integer(self.0);
+		debug_assert!(transactionCacheThreshold < 0, "transactionCacheThreshold '{}' is negative", transactionCacheThreshold);
+		
+		let transactionCacheThreshold = transactionCacheThreshold as u64;
+		debug_assert!(transactionCacheThreshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transactionCacheThreshold '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transactionCacheThreshold, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		transactionCacheThreshold
+	}
+	
+	#[inline(always)]
+	fn setTransactionCacheThreshold(&self, cacheThreshold: u64)
+	{
+		debug_assert!(cacheThreshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cacheThreshold '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cacheThreshold, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		TransactionCacheThresholdKey.set_integer(self.0, cacheThreshold as i64);
+	}
 }
+
+static PrefaultAtCreateKey: &'static [u8] = b"prefault.at_create\0";
+
+static PrefaultAtOpenKey: &'static [u8] = b"prefault.at_open\0";
+
+static TransactionDebugSkipExpensiveChecksKey: &'static [u8] = b"tx.debug.skip_expensive_checks\0";
+
+static TransactionCacheSizeKey: &'static [u8] = b"tx.cache.size\0";
+
+static TransactionCacheThresholdKey: &'static [u8] = b"tx.cache.threshold\0";

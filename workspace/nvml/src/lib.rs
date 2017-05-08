@@ -21,6 +21,8 @@ extern crate libc;
 extern crate nvml_sys;
 #[macro_use] extern crate quick_error;
 extern crate rust_extra;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
 extern crate syscall_alt;
 
 
