@@ -26,12 +26,26 @@ extern crate serde;
 extern crate syscall_alt;
 
 
-include!("initialiseMemoryFunctions.rs");
 include!("usePath.rs");
-
-
 pub mod blockPool;
 pub mod errors;
 pub mod logPool;
 pub mod persistentMemory;
 pub mod objectPool;
+
+
+use ::blockPool::BlockPool;
+use ::blockPool::BlockPoolsConfiguration;
+use ::libc::mode_t;
+use ::logPool::LogPool;
+use ::logPool::LogPoolsConfiguration;
+use ::objectPool::ObjectPool;
+use ::objectPool::ObjectPoolsConfiguration;
+use ::rust_extra::unlikely;
+use ::std::collections::HashMap;
+use ::std::path::Path;
+
+
+include!("Configuration.rs");
+include!("initialiseMemoryFunctions.rs");
+include!("Pools.rs");

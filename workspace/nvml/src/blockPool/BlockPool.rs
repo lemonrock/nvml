@@ -30,11 +30,19 @@ impl BlockPool
 	}
 	
 	#[inline(always)]
-	pub fn open(poolSetFilePath: &Path) -> Result<Self, GenericError>
+	pub fn open(poolSetFilePath: &Path, validateBlockSize: Option<usize>) -> Result<Self, GenericError>
 	{
-		const DoNotValidateBlockSize: usize = 0;
+		let blockSize = if let Some(blockSize) = validateBlockSize
+		{
+			assert!(blockSize != 0, "blockSize can not be zero");
+			blockSize
+		}
+		else
+		{
+			0
+		};
 		
-		poolSetFilePath.openPersistentMemoryBlockPool(DoNotValidateBlockSize).map(Self::fromHandle)
+		poolSetFilePath.openPersistentMemoryBlockPool(blockSize).map(Self::fromHandle)
 	}
 	
 	#[inline(always)]

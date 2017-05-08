@@ -80,6 +80,7 @@ impl Persistable for root
 	
 	type Arguments = ();
 	
+	#[allow(unused_variables)]
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
@@ -108,6 +109,7 @@ impl Persistable for node
 	
 	type Arguments = ();
 	
+	#[allow(unused_variables)]
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{

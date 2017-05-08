@@ -9,9 +9,11 @@ use ::libc::c_longlong;
 use ::libc::c_void;
 use ::libc::mode_t;
 use ::libc::size_t;
+use ::Configuration;
 use ::nvml_sys::*;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
+use ::std::collections::HashMap;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
 use ::std::sync::Arc;
@@ -19,7 +21,9 @@ use ::syscall_alt::constants::E;
 
 
 include!("BlockPool.rs");
+include!("BlockPoolConfiguration.rs");
 include!("BlockPoolDropWrapper.rs");
+include!("BlockPoolsConfiguration.rs");
 include!("initialiseMemoryFunctions.rs");
 include!("PersistentMemoryBlockPoolPathExt.rs");
 include!("PMEMblkpoolEx.rs");

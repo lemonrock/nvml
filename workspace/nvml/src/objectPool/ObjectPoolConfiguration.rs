@@ -4,9 +4,10 @@
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[derive(Deserialize, Serialize)]
+#[serde(default)]
 pub struct ObjectPoolConfiguration
 {
-	layoutName: String,
+	permissions: mode_t,
 	skipExpensiveDebugChecks: bool,
 	transactionCacheSize: u64,
 	transactionCacheThreshold: u64,
@@ -19,7 +20,7 @@ impl Default for ObjectPoolConfiguration
 	{
 		Self
 		{
-			layoutName: "ObjectPool".to_string(),
+			permissions: Configuration::DefaultPermissionsForPoolSets,
 			skipExpensiveDebugChecks: false,
 			transactionCacheSize: Self::TX_DEFAULT_RANGE_CACHE_SIZE,
 			transactionCacheThreshold: Self::TX_DEFAULT_RANGE_CACHE_THRESHOLD,
@@ -37,23 +38,14 @@ impl ObjectPoolConfiguration
 	// lib/nvml/src/libpmemobj/tx.c
 	const TX_DEFAULT_RANGE_CACHE_THRESHOLD: u64 = 1 << 12;
 	
-	pub fn typical(&self, layoutName: String) -> ObjectPoolConfiguration
+	pub fn open(&self, objectPoolSetsFolderPath: &Path, fileNameAndLayoutName: &str) -> ObjectPool
 	{
-		Self
-		{
-			layoutName: layoutName,
-			.. Default::default()
-		}
-	}
-	
-	pub fn open(&self, poolSetFolderPath: &Path) -> ObjectPool
-	{
-		let poolSetFilePath = poolSetFolderPath.join(&self.layoutName);
+		let poolSetFilePath = objectPoolSetsFolderPath.join(fileNameAndLayoutName);
 		
 		assert!(poolSetFilePath.exists(), "poolSetFilePath '{:?}' does not exist", poolSetFilePath);
 		assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
 		
-		let objectPool = ObjectPool::open(&poolSetFilePath, Some(&self.layoutName)).expect("Could not open poolSetFilePath");
+		let objectPool = ObjectPool::open(&poolSetFilePath, Some(fileNameAndLayoutName)).expect("Could not open ObjectPool");
 		objectPool.setTransactionDebugSkipExpensiveChecks(self.skipExpensiveDebugChecks);
 		objectPool.setTransactionCacheSize(self.transactionCacheSize);
 		objectPool.setTransactionCacheSize(self.transactionCacheThreshold);
