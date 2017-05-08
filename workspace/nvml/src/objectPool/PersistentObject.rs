@@ -512,6 +512,18 @@ impl<T: Persistable> PersistentObject<T>
 	}
 	
 	#[inline(always)]
+	pub fn addSelfToTransaction(&self, transaction: Transaction) -> Result<(), GenericError>
+	{
+		self.addRangeSnapshotInTransaction(transaction, 0, T::size())
+	}
+	
+	#[inline(always)]
+	pub fn addSelfToTransactionWithoutFlush(&self, transaction: Transaction) -> Result<(), GenericError>
+	{
+		self.addRangeSnapshotInTransactionWithoutFlush(transaction, 0, T::size())
+	}
+	
+	#[inline(always)]
 	fn constructInTransaction(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments, oid: PMEMoid) -> Result<(), GenericError>
 	{
 		if unlikely(oid.is_null())
@@ -573,3 +585,61 @@ impl<T: Persistable> PersistentObject<T>
 		persistentObjectPool
 	}
 }
+
+#[macro_export]
+macro_rules! addFieldToTransaction
+{
+	($self: ident, $transaction: ident, $selfType: ty, $field: ident) =>
+	{
+		{
+			$self.addRangeSnapshotInTransaction(offset_of!($selfType, $field), ::std::mem::size_of_val(&$self.$field))
+		}
+	}
+}
+
+#[macro_export]
+macro_rules! addFieldToTransactionWithoutFlush
+{
+	($self: ident, $transaction: ident, $selfType: ty, $field: ident) =>
+	{
+		{
+			$self.addRangeSnapshotInTransactionWithoutFlush(offset_of!($selfType, $field), ::std::mem::size_of_val(&$self.$field))
+		}
+	}
+}
+
+#[macro_export]
+macro_rules! addContiguousFieldsToTransaction
+{
+	($self: ident, $transaction: ident, $selfType: ty, $fromInclusiveField: ident, $toInclusiveField: ident) =>
+	{
+		{
+			$self.addRangeSnapshotInTransaction(offset_of!($selfType, $fromInclusiveField), (::std::mem::size_of_val(&$self.$toInclusiveField) + offset_of!($selfType, $toInclusiveField)) - offset_of!($selfType, $fromInclusiveField))
+		}
+	}
+}
+
+#[macro_export]
+macro_rules! addContiguousFieldsToTransactionWithoutFlush
+{
+	($self: ident, $transaction: ident, $selfType: ty, $fromInclusiveField: ident, $toInclusiveField: ident) =>
+	{
+		{
+			$self.addRangeSnapshotInTransactionWithoutFlush(offset_of!($selfType, $fromInclusiveField), (::std::mem::size_of_val(&$self.$toInclusiveField) + offset_of!($selfType, $toInclusiveField)) - offset_of!($selfType, $fromInclusiveField))
+		}
+	}
+}
+
+macro_rules! offset_of
+{
+	($selfType: ty, $field: ident) =>
+	{
+		unsafe { &(*(0 as *const $selfType)).$field as *const _ as usize }
+	}
+}
+
+/*
+#define TX_ADD_FIELD(o, field)\
+pmemobj_tx_add_range((o).oid, TOID_OFFSETOF(o, field),\
+	sizeof(D_RO(o)->field))
+*/
