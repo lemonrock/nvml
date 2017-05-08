@@ -7,7 +7,9 @@
 #[serde(default)]
 pub struct ObjectPoolConfiguration
 {
+	poolSize: Option<usize>,
 	permissions: mode_t,
+	layoutName: Option<String>,
 	skipExpensiveDebugChecks: bool,
 	transactionCacheSize: u64,
 	transactionCacheThreshold: u64,
@@ -20,32 +22,49 @@ impl Default for ObjectPoolConfiguration
 	{
 		Self
 		{
+			poolSize: None,
 			permissions: Configuration::DefaultPermissionsForPoolSets,
+			layoutName: None,
 			skipExpensiveDebugChecks: false,
-			transactionCacheSize: Self::TX_DEFAULT_RANGE_CACHE_SIZE,
-			transactionCacheThreshold: Self::TX_DEFAULT_RANGE_CACHE_THRESHOLD,
+			transactionCacheSize: TX_DEFAULT_RANGE_CACHE_SIZE as u64,
+			transactionCacheThreshold: TX_DEFAULT_RANGE_CACHE_THRESHOLD as u64,
 		}
 	}
 }
 
 impl ObjectPoolConfiguration
 {
-	// Accurate as of May 7th 2017
-	// lib/nvml/src/libpmemobj/tx.c
-	const TX_DEFAULT_RANGE_CACHE_SIZE: u64 = 1 << 15;
-	
-	// Accurate as of May 7th 2017
-	// lib/nvml/src/libpmemobj/tx.c
-	const TX_DEFAULT_RANGE_CACHE_THRESHOLD: u64 = 1 << 12;
-	
-	pub fn open(&self, objectPoolSetsFolderPath: &Path, fileNameAndLayoutName: &str) -> ObjectPool
+	pub fn openOrCreate(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> ObjectPool
 	{
-		let poolSetFilePath = objectPoolSetsFolderPath.join(fileNameAndLayoutName);
+		let layoutName = match self.layoutName
+		{
+			None => fileName,
+			Some(ref layoutName) => layoutName,
+		};
 		
-		assert!(poolSetFilePath.exists(), "poolSetFilePath '{:?}' does not exist", poolSetFilePath);
-		assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
+		assert!(layoutName.len() + 1 <= PMEMOBJ_MAX_LAYOUT, "layoutName '{}' can not be larger than PMEMOBJ_MAX_LAYOUT '{}' - 1", layoutName, PMEMOBJ_MAX_LAYOUT);
 		
-		let objectPool = ObjectPool::open(&poolSetFilePath, Some(fileNameAndLayoutName)).expect("Could not open ObjectPool");
+		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
+		let layoutName = Some(layoutName);
+		let objectPool = if likely(poolSetFilePath.exists())
+		{
+			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
+			ObjectPool::open(&poolSetFilePath, layoutName).expect("Could not open ObjectPool")
+		}
+		else
+		{
+			let poolSize = match self.poolSize
+			{
+				None => 0,
+				Some(poolSize) =>
+				{
+					assert!(poolSize >= PMEMOBJ_MIN_POOL, "poolSize '{}' is smaller than PMEMOBJ_MIN_POOL '{}'", poolSize, PMEMOBJ_MIN_POOL);
+					poolSize
+				},
+			};
+			ObjectPool::create(&poolSetFilePath, layoutName, poolSize, self.permissions).expect("Could not create ObjectPool")
+		};
+		
 		objectPool.setTransactionDebugSkipExpensiveChecks(self.skipExpensiveDebugChecks);
 		objectPool.setTransactionCacheSize(self.transactionCacheSize);
 		objectPool.setTransactionCacheSize(self.transactionCacheThreshold);

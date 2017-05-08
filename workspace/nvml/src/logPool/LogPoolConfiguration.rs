@@ -6,27 +6,46 @@
 #[derive(Deserialize, Serialize)]
 pub struct LogPoolConfiguration
 {
-	#[serde(default = "LogPoolConfiguration::default_permissions")] permissions: mode_t,
-	poolSize: usize,
+	permissions: mode_t,
+	poolSize: Option<usize>,
+}
+
+impl Default for LogPoolConfiguration
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self
+		{
+			permissions: Configuration::DefaultPermissionsForPoolSets,
+			poolSize: None,
+		}
+	}
 }
 
 impl LogPoolConfiguration
 {
-	#[inline(always)]
-	fn default_permissions() -> mode_t
+	pub fn openOrCreate(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> LogPool
 	{
-		Configuration::DefaultPermissionsForPoolSets
-	}
-	
-	pub fn open(&self, blockPoolSetsFolderPath: &Path, fileName: &str) -> LogPool
-	{
-		debug_assert!(self.poolSize != 0, "poolSize should not be zero");
+		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
 		
-		let poolSetFilePath = blockPoolSetsFolderPath.join(fileName);
-		
-		assert!(poolSetFilePath.exists(), "poolSetFilePath '{:?}' does not exist", poolSetFilePath);
-		assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
-		
-		LogPool::open(&poolSetFilePath).expect("Could not open LogPool")
+		if likely(poolSetFilePath.exists())
+		{
+			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
+			LogPool::open(&poolSetFilePath).expect("Could not open LogPool")
+		}
+		else
+		{
+			let poolSize = match self.poolSize
+			{
+				None => 0,
+				Some(poolSize) =>
+				{
+					assert!(poolSize >= PMEMLOG_MIN_POOL, "poolSize '{}' is smaller than PMEMLOG_MIN_POOL '{}'", poolSize, PMEMLOG_MIN_POOL);
+					poolSize
+				},
+			};
+			LogPool::create(&poolSetFilePath, poolSize, self.permissions).expect("Could not create LogPool")
+		}
 	}
 }

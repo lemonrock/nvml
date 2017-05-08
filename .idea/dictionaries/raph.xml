@@ -18,12 +18,14 @@
       <w>libpmem</w>
       <w>libpmemobj</w>
       <w>longjmp</w>
+      <w>longlong</w>
       <w>mblkpool</w>
       <w>mcond</w>
       <w>memcpy</w>
       <w>memmove</w>
       <w>memset</w>
       <w>mlogpool</w>
+      <w>mmap</w>
       <w>mmutex</w>
       <w>mobjpool</w>
       <w>moid</w>

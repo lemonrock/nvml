@@ -4,29 +4,58 @@
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[derive(Deserialize, Serialize)]
+#[serde(default)]
 pub struct BlockPoolConfiguration
 {
-	#[serde(default = "BlockPoolConfiguration::default_permissions")] permissions: mode_t,
-	blockSize: usize,
+	permissions: mode_t,
+	poolSize: Option<usize>,
+	blockSize: Option<usize>,
+}
+
+impl Default for BlockPoolConfiguration
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self
+		{
+			permissions: Configuration::DefaultPermissionsForPoolSets,
+			poolSize: None,
+			blockSize: None,
+		}
+	}
 }
 
 impl BlockPoolConfiguration
 {
-	#[inline(always)]
-	fn default_permissions() -> mode_t
+	pub fn openOrCreate(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> BlockPool
 	{
-		Configuration::DefaultPermissionsForPoolSets
-	}
-	
-	pub fn open(&self, blockPoolSetsFolderPath: &Path, fileName: &str) -> BlockPool
-	{
-		debug_assert!(self.blockSize != 0, "blockSize should not be zero");
+		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
 		
-		let poolSetFilePath = blockPoolSetsFolderPath.join(fileName);
-		
-		assert!(poolSetFilePath.exists(), "poolSetFilePath '{:?}' does not exist", poolSetFilePath);
-		assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
-		
-		BlockPool::open(&poolSetFilePath, Some(self.blockSize)).expect("Could not open BlockPool")
+		if likely(poolSetFilePath.exists())
+		{
+			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
+			BlockPool::open(&poolSetFilePath, self.blockSize).expect("Could not open BlockPool")
+		}
+		else
+		{
+			
+			let blockSize = match self.blockSize
+			{
+				None => PMEMBLK_MIN_BLK,
+				Some(blockSize) => min(blockSize, PMEMBLK_MIN_BLK)
+			};
+			
+			let poolSize = match self.poolSize
+			{
+				None => 0,
+				Some(poolSize) =>
+				{
+					assert!(poolSize >= PMEMOBJ_MIN_POOL, "poolSize '{}' is smaller than PMEMOBJ_MIN_POOL '{}'", poolSize, PMEMOBJ_MIN_POOL);
+					poolSize
+				},
+			};
+			BlockPool::create(&poolSetFilePath, blockSize, poolSize, self.permissions).expect("Could not create BlockPool")
+		}
 	}
 }

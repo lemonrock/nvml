@@ -14,6 +14,7 @@ use ::nvml_sys::*;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
 use ::std::collections::HashMap;
+use ::std::cmp::min;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
 use ::std::sync::Arc;

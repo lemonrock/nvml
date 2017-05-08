@@ -37,6 +37,6 @@ impl LogPoolsConfiguration
 		
 		assert!(logPoolSetsFolderPath.is_dir(), "logPoolSetsFolderPath '{:?}' is not a folder", logPoolSetsFolderPath);
 		
-		self.logPoolConfigurations.iter().map(|(fileName, logPoolConfiguration)| (fileName.to_string(), logPoolConfiguration.open(&logPoolSetsFolderPath, fileName)) ).collect()
+		self.logPoolConfigurations.iter().map(|(fileName, logPoolConfiguration)| (fileName.to_string(), logPoolConfiguration.openOrCreate(&logPoolSetsFolderPath, fileName)) ).collect()
 	}
 }

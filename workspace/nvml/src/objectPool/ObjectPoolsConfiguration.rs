@@ -44,6 +44,6 @@ impl ObjectPoolsConfiguration
 		ObjectPool::setPrefaultAtCreate(self.preFaultPersistentObjectPoolMemoryAtCreateToImprovePerformance);
 		ObjectPool::setPrefaultAtOpen(self.preFaultPersistentObjectPoolMemoryAtOpenToImprovePerformance);
 		
-		self.objectPoolConfigurations.iter().map(|(fileName, objectPoolConfiguration)| (fileName.to_string(), objectPoolConfiguration.open(&objectPoolSetsFolderPath, fileName)) ).collect()
+		self.objectPoolConfigurations.iter().map(|(fileName, objectPoolConfiguration)| (fileName.to_string(), objectPoolConfiguration.openOrCreate(&objectPoolSetsFolderPath, fileName)) ).collect()
 	}
 }

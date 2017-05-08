@@ -37,6 +37,6 @@ impl BlockPoolsConfiguration
 		
 		assert!(blockPoolSetsFolderPath.is_dir(), "blockPoolSetsFolderPath '{:?}' is not a folder", blockPoolSetsFolderPath);
 		
-		self.blockPoolConfigurations.iter().map(|(fileName, blockPoolConfiguration)| (fileName.to_string(), blockPoolConfiguration.open(&blockPoolSetsFolderPath, fileName)) ).collect()
+		self.blockPoolConfigurations.iter().map(|(fileName, blockPoolConfiguration)| (fileName.to_string(), blockPoolConfiguration.openOrCreate(&blockPoolSetsFolderPath, fileName)) ).collect()
 	}
 }
