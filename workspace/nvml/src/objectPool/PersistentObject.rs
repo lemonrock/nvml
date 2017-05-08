@@ -637,9 +637,3 @@ macro_rules! offset_of
 		unsafe { &(*(0 as *const $selfType)).$field as *const _ as usize }
 	}
 }
-
-/*
-#define TX_ADD_FIELD(o, field)\
-pmemobj_tx_add_range((o).oid, TOID_OFFSETOF(o, field),\
-	sizeof(D_RO(o)->field))
-*/
