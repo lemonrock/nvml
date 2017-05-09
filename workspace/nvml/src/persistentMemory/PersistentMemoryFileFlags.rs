@@ -2,13 +2,24 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-bitflags!
+pub mod PersistentMemoryFileFlags
 {
-	pub flags PersistentMemoryFileFlags: i32
+	use ::nvml_sys::*;
+	
+	bitflags!
 	{
-		const Create = PMEM_FILE_CREATE as i32,
-		const Exclusive = PMEM_FILE_EXCL as i32,
-		const Sparse = PMEM_FILE_SPARSE as i32,
-		const TmpFile = PMEM_FILE_TMPFILE as i32,
+		#[derive(Default)]
+		pub flags Flags: i32
+		{
+			const None = 0,
+			
+			const Create = PMEM_FILE_CREATE as i32,
+			
+			const Exclusive = PMEM_FILE_EXCL as i32,
+			
+			const Sparse = PMEM_FILE_SPARSE as i32,
+			
+			const TmpFile = PMEM_FILE_TMPFILE as i32,
+		}
 	}
 }

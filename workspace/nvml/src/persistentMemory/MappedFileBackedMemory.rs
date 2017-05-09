@@ -25,7 +25,7 @@ impl FileBackedMemory for MappedFileBackedMemory
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags
+	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags::Flags
 	{
 		if exclusive
 		{
@@ -33,7 +33,7 @@ impl FileBackedMemory for MappedFileBackedMemory
 		}
 		else
 		{
-			PersistentMemoryFileFlags::empty()
+			PersistentMemoryFileFlags::None
 		}
 	}
 	
