@@ -15,15 +15,15 @@ exclude = ["*"]
 include = ["README.md", "LICENSE", "COPYRIGHT", "src/**/*.rs", "benches/**/*.rs", "examples/**/*.rs", "tests/**/*.rs", "Cargo.toml", "rustfmt.toml", "clippy.toml"]
 # Relative to Cargo.toml
 readme = "README.md"
-publish = false
-version = "0.0.0"
+publish = true
+version = "0.0.1"
 
 [dependencies]
 bitflags = { path = "../bitflags" }
 errno = "0.2"
 interpolate_idents = { git = "https://github.com/lemonrock/interpolate_idents", branch = "rust-nightly-as-of-May-1st-2017" }
 libc = "0.2"
-nvml-sys = { path = "../nvml-sys" }
+nvml-sys = { path = "../nvml-sys", version = "0.0.2" }
 quick-error = "1.2.0"
 rust-extra = "0.0.10"
 serde = "1.0"
