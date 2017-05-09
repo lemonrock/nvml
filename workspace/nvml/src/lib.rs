@@ -5,14 +5,12 @@
 #![feature(associated_consts)]
 #![feature(const_fn)]
 #![feature(drop_types_in_const)]
-#![feature(plugin)]
 #![feature(specialization)]
 #![feature(thread_local)]
 #![feature(untagged_unions)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![plugin(interpolate_idents)]
 
 
 #[macro_use] extern crate bitflags;

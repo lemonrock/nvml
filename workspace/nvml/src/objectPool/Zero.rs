@@ -11,18 +11,13 @@ pub trait Zero: Sized
 	unsafe fn zero(self, objectPool: *mut PMEMobjpool);
 }
 
-macro_rules! zero
+macro_rules! zero_guard
 {
-	($self: ident, $objectPool: ident, $functionNameFragment: ident) =>
+	($self: ident, $objectPool: ident) =>
 	{
-		interpolate_idents!
 		{
-			{
-				debug_assert!(!$self.is_null(), "self is null");
-				debug_assert!(!$objectPool.is_null(), "objectPool is null");
-				
-				[pmemobj_ $functionNameFragment _zero]($objectPool, $self)
-			}
+			debug_assert!(!$self.is_null(), "self is null");
+			debug_assert!(!$objectPool.is_null(), "objectPool is null");
 		}
 	}
 }
@@ -32,7 +27,8 @@ impl Zero for *mut PMEMmutex
 	#[inline(always)]
 	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
 	{
-		zero!(self, objectPool, mutex);
+		zero_guard!(self, objectPool);
+		pmemobj_mutex_zero(objectPool, self)
 	}
 }
 
@@ -41,7 +37,8 @@ impl Zero for *mut PMEMrwlock
 	#[inline(always)]
 	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
 	{
-		zero!(self, objectPool, rwlock);
+		zero_guard!(self, objectPool);
+		pmemobj_rwlock_zero(objectPool, self)
 	}
 }
 
@@ -50,6 +47,7 @@ impl Zero for *mut PMEMcond
 	#[inline(always)]
 	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
 	{
-		zero!(self, objectPool, cond);
+		zero_guard!(self, objectPool);
+		pmemobj_cond_zero(objectPool, self)
 	}
 }
