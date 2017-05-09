@@ -6,6 +6,7 @@
 name = "nvml"
 description = "nvml"
 keywords = ["NVML", "pmem", "libpmem", "persistent", "memory"]
+categories = ["external-ffi-bindings", "filesystem", "hardware-support", "memory-management"]
 license = "MIT"
 authors = ["Raphael Cohn <raphael.cohn@stormmq.com>"]
 documentation = "https://github.com/lemonrock/nvml/blob/master/README.md"
