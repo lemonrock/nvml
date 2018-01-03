@@ -9,15 +9,13 @@ keywords = ["NVML", "pmem", "libpmem", "PMDK"]
 categories = ["external-ffi-bindings", "filesystem", "hardware-support", "memory-management"]
 license = "MIT"
 authors = ["Raphael Cohn <raphael.cohn@stormmq.com>"]
-documentation = "https://github.com/lemonrock/nvml/blob/master/README.md"
 homepage = "https://github.com/lemonrock/nvml"
 repository = "https://github.com/lemonrock/nvml.git"
-exclude = ["*"]
-include = ["README.md", "LICENSE", "COPYRIGHT", "src/**/*.rs", "benches/**/*.rs", "examples/**/*.rs", "tests/**/*.rs", "Cargo.toml", "rustfmt.toml", "clippy.toml"]
+include = ["/README.md", "/LICENSE", "/COPYRIGHT", "/src/**/*.rs", "/Cargo.toml"]
 # Relative to Cargo.toml
 readme = "README.md"
 publish = true
-version = "0.0.1"
+version = "0.0.2"
 
 [dependencies]
 bitflags = "1.0"
