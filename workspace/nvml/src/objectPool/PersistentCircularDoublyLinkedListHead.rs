@@ -20,7 +20,7 @@ impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedLi
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
-		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
 		instance.pe_first = PersistentObject::null();
 		(&mut instance.lock as *mut _).zero(objectPool);
 	}

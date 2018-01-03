@@ -53,7 +53,7 @@ impl Persistable for root
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
-		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
 		instance.node.allocateUninitializedAndConstruct(objectPool, &mut ()).expect("Allocation failed for node");
 	}
 }
@@ -82,7 +82,7 @@ impl Persistable for node
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
-		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
 		
 		(&mut instance.readWriteLock as *mut _).zero(objectPool);
 		(&mut instance.mutex as *mut _).zero(objectPool);
@@ -154,7 +154,7 @@ impl Persistable for foo
 		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
 		debug_assert!(!objectPool.is_null(), "objectPool is null");
 		
-		let mut instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
 		instance.address = *arguments;
 	}
 }

@@ -4,8 +4,8 @@
 
 [package]
 name = "nvml"
-description = "nvml"
-keywords = ["NVML", "pmem", "libpmem", "persistent", "memory"]
+description = "A mid-level wrapper around PMDK (the persistent memory development kit), formely NVML"
+keywords = ["NVML", "pmem", "libpmem", "PMDK"]
 categories = ["external-ffi-bindings", "filesystem", "hardware-support", "memory-management"]
 license = "MIT"
 authors = ["Raphael Cohn <raphael.cohn@stormmq.com>"]
@@ -20,10 +20,10 @@ publish = true
 version = "0.0.1"
 
 [dependencies]
-bitflags = "0.8"
+bitflags = "1.0"
 errno = "0.2"
 libc = "0.2"
-nvml-sys = { path = "../nvml-sys", version = "0.0.2" }
+nvml-sys = { path = "../nvml-sys", version = "0.0.4" }
 quick-error = "1.2.0"
 rust-extra = "0.0.10"
 serde = "1.0"

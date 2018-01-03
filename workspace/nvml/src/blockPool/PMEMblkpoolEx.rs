@@ -15,10 +15,10 @@ pub trait PMEMblkpoolEx
 	
 	/// Returns false if the block has previously had its error condition set
 	#[inline(always)]
-	fn read(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool;
+	fn read_from(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool;
 	
 	#[inline(always)]
-	fn write(self, from: *const c_void, zeroBasedBlockIndex: usize);
+	fn write_to(self, from: *const c_void, zeroBasedBlockIndex: usize);
 	
 	#[inline(always)]
 	fn setZero(self, zeroBasedBlockIndex: usize);
@@ -62,7 +62,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn read(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
+	fn read_from(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
 	{
 		debug_assert_self_is_not_null!(self);
 		debug_assert!(!to.is_null(), "to can not be null");
@@ -92,7 +92,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn write(self, from: *const c_void, zeroBasedBlockIndex: usize)
+	fn write_to(self, from: *const c_void, zeroBasedBlockIndex: usize)
 	{
 		debug_assert_self_is_not_null!(self);
 		debug_assert!(!from.is_null(), "from can not be null");

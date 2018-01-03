@@ -5,13 +5,13 @@
 pub trait PersistentMemoryPathExt
 {
 	#[inline(always)]
-	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags::Flags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>;
+	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>;
 }
 
 impl PersistentMemoryPathExt for Path
 {
 	#[inline(always)]
-	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags::Flags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>
+	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>
 	{
 		let mut mappedLength: usize = unsafe { uninitialized() };
 		let mappedLengthPointer = &mut mappedLength as *mut _;

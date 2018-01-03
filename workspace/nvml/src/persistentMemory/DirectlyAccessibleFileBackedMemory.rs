@@ -26,7 +26,7 @@ impl FileBackedMemory for DirectlyAccessibleFileBackedMemory
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags::Flags
+	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags
 	{
 		assert!(!exclusive, "Directly Accessible Memory (Device DaX) does not support exclusive");
 		

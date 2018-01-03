@@ -629,11 +629,3 @@ macro_rules! addContiguousFieldsToTransactionWithoutFlush
 		}
 	}
 }
-
-macro_rules! offset_of
-{
-	($selfType: ty, $field: ident) =>
-	{
-		unsafe { &(*(0 as *const $selfType)).$field as *const _ as usize }
-	}
-}

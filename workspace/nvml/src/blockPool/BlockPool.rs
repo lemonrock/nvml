@@ -34,7 +34,7 @@ impl BlockPool
 	{
 		let blockSize = if let Some(blockSize) = validateBlockSize
 		{
-			assert!(blockSize != 0, "blockSize can not be zero");
+			assert_ne!(blockSize, 0, "blockSize can not be zero");
 			blockSize
 		}
 		else
@@ -66,13 +66,13 @@ impl BlockPool
 	#[inline(always)]
 	pub fn read(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
 	{
-		self.0.read(to, zeroBasedBlockIndex)
+		self.0.read_from(to, zeroBasedBlockIndex)
 	}
 	
 	#[inline(always)]
 	pub fn write(self, from: *const c_void, zeroBasedBlockIndex: usize)
 	{
-		self.0.write(from, zeroBasedBlockIndex)
+		self.0.write_to(from, zeroBasedBlockIndex)
 	}
 	
 	#[inline(always)]

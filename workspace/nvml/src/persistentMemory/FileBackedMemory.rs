@@ -34,7 +34,7 @@ pub trait FileBackedMemory : Sized + Send + Sync
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _map(persistentMemoryFilePath: &Path, length: usize, flags: PersistentMemoryFileFlags::Flags, mode: mode_t) -> Result<Option<Self>, GenericError>
+	fn _map(persistentMemoryFilePath: &Path, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<Option<Self>, GenericError>
 	{
 		let result = persistentMemoryFilePath.mapMemoryFile(length, flags, mode);
 		
@@ -63,7 +63,7 @@ pub trait FileBackedMemory : Sized + Send + Sync
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags::Flags;
+	fn _openFlags(exclusive: bool) -> PersistentMemoryFileFlags;
 	
 	#[doc(hidden)]
 	#[inline(always)]
