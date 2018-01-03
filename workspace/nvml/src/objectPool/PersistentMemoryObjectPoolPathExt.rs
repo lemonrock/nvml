@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Adds additional methods to Path to make it easier to open persistent memory object pools.
 pub trait PersistentMemoryObjectPoolPathExt
 {
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path

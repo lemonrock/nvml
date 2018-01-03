@@ -2,16 +2,13 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A structure that represents a Read-Write lock.
 pub struct ReadWriteLock<'a, T: Persistable + 'a>
 {
 	objectPool: *mut PMEMobjpool,
 	readWriteLock: *mut PMEMrwlock,
 	object: &'a mut T
 }
-
-/*
-	pub fn pmemobj_tx_lock(type_: pobj_tx_param, lockp: *mut c_void) -> c_int;
-*/
 
 impl<'a, T: Persistable> ReadWriteLock<'a, T>
 {

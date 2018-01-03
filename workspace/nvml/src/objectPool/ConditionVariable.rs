@@ -19,8 +19,8 @@ impl<'a, T: Persistable> ConditionVariable<'a, T>
 		
 		Self
 		{
-			objectPool: objectPool,
-			conditionVariable: conditionVariable,
+			objectPool,
+			conditionVariable,
 			phantomData: PhantomData,
 		}
 	}

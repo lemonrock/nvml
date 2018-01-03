@@ -58,6 +58,7 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListEntry<T>
 	}
 }
 
+/// An example of a list entry
 #[repr(C)]
 pub struct fooListEntry
 {

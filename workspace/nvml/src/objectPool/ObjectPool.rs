@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// An ObjectPool is a thread-safe owner of persistent objects (structs implementing Persistable).
 #[derive(Debug, Clone)]
 pub struct ObjectPool(*mut PMEMobjpool, Arc<ObjectPoolDropWrapper>);
 

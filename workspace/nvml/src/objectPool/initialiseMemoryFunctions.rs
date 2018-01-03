@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Initialise persistent memory functions if different to libc standard (eg if using DPDK).
 pub fn initialiseMemoryFunctions
 (
 	malloc: unsafe extern "C" fn(size: size_t) -> *mut c_void,

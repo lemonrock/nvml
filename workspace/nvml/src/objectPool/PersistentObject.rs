@@ -2,6 +2,8 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A wrapper type that acts as a reference to a Persistable.
+/// Persistent objects can be iterated upon, giving the next stored instance, if any.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PersistentObject<T: Persistable>
@@ -566,7 +568,7 @@ impl<T: Persistable> PersistentObject<T>
 	{
 		Self
 		{
-			oid: oid,
+			oid,
 			phantomData: PhantomData,
 		}
 	}

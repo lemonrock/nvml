@@ -2,8 +2,10 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A Persistable that can be an entry in a doubly-linked list.
 pub trait ListEntryPersistable: Persistable
 {
+	/// The offset in bytes of the field in the Persistable-implementing struct that holds the next() pointer
 	const PersistentCircularDoublyLinkedListEntryFieldOffset: size_t = 0;
 	
 	#[inline(always)]

@@ -2,11 +2,15 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Every persistable object has an OID, Object Identifier, which is an unique identifier in persistent storage. Object identifiers are not unique across program lifetimes, ie not unique across time.
+/// Ordinarily there is no need to use this interface; prefer using the wrapper type PersistentObject.
 pub trait OID
 {
+	/// Is this instance equivalent to null?
 	#[inline(always)]
 	fn is_null(&self) -> bool;
 	
+	/// Comparision
 	#[inline(always)]
 	fn equals(&self, other: &Self) -> bool;
 	

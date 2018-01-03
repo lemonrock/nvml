@@ -2,6 +2,8 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A structure that represents an owned write lock. When it goes out of scope (dropped) the write lock is released.
+/// Use `deref()` (ie &x) to get to the object wrapped in the lock.
 pub struct WriteLockUnlock<'a, T: Persistable + 'a>(ReadWriteLock<'a, T>);
 
 impl<'a, T: Persistable + 'a> Drop for WriteLockUnlock<'a, T>

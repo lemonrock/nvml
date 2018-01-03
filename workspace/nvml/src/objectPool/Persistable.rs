@@ -2,11 +2,14 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A Persistable is the essential trait that a struct must implement in order to be persistent.
 /// Persistable MUST NOT implement Drop, Copy or Clone
 pub trait Persistable: Sized
 {
+	/// Each implementation must have an unique value of this, ideally starting at one (one-based)
 	const TypeNumber: TypeNumber;
 	
+	/// A tuple of the arguments passed to initialize()
 	type Arguments;
 	
 	/// # Arguments
@@ -15,6 +18,8 @@ pub trait Persistable: Sized
 	#[inline(always)]
 	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments);
 	
+	/// Size in bytes that pointerToUninitializedMemoryToUseForFields in initialize() points to.
+	/// ie the size of this 'struct'.
 	#[inline(always)]
 	fn size() -> size_t
 	{
@@ -23,6 +28,7 @@ pub trait Persistable: Sized
 		size
 	}
 	
+	/// Find this instance's OID. An OID is the unique object identifier, ie an instance identifier, used in the persistent data store.
 	#[deprecated(note = "inefficient; access via PersistentObject")]
 	#[inline(always)]
 	fn oid(&self) -> PMEMoid
@@ -34,6 +40,7 @@ pub trait Persistable: Sized
 	}
 }
 
+/// An example of a Persistable that is the root of a graph of persistable objects
 #[repr(C)]
 pub struct root
 {
@@ -58,6 +65,7 @@ impl Persistable for root
 	}
 }
 
+/// An example of a Persistable that is quite complex, with different synchronisation properties and children
 #[repr(C)]
 pub struct node
 {
@@ -136,6 +144,7 @@ impl node
 	}
 }
 
+/// An example of a Persistable
 #[repr(C)]
 pub struct foo
 {

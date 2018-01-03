@@ -2,4 +2,6 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Should be unique, monotonically increasing and start from 1 (one-based).
+/// Each implementation of Persistable should have an unique value of this across an entire persistable memory object pool.
 pub type TypeNumber = u64;

@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A structure that represents a Mutex lock.
 pub struct MutexLock<'a, T: Persistable + 'a>
 {
 	objectPool: *mut PMEMobjpool,
@@ -19,9 +20,9 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 		
 		Self
 		{
-			objectPool: objectPool,
-			mutex: mutex,
-			object: object,
+			objectPool,
+			mutex,
+			object,
 		}
 	}
 	
