@@ -66,7 +66,7 @@ impl PersistentMemoryBlockPoolPathExt for Path
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemlog_create)
+			handleError!(pmemblk_create)
 		}
 		else
 		{

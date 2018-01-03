@@ -3,6 +3,7 @@
     <words>
       <w>appendv</w>
       <w>bindgen</w>
+      <w>calloc</w>
       <w>chunksize</w>
       <w>eagain</w>
       <w>ebusy</w>
@@ -14,6 +15,7 @@
       <w>initializable</w>
       <w>iovcnt</w>
       <w>iovec</w>
+      <w>isize</w>
       <w>isystem</w>
       <w>libpmem</w>
       <w>libpmemobj</w>
@@ -21,6 +23,7 @@
       <w>longlong</w>
       <w>mblkpool</w>
       <w>mcond</w>
+      <w>mctopool</w>
       <w>memcpy</w>
       <w>memmove</w>
       <w>memset</w>
@@ -38,6 +41,7 @@
       <w>nvml</w>
       <w>pmem</w>
       <w>pmemblk</w>
+      <w>pmemcto</w>
       <w>pmemlog</w>
       <w>pmemobj</w>
       <w>pmemoid</w>

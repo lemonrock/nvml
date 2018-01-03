@@ -7,7 +7,7 @@ pub fn initialiseMemoryFunctions
 	malloc: unsafe extern "C" fn(size: size_t) -> *mut c_void,
 	free: unsafe extern "C" fn(ptr: *mut c_void),
 	realloc: unsafe extern "C" fn(ptr: *mut c_void, size: size_t) -> *mut c_void,
-	strdup: unsafe extern "C" fn(s: *const c_char) -> *mut c_char
+	strdup: unsafe extern "C" fn(s: *const c_char) -> *mut c_char,
 )
 {
 	unsafe { pmemblk_set_funcs(Some(malloc), Some(free), Some(realloc), Some(strdup)) }

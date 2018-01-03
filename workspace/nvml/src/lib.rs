@@ -12,6 +12,7 @@
 
 
 #[macro_use] extern crate bitflags;
+extern crate either;
 extern crate errno;
 extern crate libc;
 extern crate nvml_sys;
@@ -24,6 +25,7 @@ extern crate syscall_alt;
 
 include!("usePath.rs");
 pub mod blockPool;
+pub mod ctoPool;
 pub mod errors;
 pub mod logPool;
 pub mod persistentMemory;
