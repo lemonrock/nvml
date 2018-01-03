@@ -42,8 +42,13 @@ impl CtoPool
 		
 		match initializer(unsafe { &mut *pointer }, self)
 		{
-			Err(failure) => Err(Left(failure)),
 			Ok(()) => Ok(CtoBox(pointer, self.clone())),
+			Err(failure) =>
+			{
+				self.0.free(pointer);
+				
+				Err(Left(failure))
+			}
 		}
 	}
 	
