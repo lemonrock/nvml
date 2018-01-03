@@ -34,6 +34,15 @@ impl CtoPool
 	#[inline(always)]
 	pub fn allocate_box<T: CtoSafe, Failure, Initializer: FnOnce(&mut T, &Self) -> Result<(), Failure>>(&self, initializer: Initializer) -> Result<CtoBox<T>, Either<Failure, GenericError>>
 	{
+		self.allocate(initializer, CtoBox)
+	}
+	
+	/// The reference passed to initializer() will be uninitialized memory; it won't even be zeroed or have default values.
+	/// Returns on success a CtoBox, which is conceptually similar to a Box.
+	/// Returns on error either an initialisation failure (Left) or an allocation failure (Right).
+	#[inline(always)]
+	fn allocate<T: CtoSafe, Failure, Initializer: FnOnce(&mut T, &Self) -> Result<(), Failure>, Constructor: FnOnce(*mut T, Self) -> Instance, Instance>(&self, initializer: Initializer, constructor: Constructor) -> Result<Instance, Either<Failure, GenericError>>
+	{
 		let pointer = match self.0.aligned_alloc::<T>()
 		{
 			Err(allocation_error) => return Err(Right(allocation_error)),
@@ -42,7 +51,7 @@ impl CtoPool
 		
 		match initializer(unsafe { &mut *pointer }, self)
 		{
-			Ok(()) => Ok(CtoBox(pointer, self.clone())),
+			Ok(()) => Ok(constructor(pointer, self.clone())),
 			Err(failure) =>
 			{
 				self.0.free(pointer);
