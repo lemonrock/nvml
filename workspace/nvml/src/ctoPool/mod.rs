@@ -43,6 +43,7 @@ include!("handleError.rs");
 include!("CtoBox.rs");
 include!("CtoPool.rs");
 include!("CtoPoolAllocationError.rs");
+include!("CtoPoolAllocator.rs");
 include!("CtoPoolInner.rs");
 include!("CtoPoolOpenError.rs");
 include!("CtoRootBox.rs");

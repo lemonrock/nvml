@@ -90,64 +90,10 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 		Ok(CtoPool(cto_pool_inner, RwLock::new(CtoRootBox(root))))
 	}
 	
-	/// Returns an allocator which can be used to create new CtoBox and other 'heap-like' persistent memory objects.
-	#[inline(always)]
-	pub fn allocator<'ctopool>(&'ctopool self) -> CtoPoolAllocator<'ctopool>
-	{
-		CtoPoolAllocator(self.cto_pool_inner())
-	}
-	
 	/// Returns a Read-Write lock to access the root of the CTO object graph.
 	#[inline(always)]
 	pub fn root(&self) -> &RwLock<CtoRootBox<T>>
 	{
 		&self.1
-	}
-	
-	#[inline(always)]
-	fn cto_pool_inner(&self) -> &Arc<CtoPoolInner>
-	{
-		&self.0
-	}
-}
-
-#[derive(Debug)]
-pub struct CtoPoolAllocator<'ctopool>(&'ctopool Arc<CtoPoolInner>);
-
-impl<'ctopool> CtoPoolAllocator<'ctopool>
-{
-	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
-	/// The exception is that `CtoSafe.reinitialize()` will have been called first.
-	/// Returns on success a CtoBox, which is conceptually similar to a Box.
-	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
-	#[inline(always)]
-	pub fn allocate_box<T: CtoSafe, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoBox<T>, CtoPoolAllocationError<InitializationError>>
-	{
-		self.allocate(initializer, CtoBox)
-	}
-	
-	#[inline(always)]
-	fn allocate<T: CtoSafe, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>, Constructor: FnOnce(*mut T, Arc<CtoPoolInner>) -> Instance, Instance>(&self, initializer: Initializer, constructor: Constructor) -> Result<Instance, CtoPoolAllocationError<InitializationError>>
-	{
-		match self.0.deref().0.aligned_alloc::<T>()
-		{
-			Err(allocation_error) => return Err(CtoPoolAllocationError::Allocation(allocation_error)),
-			
-			Ok(pointer) =>
-			{
-				let mutable_reference = unsafe { &mut *pointer };
-				
-				match initializer(mutable_reference, self)
-				{
-					Ok(()) => Ok(constructor(pointer, self.0.clone())),
-					Err(initialization_error) =>
-					{
-						(self.0).0.free(pointer);
-						
-						Err(CtoPoolAllocationError::Initialization(initialization_error))
-					}
-				}
-			}
-		}
 	}
 }
