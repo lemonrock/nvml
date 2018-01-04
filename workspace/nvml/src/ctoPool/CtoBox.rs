@@ -8,10 +8,10 @@ pub struct CtoBox<T: CtoSafe>(*mut T, Arc<CtoPoolInner>);
 impl<T: CtoSafe> CtoSafe for CtoBox<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool: &Arc<CtoPoolInner>)
+	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
-		self.deref_mut().reinitialize(cto_pool);
-		self.1 = cto_pool.clone();
+		self.deref_mut().reinitialize(cto_pool_inner);
+		self.1 = cto_pool_inner.clone();
 	}
 }
 

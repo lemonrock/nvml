@@ -9,7 +9,7 @@ pub trait CtoSafe
 	/// Used internally when opening persistent memory pools for the first time.
 	/// Exists for the convenience of objects with fields that should not be persistent, eg Mutexes, RwLocks and CondVars.
 	#[inline(always)]
-	fn reinitialize(&mut self, _cto_pool: &Arc<CtoPoolInner>)
+	fn reinitialize(&mut self, _cto_pool_inner: &Arc<CtoPoolInner>)
 	{
 	}
 }

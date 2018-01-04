@@ -3,6 +3,7 @@
 
 
 #![feature(const_fn)]
+#![feature(optin_builtin_traits)]
 #![feature(specialization)]
 #![feature(thread_local)]
 #![feature(untagged_unions)]
