@@ -48,24 +48,4 @@ impl CtoPoolInner
 	{
 		self.0.set_root(root)
 	}
-	
-	#[inline(always)]
-	fn open(pool_set_file_path: &Path, layout_name: &CStr) -> Result<Arc<Self>, GenericError>
-	{
-		pool_set_file_path.openPersistentMemoryCtoPool(layout_name).map(Self::from_handle)
-	}
-	
-	#[inline(always)]
-	fn create(pool_set_file_path: &Path, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<Arc<Self>, GenericError>
-	{
-		pool_set_file_path.createPersistentMemoryCtoPool(layout_name, pool_size, mode).map(Self::from_handle)
-	}
-	
-	#[inline(always)]
-	fn from_handle(handle: *mut PMEMctopool) -> Arc<Self>
-	{
-		debug_assert!(!handle.is_null(), "PMEMctopool handle is null");
-		
-		Arc::new(CtoPoolInner(handle))
-	}
 }

@@ -15,6 +15,7 @@ use ::std::borrow::Borrow;
 use ::std::borrow::BorrowMut;
 use ::std::cmp::Ordering;
 use ::std::error;
+use ::std::ffi::CString;
 use ::std::ffi::CStr;
 use ::std::fmt;
 use ::std::fmt::Debug;

@@ -5,7 +5,13 @@
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum CtoPoolOpenError<InitializationError>
 {
-	Open(GenericError),
+	CreateFailed(GenericError),
+	
+	ValidationFailed(GenericError),
+	
+	OpenFailed(GenericError),
+	
+	Invalid,
 	
 	RootCreation(CtoPoolAllocationError<InitializationError>),
 }
@@ -19,7 +25,13 @@ impl<InitializationError: Display> Display for CtoPoolOpenError<InitializationEr
 		
 		match *self
 		{
-			Open(ref generic_error) => Display::fmt(generic_error, formatter),
+			CreateFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			
+			ValidationFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			
+			OpenFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			
+			Invalid => write!(formatter, "Invalid"),
 			
 			RootCreation(ref cto_pool_allocation_error) => Display::fmt(cto_pool_allocation_error, formatter),
 		}
@@ -41,7 +53,13 @@ impl<InitializationError: error::Error> error::Error for CtoPoolOpenError<Initia
 		
 		match *self
 		{
-			Open(ref generic_error) => Some(generic_error),
+			CreateFailed(ref generic_error) => Some(generic_error),
+			
+			ValidationFailed(ref generic_error) => Some(generic_error),
+			
+			OpenFailed(ref generic_error) => Some(generic_error),
+			
+			Invalid => None,
 			
 			RootCreation(ref cto_pool_allocation_error) => Some(cto_pool_allocation_error),
 		}
