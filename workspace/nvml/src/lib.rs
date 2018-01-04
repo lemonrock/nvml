@@ -12,7 +12,6 @@
 
 
 #[macro_use] extern crate bitflags;
-extern crate either;
 extern crate errno;
 extern crate libc;
 extern crate nvml_sys;

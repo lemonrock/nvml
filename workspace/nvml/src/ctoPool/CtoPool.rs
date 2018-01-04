@@ -2,88 +2,113 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[derive(Debug, Clone)]
-pub struct CtoPool(*mut PMEMctopool, Arc<CtoPoolDropWrapper>);
+#[derive(Debug)]
+pub struct CtoPool<T: CtoSafe + Send + Sync>(Arc<CtoPoolInner>, RwLock<CtoRootBox<T>>);
 
-unsafe impl Send for CtoPool
+unsafe impl<T: CtoSafe + Send + Sync> Send for CtoPool<T>
 {
 }
 
-unsafe impl Sync for CtoPool
+unsafe impl<T: CtoSafe + Send + Sync> Sync for CtoPool<T>
 {
 }
 
-impl PartialEq for CtoPool
+impl<T: CtoSafe + Send + Sync> CtoPool<T>
 {
-	#[inline(always)]
-	fn eq(&self, other: &Self) -> bool
-	{
-		self.0 == other.0
-	}
-}
-
-impl Eq for CtoPool
-{
-}
-
-impl CtoPool
-{
-	/// The reference passed to initializer() will be uninitialized memory; it won't even be zeroed or have default values.
-	/// Returns on success a CtoBox, which is conceptually similar to a Box.
-	/// Returns on error either an initialisation failure (Left) or an allocation failure (Right).
-	#[inline(always)]
-	pub fn allocate_box<T: CtoSafe, Failure, Initializer: FnOnce(&mut T, &Self) -> Result<(), Failure>>(&self, initializer: Initializer) -> Result<CtoBox<T>, Either<Failure, GenericError>>
-	{
-		self.allocate(initializer, CtoBox)
-	}
-	
-	/// The reference passed to initializer() will be uninitialized memory; it won't even be zeroed or have default values.
-	/// Returns on success a CtoBox, which is conceptually similar to a Box.
-	/// Returns on error either an initialisation failure (Left) or an allocation failure (Right).
-	#[inline(always)]
-	fn allocate<T: CtoSafe, Failure, Initializer: FnOnce(&mut T, &Self) -> Result<(), Failure>, Constructor: FnOnce(*mut T, Self) -> Instance, Instance>(&self, initializer: Initializer, constructor: Constructor) -> Result<Instance, Either<Failure, GenericError>>
-	{
-		let pointer = match self.0.aligned_alloc::<T>()
-		{
-			Err(allocation_error) => return Err(Right(allocation_error)),
-			Ok(pointer) => pointer,
-		};
-		
-		match initializer(unsafe { &mut *pointer }, self)
-		{
-			Ok(()) => Ok(constructor(pointer, self.clone())),
-			Err(failure) =>
-			{
-				self.0.free(pointer);
-				
-				Err(Left(failure))
-			}
-		}
-	}
-	
+	/// Validate this CTO pool.
 	#[inline(always)]
 	pub fn validate(pool_set_file_path: &Path, layout_name: &CStr) -> Result<bool, GenericError>
 	{
 		pool_set_file_path.validatePersistentMemoryCtoPoolIsConsistent(layout_name)
 	}
 	
+	/// This method is unsafe, because nothing stops T being of a different layout (struct type).
+	/// Additionally, nothing stops the layout of T changing from compile to compile.
 	#[inline(always)]
-	pub fn open(pool_set_file_path: &Path, layout_name: &CStr) -> Result<Self, GenericError>
+	pub fn open<InitializationError: error::Error, Initializer: FnOnce(&mut T, &CtoPoolAllocator) -> Result<(), InitializationError>>(pool_set_file_path: &Path, layout_name: &CStr, root_initializer: Initializer) -> Result<Self, CtoPoolOpenError<InitializationError>>
 	{
-		pool_set_file_path.openPersistentMemoryCtoPool(layout_name).map(Self::from_handle)
-	}
-	
-	#[inline(always)]
-	pub fn create(pool_set_file_path: &Path, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<Self, GenericError>
-	{
-		pool_set_file_path.createPersistentMemoryCtoPool(layout_name, pool_size, mode).map(Self::from_handle)
-	}
-	
-	#[inline(always)]
-	fn from_handle(handle: *mut PMEMctopool) -> Self
-	{
-		debug_assert!(!handle.is_null(), "PMEMctopool handle is null");
+		let cto_pool_inner = match CtoPoolInner::open(pool_set_file_path, layout_name)
+		{
+			Err(generic_error) => return Err(CtoPoolOpenError::Open(generic_error)),
+			Ok(cto_pool_inner) => cto_pool_inner,
+		};
 		
-		CtoPool(handle, CtoPoolDropWrapper::new(handle))
+		let existing_root = cto_pool_inner.get_root();
+		let root = if unlikely(existing_root.is_null())
+		{
+			let new_root_cto_box = CtoPoolAllocator(&cto_pool_inner).allocate_box(root_initializer).map_err(|cto_pool_allocation_error| CtoPoolOpenError::RootCreation(cto_pool_allocation_error))?;
+			let new_root = CtoBox::into_raw(new_root_cto_box);
+			cto_pool_inner.set_root(new_root);
+			new_root
+		}
+		else
+		{
+			let mutable_root_reference = unsafe { &mut * (existing_root as *mut T) };
+			mutable_root_reference.reinitialize(&cto_pool_inner);
+			existing_root
+		};
+		
+		Ok(CtoPool(cto_pool_inner, RwLock::new(CtoRootBox(root))))
+	}
+	
+	/// Returns an allocator which can be used to create new CtoBox and other 'heap-like' persistent memory objects.
+	#[inline(always)]
+	pub fn allocator<'ctopool>(&'ctopool self) -> CtoPoolAllocator<'ctopool>
+	{
+		CtoPoolAllocator(self.cto_pool_inner())
+	}
+	
+	/// Returns a Read-Write lock to access the root of the CTO object graph.
+	#[inline(always)]
+	pub fn root(&self) -> &RwLock<CtoRootBox<T>>
+	{
+		&self.1
+	}
+	
+	#[inline(always)]
+	fn cto_pool_inner(&self) -> &Arc<CtoPoolInner>
+	{
+		&self.0
+	}
+}
+
+#[derive(Debug)]
+pub struct CtoPoolAllocator<'ctopool>(&'ctopool Arc<CtoPoolInner>);
+
+impl<'ctopool> CtoPoolAllocator<'ctopool>
+{
+	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
+	/// The exception is that `CtoSafe.reinitialize()` will have been called first.
+	/// Returns on success a CtoBox, which is conceptually similar to a Box.
+	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
+	#[inline(always)]
+	pub fn allocate_box<T: CtoSafe, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoBox<T>, CtoPoolAllocationError<InitializationError>>
+	{
+		self.allocate(initializer, CtoBox)
+	}
+	
+	#[inline(always)]
+	fn allocate<T: CtoSafe, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>, Constructor: FnOnce(*mut T, Arc<CtoPoolInner>) -> Instance, Instance>(&self, initializer: Initializer, constructor: Constructor) -> Result<Instance, CtoPoolAllocationError<InitializationError>>
+	{
+		match self.0.deref().0.aligned_alloc::<T>()
+		{
+			Err(allocation_error) => return Err(CtoPoolAllocationError::Allocation(allocation_error)),
+			
+			Ok(pointer) =>
+			{
+				let mutable_reference = unsafe { &mut *pointer };
+				
+				match initializer(mutable_reference, self)
+				{
+					Ok(()) => Ok(constructor(pointer, self.0.clone())),
+					Err(initialization_error) =>
+					{
+						(self.0).0.free(pointer);
+						
+						Err(CtoPoolAllocationError::Initialization(initialization_error))
+					}
+				}
+			}
+		}
 	}
 }

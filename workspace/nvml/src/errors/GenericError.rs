@@ -12,6 +12,7 @@ pub struct GenericError
 
 impl Display for GenericError
 {
+	#[inline(always)]
 	fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error>
 	{
 		let lastErrorMessageOnThisThread = self.lastErrorMessageOnThisThread.as_ref();
@@ -28,11 +29,13 @@ impl Display for GenericError
 
 impl error::Error for GenericError
 {
+	#[inline(always)]
 	fn description(&self) -> &str
 	{
 		"Generic Error"
 	}
 	
+	#[inline(always)]
 	fn cause(&self) -> Option<&error::Error>
 	{
 		None
@@ -50,9 +53,9 @@ impl GenericError
 		{
 			Self
 			{
-				osErrorNumber: osErrorNumber,
-				lastErrorMessageOnThisThread: lastErrorMessageOnThisThread,
-				functionName: functionName,
+				osErrorNumber,
+				lastErrorMessageOnThisThread,
+				functionName,
 			}
 		}
 		else

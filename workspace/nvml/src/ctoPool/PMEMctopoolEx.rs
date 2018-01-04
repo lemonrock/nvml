@@ -14,7 +14,7 @@ pub trait PMEMctopoolEx
 	
 	/// Get the root pointer. Can be null.
 	#[inline(always)]
-	fn get_root(self) -> *mut c_void;
+	fn get_root<T>(self) -> *mut T;
 	
 	/// Set the root pointer. Should only be used if the current root pointer is null. Root pointer to set should not be null.
 	/// Should be a pointer to an object previously created with one of the following methods on *mut PMEMctopool:-
@@ -25,7 +25,7 @@ pub trait PMEMctopoolEx
 	/// * `wcsdup()`
 	/// The persistent object must eventually be free'd with our `free()`
 	#[inline(always)]
-	fn set_root(self, root: *mut c_void);
+	fn set_root<T>(self, root: *mut T);
 	
 	/// The size_of::<T> must not be zero.
 	#[inline(always)]
@@ -80,20 +80,20 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn get_root(self) -> *mut c_void
+	fn get_root<T>(self) -> *mut T
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		
-		unsafe { pmemcto_get_root_pointer(self) }
+		unsafe { pmemcto_get_root_pointer(self) as *mut T }
 	}
 	
 	#[inline(always)]
-	fn set_root(self, root: *mut c_void)
+	fn set_root<T>(self, root: *mut T)
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		debug_assert!(!root.is_null(), "root can not be null");
 		
-		unsafe { pmemcto_set_root_pointer(self, root) }
+		unsafe { pmemcto_set_root_pointer(self, root as *mut _) }
 	}
 	
 	#[inline(always)]

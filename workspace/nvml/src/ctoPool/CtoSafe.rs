@@ -6,4 +6,66 @@
 /// Exists to prevent regular Rust types such as Vec<T> and other stack-allocated code from being passed to a CTO pool.
 pub trait CtoSafe
 {
+	/// Used internally when opening persistent memory pools for the first time.
+	/// Exists for the convenience of objects with fields that should not be persistent, eg Mutexes, RwLocks and CondVars.
+	#[inline(always)]
+	fn reinitialize(&mut self, _cto_pool: &Arc<CtoPoolInner>)
+	{
+	}
+}
+
+impl CtoSafe for u8
+{
+}
+
+impl CtoSafe for i8
+{
+}
+
+impl CtoSafe for u16
+{
+}
+
+impl CtoSafe for i16
+{
+}
+
+impl CtoSafe for u32
+{
+}
+
+impl CtoSafe for i32
+{
+}
+
+impl CtoSafe for u64
+{
+}
+
+impl CtoSafe for i64
+{
+}
+
+impl CtoSafe for usize
+{
+}
+
+impl CtoSafe for isize
+{
+}
+
+impl CtoSafe for f32
+{
+}
+
+impl CtoSafe for f64
+{
+}
+
+impl CtoSafe for bool
+{
+}
+
+impl<T: CtoSafe> CtoSafe for Option<T>
+{
 }

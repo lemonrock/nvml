@@ -19,7 +19,6 @@ version = "0.0.2"
 
 [dependencies]
 bitflags = "1.0"
-either = "1.2"
 errno = "0.2"
 libc = "0.2"
 nvml-sys = { path = "../nvml-sys", version = "0.0.4" }

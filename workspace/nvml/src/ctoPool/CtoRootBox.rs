@@ -2,40 +2,21 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Identical concept to a regular Rust Box but exists in a persistent object pool.
-pub struct CtoBox<T: CtoSafe>(*mut T, Arc<CtoPoolInner>);
+/// CtoRootBox is very similar to CtoBox but:-
+/// * does not implement Drop.
+/// * can be sent between threads.
+// NOTE: CtoRootBox MUST NOT implement Drop or the code in `CtoPool.open()` could fail spectacularly.
+pub struct CtoRootBox<T: CtoSafe + Send + Sync>(*mut T);
 
-impl<T: CtoSafe> CtoSafe for CtoBox<T>
+unsafe impl<T: CtoSafe + Send + Sync> Send for CtoRootBox<T>
 {
-	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool: &Arc<CtoPoolInner>)
-	{
-		self.deref_mut().reinitialize(cto_pool);
-		self.1 = cto_pool.clone();
-	}
 }
 
-impl<T: CtoSafe> Drop for CtoBox<T>
+unsafe impl<T: CtoSafe + Send + Sync> Sync for CtoRootBox<T>
 {
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		CtoPoolInner::free(&self.1, self.0)
-	}
 }
 
-impl<T: CtoSafe + Clone> Clone for CtoBox<T>
-{
-	#[inline(always)]
-	fn clone(&self) -> Self
-	{
-		let pointer = (self.1).0.malloc::<T>().unwrap();
-		unsafe { copy_nonoverlapping(self.0, pointer, 1) };
-		CtoBox(pointer, self.1.clone())
-	}
-}
-
-impl<T: CtoSafe + PartialEq> PartialEq for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + PartialEq> PartialEq for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
@@ -50,11 +31,11 @@ impl<T: CtoSafe + PartialEq> PartialEq for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Eq> Eq for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Eq> Eq for CtoRootBox<T>
 {
 }
 
-impl<T: CtoSafe + PartialOrd> PartialOrd for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + PartialOrd> PartialOrd for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering>
@@ -87,7 +68,7 @@ impl<T: CtoSafe + PartialOrd> PartialOrd for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Ord> Ord for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Ord> Ord for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn cmp(&self, other: &Self) -> Ordering
@@ -96,7 +77,7 @@ impl<T: CtoSafe + Ord> Ord for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Hash> Hash for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Hash> Hash for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn hash<H: Hasher>(&self, state: &mut H)
@@ -105,7 +86,7 @@ impl<T: CtoSafe + Hash> Hash for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Hasher> Hasher for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn finish(&self) -> u64
@@ -143,7 +124,7 @@ impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
 		(**self).write_u64(i)
 	}
 	
-//	#[inline(always)]
+	//	#[inline(always)]
 //	fn write_u128(&mut self, i: u128)
 //	{
 //		(**self).write_u128(i)
@@ -179,7 +160,7 @@ impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
 		(**self).write_i64(i)
 	}
 	
-//	#[inline(always)]
+	//	#[inline(always)]
 //	fn write_i128(&mut self, i: i128)
 //	{
 //		(**self).write_i128(i)
@@ -192,7 +173,7 @@ impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Display> Display for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Display> Display for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -201,7 +182,7 @@ impl<T: CtoSafe + Display> Display for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Debug> Debug for CtoBox<T>
+impl<T: CtoSafe + Send + Sync + Debug> Debug for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -210,7 +191,7 @@ impl<T: CtoSafe + Debug> Debug for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> Pointer for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> Pointer for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -219,25 +200,27 @@ impl<T: CtoSafe> Pointer for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> Deref for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> Deref for CtoRootBox<T>
 {
 	type Target = T;
 	
-	fn deref(&self) -> &T
+	#[inline(always)]
+	fn deref(&self) -> &Self::Target
 	{
-		unsafe { &*(self.0 as *const T) }
+		unsafe { &*(self.0 as *const _)}
 	}
 }
 
-impl<T: CtoSafe> DerefMut for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> DerefMut for CtoRootBox<T>
 {
-	fn deref_mut(&mut self) -> &mut T
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut Self::Target
 	{
 		unsafe { &mut *self.0 }
 	}
 }
 
-impl<T: CtoSafe> Borrow<T> for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> Borrow<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn borrow(&self) -> &T
@@ -246,7 +229,7 @@ impl<T: CtoSafe> Borrow<T> for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> BorrowMut<T> for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> BorrowMut<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn borrow_mut(&mut self) -> &mut T
@@ -255,7 +238,7 @@ impl<T: CtoSafe> BorrowMut<T> for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> AsRef<T> for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> AsRef<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn as_ref(&self) -> &T
@@ -264,23 +247,11 @@ impl<T: CtoSafe> AsRef<T> for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> AsMut<T> for CtoBox<T>
+impl<T: CtoSafe + Send + Sync> AsMut<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn as_mut(&mut self) -> &mut T
 	{
 		self.deref_mut()
-	}
-}
-
-impl<T: CtoSafe> CtoBox<T>
-{
-	/// Converts to a raw value to pass to C without dropping.
-	#[inline(always)]
-	pub fn into_raw(b: Self) -> *mut T
-	{
-		let inner = b.0;
-		forget(b);
-		inner
 	}
 }
