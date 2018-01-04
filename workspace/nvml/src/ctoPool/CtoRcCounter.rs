@@ -5,6 +5,15 @@
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct CtoRcCounter(Cell<usize>);
 
+impl Default for CtoRcCounter
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		CtoRcCounter(Cell::new(0))
+	}
+}
+
 impl CtoRcCounter
 {
 	#[inline(always)]

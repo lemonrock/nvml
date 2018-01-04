@@ -73,21 +73,20 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 		let cto_pool_inner = Arc::new(CtoPoolInner(pool_pointer));
 		
 		let existing_root = cto_pool_inner.get_root();
-		let root = if unlikely(existing_root.is_null())
+		let cto_root_box = if unlikely(existing_root.is_null())
 		{
-			let new_root_cto_box = CtoPoolAllocator(&cto_pool_inner).allocate_box(root_initializer).map_err(|cto_pool_allocation_error| CtoPoolOpenError::RootCreation(cto_pool_allocation_error))?;
-			let new_root = CtoBox::into_raw(new_root_cto_box);
-			cto_pool_inner.set_root(new_root);
-			new_root
+			let new_cto_root_box = CtoPoolAllocator(&cto_pool_inner).allocate_root_box(root_initializer).map_err(|cto_pool_allocation_error| CtoPoolOpenError::RootCreation(cto_pool_allocation_error))?;
+			cto_pool_inner.set_root(CtoRootBox::as_ptr(&new_cto_root_box));
+			new_cto_root_box
 		}
 		else
 		{
 			let mutable_root_reference = unsafe { &mut * (existing_root as *mut T) };
 			mutable_root_reference.reinitialize(&cto_pool_inner);
-			existing_root
+			CtoRootBox(existing_root)
 		};
 		
-		Ok(CtoPool(cto_pool_inner, RwLock::new(CtoRootBox(root))))
+		Ok(CtoPool(cto_pool_inner, RwLock::new(cto_root_box)))
 	}
 	
 	/// Returns a Read-Write lock to access the root of the CTO object graph.

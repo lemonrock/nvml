@@ -255,3 +255,12 @@ impl<T: CtoSafe + Send + Sync> AsMut<T> for CtoRootBox<T>
 		self.deref_mut()
 	}
 }
+
+impl<T: CtoSafe + Send + Sync> CtoRootBox<T>
+{
+	#[inline(always)]
+	fn as_ptr(this: &Self) -> *mut T
+	{
+		this.0
+	}
+}

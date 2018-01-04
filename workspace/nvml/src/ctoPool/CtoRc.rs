@@ -209,14 +209,6 @@ impl<T: CtoSafe> CtoRc<T>
 	/// Converts to a pointer produced by `into_raw()`.
 	pub unsafe fn from_raw(pointer: *const T) -> Self
 	{
-		macro_rules! offset_of
-		{
-			($structType:ty, $field:ident) =>
-			{
-				&(*(0 as *const $structType)).$field as *const _ as isize
-			}
-		}
-		
 		let offset = offset_of!(CtoRcInner<T>, value);
 		
 		// Find offset of T in CtoRcInner.

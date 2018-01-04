@@ -33,6 +33,11 @@ impl CtoPoolInner
 	#[inline(always)]
 	pub fn free<T: CtoSafe>(this: &Arc<CtoPoolInner>, value_to_free: *mut T)
 	{
+		if needs_drop::<T>()
+		{
+			unsafe { drop_in_place(value_to_free) }
+		}
+		
 		let cto_pool_inner = this.deref();
 		cto_pool_inner.0.free(value_to_free)
 	}

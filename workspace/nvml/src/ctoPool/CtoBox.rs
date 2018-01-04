@@ -3,7 +3,12 @@
 
 
 /// Identical concept to a regular Rust Box but exists in a persistent object pool.
-pub struct CtoBox<T: CtoSafe>(*mut T, Arc<CtoPoolInner>);
+#[repr(C)]
+pub struct CtoBox<T: CtoSafe>
+{
+	value: *mut T,
+	cto_pool_inner: Arc<CtoPoolInner>,
+}
 
 impl<T: CtoSafe> CtoSafe for CtoBox<T>
 {
@@ -11,7 +16,7 @@ impl<T: CtoSafe> CtoSafe for CtoBox<T>
 	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
 		self.deref_mut().reinitialize(cto_pool_inner);
-		self.1 = cto_pool_inner.clone();
+		self.cto_pool_inner = cto_pool_inner.clone();
 	}
 }
 
@@ -20,7 +25,7 @@ impl<T: CtoSafe> Drop for CtoBox<T>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		CtoPoolInner::free(&self.1, self.0)
+		CtoPoolInner::free(&self.cto_pool_inner, self.value)
 	}
 }
 
@@ -29,9 +34,15 @@ impl<T: CtoSafe + Clone> Clone for CtoBox<T>
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		let pointer = (self.1).0.malloc::<T>().unwrap();
-		unsafe { copy_nonoverlapping(self.0, pointer, 1) };
-		CtoBox(pointer, self.1.clone())
+		let value = CtoPoolAllocator(&self.cto_pool_inner).aligned_allocate::<T>().unwrap();
+		
+		unsafe { copy_nonoverlapping(self.value, value, 1) };
+		
+		Self
+		{
+			value,
+			cto_pool_inner: self.cto_pool_inner.clone(),
+		}
 	}
 }
 
@@ -225,7 +236,7 @@ impl<T: CtoSafe> Deref for CtoBox<T>
 	
 	fn deref(&self) -> &T
 	{
-		unsafe { &*(self.0 as *const T) }
+		unsafe { &*(self.value as *const T) }
 	}
 }
 
@@ -233,7 +244,7 @@ impl<T: CtoSafe> DerefMut for CtoBox<T>
 {
 	fn deref_mut(&mut self) -> &mut T
 	{
-		unsafe { &mut *self.0 }
+		unsafe { &mut *self.value }
 	}
 }
 
@@ -275,12 +286,22 @@ impl<T: CtoSafe> AsMut<T> for CtoBox<T>
 
 impl<T: CtoSafe> CtoBox<T>
 {
-	/// Converts to a raw value to pass to C without dropping.
 	#[inline(always)]
-	pub fn into_raw(b: Self) -> *mut T
+	fn into_pointer(mut this: Self) -> *mut T
 	{
-		let inner = b.0;
-		forget(b);
-		inner
+		let value = this.value;
+		unsafe { drop_in_place(&mut this.cto_pool_inner) };
+		forget(this);
+		value
+	}
+	
+	#[inline(always)]
+	fn constructor(value: *mut T, cto_pool_inner: Arc<CtoPoolInner>) -> Self
+	{
+		Self
+		{
+			value,
+			cto_pool_inner
+		}
 	}
 }

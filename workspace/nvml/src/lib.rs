@@ -23,6 +23,7 @@ extern crate serde;
 extern crate syscall_alt;
 
 
+include!("offset_of.rs");
 include!("usePath.rs");
 pub mod blockPool;
 pub mod ctoPool;
