@@ -43,13 +43,13 @@ impl CtoPoolInner
 	}
 	
 	#[inline(always)]
-	fn get_root<'ctopool, T: CtoSafe>(&self) -> *mut T
+	fn get_root<T: CtoSafe>(&self) -> *mut T
 	{
 		self.0.get_root()
 	}
 	
 	#[inline(always)]
-	fn set_root<'ctopool, T: CtoSafe>(&self, root: *mut T)
+	fn set_root<T: CtoSafe>(&self, root: *mut T)
 	{
 		self.0.set_root(root)
 	}
