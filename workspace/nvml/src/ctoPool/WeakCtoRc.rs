@@ -3,7 +3,6 @@
 
 
 /// Very similar to Rust's Rc Weak.
-#[derive(Debug)]
 pub struct WeakCtoRc<T: CtoSafe>(*mut CtoRcInner<T>);
 
 impl<T: CtoSafe> Drop for WeakCtoRc<T>
@@ -29,6 +28,14 @@ impl<T: CtoSafe> Clone for WeakCtoRc<T>
 		}
 		
 		WeakCtoRc(self.0)
+	}
+}
+
+impl<T: CtoSafe + Debug> Debug for WeakCtoRc<T>
+{
+	fn fmt(&self, f: &mut Formatter) -> fmt::Result
+	{
+		write!(f, "(WeakCtoRc)")
 	}
 }
 
