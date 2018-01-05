@@ -25,12 +25,12 @@ impl FileBackedMemory for DirectlyAccessibleFileBackedMemory
 	
 	const IsPersistent: bool = true;
 	
+	const SupportsExclusiveOpen: bool = false;
+	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _open_flags(exclusive: bool) -> FileBackedMemoryOpenFlags
+	fn _open_flags(_exclusive: bool) -> FileBackedMemoryOpenFlags
 	{
-		assert!(!exclusive, "Directly Accessible Memory (Device DaX) does not support exclusive");
-		
 		FileBackedMemoryOpenFlags::None
 	}
 	

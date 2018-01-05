@@ -24,6 +24,8 @@ impl FileBackedMemory for MappedFileBackedMemory
 	
 	const IsPersistent: bool = true;
 	
+	const SupportsExclusiveOpen: bool = true;
+	
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _open_flags(exclusive: bool) -> FileBackedMemoryOpenFlags

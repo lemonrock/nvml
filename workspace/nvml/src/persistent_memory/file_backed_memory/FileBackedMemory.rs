@@ -13,10 +13,18 @@ pub trait FileBackedMemory : Sized + Send + Sync
 	/// Is this persistent memory?
 	const IsPersistent: bool;
 	
+	/// Does this memory support exclusive open?
+	const SupportsExclusiveOpen: bool;
+	
 	/// Open file-backed memory from a file.
 	#[inline(always)]
 	fn open(persistent_memory_file_path: &Path, exclusive: bool) -> Result<Option<Self>, PmdkError>
 	{
+		if exclusive && !Self::SupportsExclusiveOpen
+		{
+			panic!("This memory kind does not support exclusive open");
+		}
+		
 		const length: usize = 0;
 		
 		let flags = Self::_open_flags(exclusive);
