@@ -9,6 +9,7 @@
 #![feature(optin_builtin_traits)]
 #![feature(specialization)]
 #![feature(thread_local)]
+#![feature(unique)]
 #![feature(untagged_unions)]
 
 

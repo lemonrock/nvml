@@ -47,23 +47,98 @@ unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
 	{
 		self.alloc_trait_reallocate(old_pointer, &old_layout, &new_layout)
 	}
-}
-
-/*
-	unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
-		
-		(self.0).0.usable_size(xxxxx)
-		
-	//	let usable_size = self.usable_size(&layout);
-		self.alloc(layout).map(|p| Excess(p, usable_size.1))
+	
+	/// Almost useless as the usable size is a property of an allocated size.
+	#[inline(always)]
+	fn usable_size(&self, layout: &Layout) -> (usize, usize)
+	{
+		let size = layout.size();
+		if size == 0
+		{
+			(0, 1)
+		}
+		else
+		{
+			(size, size)
+		}
 	}
 	
-	unsafe fn realloc_excess(&mut self,
-		ptr: *mut u8,
-		layout: Layout,
-		new_layout: Layout) -> Result<Excess, AllocErr> {
+	#[inline(always)]
+	unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr>
+	{
+		self.alloc_trait_allocate(&layout).map(|allocation_pointer| Excess(allocation_pointer, self.as_ptr().usable_size(allocation_pointer as *mut c_void)))
+	}
+	
+	#[inline(always)]
+	unsafe fn realloc_excess(&mut self, old_pointer: *mut u8, old_layout: Layout, new_layout: Layout) -> Result<Excess, AllocErr>
+	{
+		self.alloc_trait_reallocate(old_pointer, &old_layout, &new_layout).map(|allocation_pointer| Excess(allocation_pointer, self.as_ptr().usable_size(allocation_pointer as *mut c_void)))
+	}
+	
+	/// Useless. Use realloc.
+	#[inline(always)]
+	unsafe fn grow_in_place(&mut self, _ptr: *mut u8, _old_layout: Layout, _new_layout: Layout) -> Result<(), CannotReallocInPlace>
+	{
+		Err(CannotReallocInPlace)
+	}
+	
+	/// Useless. Use realloc.
+	#[inline(always)]
+	unsafe fn shrink_in_place(&mut self, _ptr: *mut u8, _old_layout: Layout, _new_layout: Layout) -> Result<(), CannotReallocInPlace>
+	{
+		Err(CannotReallocInPlace)
+	}
+	
+	#[inline(always)]
+	fn alloc_one<UniqueT>(&mut self) -> Result<Unique<UniqueT>, AllocErr>
+	where Self: Sized
+	{
+		unsafe { self.alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut UniqueT)) }
+	}
+	
+	#[inline(always)]
+	unsafe fn dealloc_one<UniqueT>(&mut self, ptr: Unique<UniqueT>)
+	where Self: Sized
+	{
+		self.alloc_trait_free(ptr.as_ptr() as *mut u8);
+	}
+	
+	#[inline(always)]
+	fn alloc_array<UniqueT>(&mut self, number_of_items: usize) -> Result<Unique<UniqueT>, AllocErr>
+	where Self: Sized
+	{
+		match Layout::array::<UniqueT>(number_of_items)
+		{
+			Some(ref layout) => self.alloc_trait_allocate(layout).map(|allocation_pointer| unsafe { Unique::new_unchecked(allocation_pointer as *mut UniqueT) }),
+			
+			_ => Err(AllocErr::invalid_input("invalid layout for alloc_array")),
+		}
+	}
+	
+	#[inline(always)]
+	unsafe fn realloc_array<UniqueT>(&mut self, old_pointer: Unique<UniqueT>, old_number_of_items: usize, new_number_of_items: usize) -> Result<Unique<UniqueT>, AllocErr>
+	where Self: Sized
+	{
+		match (Layout::array::<UniqueT>(old_number_of_items), Layout::array::<T>(new_number_of_items))
+		{
+			(Some(ref old_layout), Some(ref new_layout)) => self.alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut UniqueT)),
+			
+			_ => Err(AllocErr::invalid_input("invalid layout for realloc_array")),
+		}
+	}
+	
+	#[inline(always)]
+	unsafe fn dealloc_array<UniqueT>(&mut self, pointer_to_free: Unique<UniqueT>, number_of_items: usize) -> Result<(), AllocErr>
+	where Self: Sized
+	{
+		match Layout::array::<UniqueT>(number_of_items)
+		{
+			Some(_) => Ok(self.alloc_trait_free(pointer_to_free.as_ptr() as *mut _)),
+			
+			_ => Err(AllocErr::invalid_input("invalid layout for dealloc_array")),
+		}
+	}
 }
-*/
 
 impl<T: CtoSafe + Send + Sync> CtoPool<T>
 {

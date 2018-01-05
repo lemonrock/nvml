@@ -64,7 +64,7 @@ trait PMEMctopoolExt
 	/// Pointer must not be null.
 	/// self can not be null.
 	#[inline(always)]
-	fn usable_size<T>(self, pointer: *mut T) -> size_t;
+	fn usable_size(self, pointer: *mut c_void) -> size_t;
 	
 	/// Pointer must not be null.
 	/// new_size can not be zero.
@@ -213,12 +213,12 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn usable_size<T>(self, pointer: *mut T) -> size_t
+	fn usable_size(self, pointer: *mut c_void) -> size_t
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		debug_assert!(!pointer.is_null(), "pointer can not be null");
 		
-		unsafe { pmemcto_malloc_usable_size(self, pointer as *mut _) }
+		unsafe { pmemcto_malloc_usable_size(self, pointer) }
 	}
 	
 	#[inline(always)]
