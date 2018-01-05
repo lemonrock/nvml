@@ -5,20 +5,20 @@
 pub trait PersistentMemoryCtoPoolPathExt
 {
 	#[inline(always)]
-	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>;
+	fn validate_cto_pool_is_consistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>;
 	
 	/// blockSize can be zero, in which case it is not explicitly checked for a match; EINVAL occurs in this case
 	#[inline(always)]
-	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>;
+	fn open_cto_pool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>;
+	fn create_cto_pool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>;
 }
 
 impl PersistentMemoryCtoPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>
+	fn validate_cto_pool_is_consistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>
 	{
 		let result = use_path!(self, pmemcto_check, layout_name.as_ptr());
 		match result
@@ -31,7 +31,7 @@ impl PersistentMemoryCtoPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>
+	fn open_cto_pool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>
 	{
 		let result = use_path!(self, pmemcto_open, layout_name.as_ptr());
 		
@@ -46,7 +46,7 @@ impl PersistentMemoryCtoPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>
+	fn create_cto_pool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>
 	{
 		let result = use_path!(self, pmemcto_create, layout_name.as_ptr(), pool_size, mode);
 		

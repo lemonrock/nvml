@@ -2,14 +2,23 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Represents block pool configuration which can be persisted or deserialized using Serde.
+/// Use `BlockPoolsConfiguration` or `Configuration` to manage multiple pools.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct BlockPoolConfiguration
 {
-	permissions: mode_t,
-	poolSize: Option<usize>,
-	blockSize: Option<usize>,
+	/// Permissions for this pool. 0o600 is a good option.
+	pub permissions: mode_t,
+	
+	/// Pool size in bytes. Ought to be a power of 2 and a multiple of block_size.
+	/// Must be at least PMEMBLK_MIN_POOL (As of May 7th 2017, 16MB + 4KB)
+	pub pool_size: Option<usize>,
+	
+	/// Block size in bytes. Ought to be a power of 2.
+	/// Rounded up to PMEMBLK_MIN_BLK. (As of May 7th 2017, 512 bytes).
+	pub block_size: Option<usize>,
 }
 
 impl Default for BlockPoolConfiguration
@@ -20,42 +29,44 @@ impl Default for BlockPoolConfiguration
 		Self
 		{
 			permissions: Configuration::DefaultPermissionsForPoolSets,
-			poolSize: None,
-			blockSize: None,
+			pool_size: None,
+			block_size: None,
 		}
 	}
 }
 
 impl BlockPoolConfiguration
 {
-	pub fn openOrCreate(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> BlockPool
+	/// Open or create (if necessary) a block pool.
+	/// Do not use this method directly unless only using one block pool.
+	pub fn open_or_create(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> BlockPool
 	{
-		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
+		let pool_set_file_path = objectPoolSetsFolderPath.join(fileName);
 		
-		if likely(poolSetFilePath.exists())
+		if likely(pool_set_file_path.exists())
 		{
-			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
-			BlockPool::open(&poolSetFilePath, self.blockSize).expect("Could not open BlockPool")
+			assert!(pool_set_file_path.is_file(), "pool_set_file_path '{:?}' is not a file", pool_set_file_path);
+			BlockPool::open(&pool_set_file_path, self.block_size).expect("Could not open BlockPool")
 		}
 		else
 		{
 			
-			let blockSize = match self.blockSize
+			let blockSize = match self.block_size
 			{
 				None => PMEMBLK_MIN_BLK,
 				Some(blockSize) => min(blockSize, PMEMBLK_MIN_BLK)
 			};
 			
-			let poolSize = match self.poolSize
+			let poolSize = match self.pool_size
 			{
 				None => 0,
 				Some(poolSize) =>
 				{
-					assert!(poolSize >= PMEMOBJ_MIN_POOL, "poolSize '{}' is smaller than PMEMOBJ_MIN_POOL '{}'", poolSize, PMEMOBJ_MIN_POOL);
+					assert!(poolSize >= PMEMBLK_MIN_POOL, "poolSize '{}' is smaller than PMEMBLK_MIN_POOL '{}'", poolSize, PMEMBLK_MIN_POOL);
 					poolSize
 				},
 			};
-			BlockPool::create(&poolSetFilePath, blockSize, poolSize, self.permissions).expect("Could not create BlockPool")
+			BlockPool::create(&pool_set_file_path, blockSize, poolSize, self.permissions).expect("Could not create BlockPool")
 		}
 	}
 }

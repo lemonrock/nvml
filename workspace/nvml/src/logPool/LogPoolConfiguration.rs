@@ -27,12 +27,12 @@ impl LogPoolConfiguration
 {
 	pub fn openOrCreate(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> LogPool
 	{
-		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
+		let pool_set_file_path = objectPoolSetsFolderPath.join(fileName);
 		
-		if likely(poolSetFilePath.exists())
+		if likely(pool_set_file_path.exists())
 		{
-			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
-			LogPool::open(&poolSetFilePath).expect("Could not open LogPool")
+			assert!(pool_set_file_path.is_file(), "pool_set_file_path '{:?}' is not a file", pool_set_file_path);
+			LogPool::open(&pool_set_file_path).expect("Could not open LogPool")
 		}
 		else
 		{
@@ -45,7 +45,7 @@ impl LogPoolConfiguration
 					poolSize
 				},
 			};
-			LogPool::create(&poolSetFilePath, poolSize, self.permissions).expect("Could not create LogPool")
+			LogPool::create(&pool_set_file_path, poolSize, self.permissions).expect("Could not create LogPool")
 		}
 	}
 }

@@ -6,19 +6,19 @@ pub trait PersistentMemoryLogPoolPathExt
 {
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	#[inline(always)]
-	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, PmdkError>;
+	fn validate_log_pool_is_consistent(&self) -> Result<bool, PmdkError>;
 	
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, PmdkError>;
+	fn open_log_pool(&self) -> Result<*mut PMEMlogpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
+	fn create_log_pool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
 }
 
 impl PersistentMemoryLogPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, PmdkError>
+	fn validate_log_pool_is_consistent(&self) -> Result<bool, PmdkError>
 	{
 		let result = use_path!(self, pmemlog_check);
 		match result
@@ -31,7 +31,7 @@ impl PersistentMemoryLogPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, PmdkError>
+	fn open_log_pool(&self) -> Result<*mut PMEMlogpool, PmdkError>
 	{
 		let result = use_path!(self, pmemlog_open);
 		
@@ -46,7 +46,7 @@ impl PersistentMemoryLogPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>
+	fn create_log_pool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>
 	{
 		let result = use_path!(self, pmemlog_create, poolSize, mode);
 		

@@ -2,31 +2,32 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A root structure representing all known persistent memory pools
 #[derive(Debug, Default)]
 pub struct Pools
 {
-	blockPools: HashMap<String, BlockPool>,
-	logPools: HashMap<String, LogPool>,
-	objectPools: HashMap<String, ObjectPool>,
+	block_pools: HashMap<String, BlockPool>,
+	log_pools: HashMap<String, LogPool>,
+	object_pools: HashMap<String, ObjectPool>,
 }
 
 impl Pools
 {
 	#[inline(always)]
-	pub fn getBlockPool(&self, poolName: &str) -> Option<BlockPool>
+	pub fn get_block_pool(&self, pool_name: &str) -> Option<BlockPool>
 	{
-		self.blockPools.get(poolName).map(|pool| pool.clone())
+		self.block_pools.get(pool_name).map(|pool| pool.clone())
 	}
 	
 	#[inline(always)]
-	pub fn getLogPool(&self, poolName: &str) -> Option<LogPool>
+	pub fn get_log_pool(&self, pool_name: &str) -> Option<LogPool>
 	{
-		self.logPools.get(poolName).map(|pool| pool.clone())
+		self.log_pools.get(pool_name).map(|pool| pool.clone())
 	}
 	
 	#[inline(always)]
-	pub fn getObjectPool(&self, poolName: &str) -> Option<ObjectPool>
+	pub fn get_object_pool(&self, pool_name: &str) -> Option<ObjectPool>
 	{
-		self.objectPools.get(poolName).map(|pool| pool.clone())
+		self.object_pools.get(pool_name).map(|pool| pool.clone())
 	}
 }

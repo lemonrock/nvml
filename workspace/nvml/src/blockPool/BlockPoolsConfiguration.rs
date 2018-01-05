@@ -7,8 +7,9 @@
 #[serde(default)]
 pub struct BlockPoolsConfiguration
 {
-	poolSetsFolderName: String,
-	blockPoolConfigurations: HashMap<String, BlockPoolConfiguration>
+	pub pool_sets_folder_name: String,
+	
+	pub block_pool_configurations: HashMap<String, BlockPoolConfiguration>
 }
 
 impl Default for BlockPoolsConfiguration
@@ -18,25 +19,27 @@ impl Default for BlockPoolsConfiguration
 	{
 		Self
 		{
-			poolSetsFolderName: "block".to_string(),
-			blockPoolConfigurations: HashMap::new(),
+			pool_sets_folder_name: "block".to_string(),
+			block_pool_configurations: HashMap::new(),
 		}
 	}
 }
 
 impl BlockPoolsConfiguration
 {
-	pub fn open(&self, poolsFolderPath: &Path) -> HashMap<String, BlockPool>
+	/// Opens a set of block pools.
+	/// Do not use this method directly unless only using block pools.
+	pub fn open(&self, pools_folder_path: &Path) -> HashMap<String, BlockPool>
 	{
-		let blockPoolSetsFolderPath = poolsFolderPath.join(&self.poolSetsFolderName);
+		let block_pool_sets_folder_path = pools_folder_path.join(&self.pool_sets_folder_name);
 		
-		if unlikely(!blockPoolSetsFolderPath.exists())
+		if unlikely(!block_pool_sets_folder_path.exists())
 		{
 			return HashMap::new()
 		}
 		
-		assert!(blockPoolSetsFolderPath.is_dir(), "blockPoolSetsFolderPath '{:?}' is not a folder", blockPoolSetsFolderPath);
+		assert!(block_pool_sets_folder_path.is_dir(), "block_pool_sets_folder_path '{:?}' is not a folder", block_pool_sets_folder_path);
 		
-		self.blockPoolConfigurations.iter().map(|(fileName, blockPoolConfiguration)| (fileName.to_string(), blockPoolConfiguration.openOrCreate(&blockPoolSetsFolderPath, fileName)) ).collect()
+		self.block_pool_configurations.iter().map(|(file_name, block_pool_configuration)| (file_name.to_string(), block_pool_configuration.open_or_create(&block_pool_sets_folder_path, file_name)) ).collect()
 	}
 }

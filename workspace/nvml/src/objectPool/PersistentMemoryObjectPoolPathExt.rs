@@ -7,19 +7,19 @@ pub trait PersistentMemoryObjectPoolPathExt
 {
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	#[inline(always)]
-	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>;
+	fn validate_object_pool_is_consistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>;
 	
 	#[inline(always)]
-	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>;
+	fn open_object_pool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>;
+	fn create_object_pool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>;
 }
 
 impl PersistentMemoryObjectPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>
+	fn validate_object_pool_is_consistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
 		let result = use_path!(self, pmemobj_check, layout);
@@ -35,7 +35,7 @@ impl PersistentMemoryObjectPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>
+	fn open_object_pool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
 		let result = use_path!(self, pmemobj_open, layout);
@@ -52,7 +52,7 @@ impl PersistentMemoryObjectPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>
+	fn create_object_pool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
 		let result = use_path!(self, pmemobj_create, layout, poolSize, mode);

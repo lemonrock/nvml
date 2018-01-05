@@ -105,6 +105,7 @@ unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
 		layout: Layout,
 		new_layout: Layout) -> Result<Excess, AllocErr> {
 }
+*/
 
 impl<T: CtoSafe + Send + Sync> CtoPool<T>
 {
@@ -120,12 +121,12 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 		
 		let layout_name = layout_name.as_c_str();
 		
-		let pool_pointer = match pool_set_file_path.createPersistentMemoryCtoPool(layout_name, pool_size, mode)
+		let pool_pointer = match pool_set_file_path.create_cto_pool(layout_name, pool_size, mode)
 		{
 			Err(generic_error) => return Err(CtoPoolOpenError::CreateFailed(generic_error)),
 			Ok(pool_pointer) => if pool_pointer.is_null()
 			{
-				match pool_set_file_path.validatePersistentMemoryCtoPoolIsConsistent(layout_name)
+				match pool_set_file_path.validate_cto_pool_is_consistent(layout_name)
 				{
 					Err(generic_error) => return Err(CtoPoolOpenError::ValidationFailed(generic_error)),
 					Ok(is_valid) => if is_valid
@@ -138,7 +139,7 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 					},
 				};
 				
-				match pool_set_file_path.openPersistentMemoryCtoPool(layout_name)
+				match pool_set_file_path.open_cto_pool(layout_name)
 				{
 					Err(generic_error) => return Err(CtoPoolOpenError::OpenFailed(generic_error)),
 					Ok(pool_pointer) => pool_pointer,
@@ -176,4 +177,3 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 		&self.1
 	}
 }
-*/

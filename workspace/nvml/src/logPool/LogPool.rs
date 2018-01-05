@@ -16,29 +16,21 @@ unsafe impl Sync for LogPool
 impl LogPool
 {
 	#[inline(always)]
-	fn fromHandle(handle: *mut PMEMlogpool) -> Self
+	pub fn validate(pool_set_file_path: &Path) -> Result<bool, PmdkError>
 	{
-		debug_assert!(!handle.is_null(), "PMEMlogpool handle is null");
-		
-		LogPool(handle, LogPoolDropWrapper::new(handle))
+		pool_set_file_path.validate_log_pool_is_consistent()
 	}
 	
 	#[inline(always)]
-	pub fn validate(poolSetFilePath: &Path) -> Result<bool, PmdkError>
+	pub fn open(pool_set_file_path: &Path) -> Result<Self, PmdkError>
 	{
-		poolSetFilePath.validatePersistentMemoryLogPoolIsConsistent()
+		pool_set_file_path.open_log_pool().map(Self::fromHandle)
 	}
 	
 	#[inline(always)]
-	pub fn open(poolSetFilePath: &Path) -> Result<Self, PmdkError>
+	pub fn create(pool_set_file_path: &Path, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
-		poolSetFilePath.openPersistentMemoryLogPool().map(Self::fromHandle)
-	}
-	
-	#[inline(always)]
-	pub fn create(poolSetFilePath: &Path, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
-	{
-		poolSetFilePath.createPersistentMemoryLogPool(poolSize, mode).map(Self::fromHandle)
+		pool_set_file_path.create_log_pool(poolSize, mode).map(Self::fromHandle)
 	}
 	
 	#[inline(always)]
@@ -75,5 +67,13 @@ impl LogPool
 	pub fn walk(&self, chunkSize: usize, processChunkCallback: unsafe extern "C" fn(dataInLog: *const c_void, length: usize, callbackArgument: *mut c_void) -> WalkCallbackResult, callbackArgument: *mut c_void)
 	{
 		self.0.walk(chunkSize, processChunkCallback, callbackArgument)
+	}
+	
+	#[inline(always)]
+	fn fromHandle(handle: *mut PMEMlogpool) -> Self
+	{
+		debug_assert!(!handle.is_null(), "PMEMlogpool handle is null");
+		
+		LogPool(handle, LogPoolDropWrapper::new(handle))
 	}
 }

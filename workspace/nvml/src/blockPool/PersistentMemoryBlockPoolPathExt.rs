@@ -7,20 +7,20 @@ pub trait PersistentMemoryBlockPoolPathExt
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	/// blockSize can be zero, in which case it is not explicitly checked for a match
 	#[inline(always)]
-	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, PmdkError>;
+	fn validate_block_pool_is_consistent(&self, blockSize: usize) -> Result<bool, PmdkError>;
 	
 	/// blockSize can be zero, in which case it is not explicitly checked for a match; EINVAL occurs in this case
 	#[inline(always)]
-	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>;
+	fn open_block_pool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>;
+	fn creat_block_pool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>;
 }
 
 impl PersistentMemoryBlockPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, PmdkError>
+	fn validate_block_pool_is_consistent(&self, blockSize: usize) -> Result<bool, PmdkError>
 	{
 		let result = use_path!(self, pmemblk_check, blockSize);
 		match result
@@ -33,7 +33,7 @@ impl PersistentMemoryBlockPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>
+	fn open_block_pool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>
 	{
 		let result = use_path!(self, pmemblk_open, blockSize);
 		
@@ -48,7 +48,7 @@ impl PersistentMemoryBlockPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>
+	fn creat_block_pool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>
 	{
 		let result = use_path!(self, pmemblk_create, blockSize, poolSize, mode);
 		

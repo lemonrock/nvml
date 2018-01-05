@@ -44,12 +44,12 @@ impl ObjectPoolConfiguration
 		
 		assert!(layoutName.len() + 1 <= PMEMOBJ_MAX_LAYOUT, "layoutName '{}' can not be larger than PMEMOBJ_MAX_LAYOUT '{}' - 1", layoutName, PMEMOBJ_MAX_LAYOUT);
 		
-		let poolSetFilePath = objectPoolSetsFolderPath.join(fileName);
+		let pool_set_file_path = objectPoolSetsFolderPath.join(fileName);
 		let layoutName = Some(layoutName);
-		let objectPool = if likely(poolSetFilePath.exists())
+		let objectPool = if likely(pool_set_file_path.exists())
 		{
-			assert!(poolSetFilePath.is_file(), "poolSetFilePath '{:?}' is not a file", poolSetFilePath);
-			ObjectPool::open(&poolSetFilePath, layoutName).expect("Could not open ObjectPool")
+			assert!(pool_set_file_path.is_file(), "pool_set_file_path '{:?}' is not a file", pool_set_file_path);
+			ObjectPool::open(&pool_set_file_path, layoutName).expect("Could not open ObjectPool")
 		}
 		else
 		{
@@ -62,7 +62,7 @@ impl ObjectPoolConfiguration
 					poolSize
 				},
 			};
-			ObjectPool::create(&poolSetFilePath, layoutName, poolSize, self.permissions).expect("Could not create ObjectPool")
+			ObjectPool::create(&pool_set_file_path, layoutName, poolSize, self.permissions).expect("Could not create ObjectPool")
 		};
 		
 		objectPool.setTransactionDebugSkipExpensiveChecks(self.skipExpensiveDebugChecks);
