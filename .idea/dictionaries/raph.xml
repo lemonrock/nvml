@@ -7,8 +7,12 @@
       <w>chunksize</w>
       <w>eagain</w>
       <w>ebusy</w>
+      <w>ecanceled</w>
       <w>edeadlk</w>
       <w>einval</w>
+      <w>enomem</w>
+      <w>enospc</w>
+      <w>erofs</w>
       <w>errnum</w>
       <w>errormsg</w>
       <w>funcs</w>
@@ -39,6 +43,7 @@
       <w>nbyte</w>
       <w>nonoverlapping</w>
       <w>nvml</w>
+      <w>pmdk</w>
       <w>pmem</w>
       <w>pmemblk</w>
       <w>pmemcto</w>
@@ -60,6 +65,7 @@
       <w>wcsdup</w>
       <w>werror</w>
       <w>whitelist</w>
+      <w>writev</w>
       <w>wrlock</w>
       <w>xadd</w>
       <w>xalloc</w>

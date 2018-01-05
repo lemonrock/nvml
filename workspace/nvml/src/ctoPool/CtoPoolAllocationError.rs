@@ -5,7 +5,7 @@
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum CtoPoolAllocationError<InitializationError>
 {
-	Allocation(GenericError),
+	Allocation(PmdkError),
 	
 	Initialization(InitializationError),
 }

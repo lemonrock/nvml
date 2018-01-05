@@ -343,7 +343,7 @@ impl<T: Persistable> PersistentObject<T>
 {
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstructRootObject(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstructRootObject(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
 		debug_assert!(T::TypeNumber == 0, "This is not a root type, ie type number is '{}'");
 		
@@ -369,7 +369,7 @@ impl<T: Persistable> PersistentObject<T>
 	
 	// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstruct(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
 		#[inline(always)]
 		fn allocate<T: Persistable>(objectPool: *mut PMEMobjpool, oidPointer: &mut PMEMoid, constructor: pmemobj_constr, arguments: *mut c_void) -> bool
@@ -385,9 +385,9 @@ impl<T: Persistable> PersistentObject<T>
 	}
 	
 	#[inline(always)]
-	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr, *mut c_void) -> bool>(objectPool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	fn allocateUninitializedAndConstructInternal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr, *mut c_void) -> bool>(object_pool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
 		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
 		
@@ -414,25 +414,25 @@ impl<T: Persistable> PersistentObject<T>
 			}
 		}
 		
-		if unlikely(allocate(objectPool, oid, Some(constructor::<T>), arguments as *mut _ as *mut _))
+		if unlikely(allocate(object_pool, oid, Some(constructor::<T>), arguments as *mut _ as *mut _))
 		{
-			let osErrorNumber = errno().0;
-			match osErrorNumber
+			let os_error_number = errno().0;
+			match os_error_number
 			{
-				E::ECANCELED =>
+				ECANCELED =>
 				{
-					if let Some(capturedPanic) = unsafe { replace(&mut CapturedPanic, None) }
+					if let Some(captured_panic) = unsafe { replace(&mut CapturedPanic, None) }
 					{
-						resume_unwind(capturedPanic);
+						resume_unwind(captured_panic);
 					}
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
+					PmdkError::obj("pmemobj_alloc or pmemobj_root_construct")
 				},
 				
 				_ =>
 				{
-					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", osErrorNumber);
+					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", os_error_number);
 					
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
+					PmdkError::obj("pmemobj_alloc or pmemobj_root_construct")
 				}
 			}
 		}
@@ -455,24 +455,24 @@ impl<T: Persistable> PersistentObject<T>
 	/// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstructInTransaction(&mut self, transaction: Transaction, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstructInTransaction(&mut self, transaction: Transaction, object_pool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
-		self.constructInTransaction(objectPool, arguments, unsafe { pmemobj_tx_alloc(size::<T>(), T::TypeNumber) })
+		self.constructInTransaction(object_pool, arguments, unsafe { pmemobj_tx_alloc(size::<T>(), T::TypeNumber) })
 	}
 	
 	/// If returns Err then the transaction will have been aborted; return immediately from work() function
 	/// At this point, self.oid can be garbage; it might also point to an existing object which hasn't been free'd
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn allocateUninitializedAndConstructInTransactionWithoutFlush(&mut self, transaction: Transaction, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), GenericError>
+	pub fn allocateUninitializedAndConstructInTransactionWithoutFlush(&mut self, transaction: Transaction, object_pool: *mut PMEMobjpool, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
-		self.constructInTransaction(objectPool, arguments, unsafe { pmemobj_tx_xalloc(size::<T>(), T::TypeNumber, POBJ_XALLOC_NO_FLUSH) })
+		self.constructInTransaction(object_pool, arguments, unsafe { pmemobj_tx_xalloc(size::<T>(), T::TypeNumber, POBJ_XALLOC_NO_FLUSH) })
 	}
 	
 	/// If returns Err then the transaction will have been aborted; return immediately from work() function
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn freeInTransaction(&mut self, transaction: Transaction) -> Result<(), GenericError>
+	pub fn freeInTransaction(&mut self, transaction: Transaction) -> Result<(), PmdkError>
 	{
 		Self::failureInTransaction(unsafe { pmemobj_tx_free(self.oid) })
 	}
@@ -481,7 +481,7 @@ impl<T: Persistable> PersistentObject<T>
 	/// size can be zero
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), GenericError>
+	pub fn addRangeSnapshotInTransaction(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), PmdkError>
 	{
 		debug_assert!(!self.oid.is_null(), "oid is null");
 		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
@@ -499,7 +499,7 @@ impl<T: Persistable> PersistentObject<T>
 	/// size can be zero
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), GenericError>
+	pub fn addRangeSnapshotInTransactionWithoutFlush(&self, transaction: Transaction, offset: u64, size: size_t) -> Result<(), PmdkError>
 	{
 		debug_assert!(!self.oid.is_null(), "oid is null");
 		debug_assert!(offset + size as u64 <= T::size() as u64, "offset '{}' + size '{}' is bigger than our size '{}'", offset, size, T::size());
@@ -514,24 +514,23 @@ impl<T: Persistable> PersistentObject<T>
 	}
 	
 	#[inline(always)]
-	pub fn addSelfToTransaction(&self, transaction: Transaction) -> Result<(), GenericError>
+	pub fn addSelfToTransaction(&self, transaction: Transaction) -> Result<(), PmdkError>
 	{
 		self.addRangeSnapshotInTransaction(transaction, 0, T::size())
 	}
 	
 	#[inline(always)]
-	pub fn addSelfToTransactionWithoutFlush(&self, transaction: Transaction) -> Result<(), GenericError>
+	pub fn addSelfToTransactionWithoutFlush(&self, transaction: Transaction) -> Result<(), PmdkError>
 	{
 		self.addRangeSnapshotInTransactionWithoutFlush(transaction, 0, T::size())
 	}
 	
 	#[inline(always)]
-	fn constructInTransaction(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments, oid: PMEMoid) -> Result<(), GenericError>
+	fn constructInTransaction(&mut self, objectPool: *mut PMEMobjpool, arguments: &mut T::Arguments, oid: PMEMoid) -> Result<(), PmdkError>
 	{
 		if unlikely(oid.is_null())
 		{
-			let osErrorNumber = errno().0;
-			Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_tx_xalloc"))
+			PmdkError::obj("pmemobj_tx_xalloc")
 		}
 		else
 		{
@@ -542,7 +541,7 @@ impl<T: Persistable> PersistentObject<T>
 	}
 	
 	#[inline(always)]
-	fn failureInTransaction(result: c_int) -> Result<(), GenericError>
+	fn failureInTransaction(result: c_int) -> Result<(), PmdkError>
 	{
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
 		
@@ -552,8 +551,7 @@ impl<T: Persistable> PersistentObject<T>
 		}
 		else
 		{
-			let osErrorNumber = errno().0;
-			Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_tx_*"))
+			PmdkError::obj("pmemobj_tx_*")
 		}
 	}
 	

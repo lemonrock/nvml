@@ -25,19 +25,19 @@ impl ObjectPool
 	}
 	
 	#[inline(always)]
-	pub fn validate(poolSetFilePath: &Path, layoutName: Option<&str>) -> Result<bool, GenericError>
+	pub fn validate(poolSetFilePath: &Path, layoutName: Option<&str>) -> Result<bool, PmdkError>
 	{
 		poolSetFilePath.validatePersistentMemoryObjectPoolIsConsistent(layoutName)
 	}
 	
 	#[inline(always)]
-	pub fn open(poolSetFilePath: &Path, layoutName: Option<&str>) -> Result<Self, GenericError>
+	pub fn open(poolSetFilePath: &Path, layoutName: Option<&str>) -> Result<Self, PmdkError>
 	{
 		poolSetFilePath.openPersistentMemoryObjectPool(layoutName).map(Self::fromHandle)
 	}
 	
 	#[inline(always)]
-	pub fn create(poolSetFilePath: &Path, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<Self, GenericError>
+	pub fn create(poolSetFilePath: &Path, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
 		poolSetFilePath.createPersistentMemoryObjectPool(layoutName, poolSize, mode).map(Self::fromHandle)
 	}

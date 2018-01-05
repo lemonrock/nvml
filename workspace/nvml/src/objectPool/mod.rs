@@ -5,7 +5,7 @@
 use ::errno::Errno;
 use ::errno::errno;
 use ::errno::set_errno;
-use ::errors::GenericError;
+use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_int;
 use ::libc::c_longlong;
@@ -44,6 +44,7 @@ use ::std::ptr::null;
 use ::std::ptr::null_mut;
 use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
+use ::syscall_alt::constants::E::ECANCELED;
 
 
 include!("ConditionVariable.rs");

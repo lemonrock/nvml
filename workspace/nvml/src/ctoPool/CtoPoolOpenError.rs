@@ -5,11 +5,11 @@
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum CtoPoolOpenError<InitializationError>
 {
-	CreateFailed(GenericError),
+	CreateFailed(PmdkError),
 	
-	ValidationFailed(GenericError),
+	ValidationFailed(PmdkError),
 	
-	OpenFailed(GenericError),
+	OpenFailed(PmdkError),
 	
 	Invalid,
 	

@@ -2,8 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-use ::errno::errno;
-use ::errors::GenericError;
+use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_void;
 use ::libc::mode_t;
@@ -25,6 +24,7 @@ use ::std::fmt::Formatter;
 use ::std::fmt::Pointer;
 use ::std::hash::Hash;
 use ::std::hash::Hasher;
+use ::std::heap::Layout;
 use ::std::mem::align_of;
 use ::std::mem::forget;
 use ::std::mem::needs_drop;
@@ -42,9 +42,6 @@ use ::std::sync::Arc;
 use ::std::sync::RwLock;
 
 
-include!("handleError.rs");
-
-
 include!("CtoBox.rs");
 include!("CtoPool.rs");
 include!("CtoPoolAllocationError.rs");
@@ -60,5 +57,3 @@ include!("initialiseMemoryFunctions.rs");
 include!("PersistentMemoryCtoPoolPathExt.rs");
 include!("PMEMctopoolEx.rs");
 include!("WeakCtoRc.rs");
-
-

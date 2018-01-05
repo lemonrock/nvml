@@ -24,13 +24,13 @@ impl BlockPool
 	}
 	
 	#[inline(always)]
-	pub fn validate(poolSetFilePath: &Path, blockSize: usize) -> Result<bool, GenericError>
+	pub fn validate(poolSetFilePath: &Path, blockSize: usize) -> Result<bool, PmdkError>
 	{
 		poolSetFilePath.validatePersistentMemoryBlockPoolIsConsistent(blockSize)
 	}
 	
 	#[inline(always)]
-	pub fn open(poolSetFilePath: &Path, validateBlockSize: Option<usize>) -> Result<Self, GenericError>
+	pub fn open(poolSetFilePath: &Path, validateBlockSize: Option<usize>) -> Result<Self, PmdkError>
 	{
 		let blockSize = if let Some(blockSize) = validateBlockSize
 		{
@@ -46,7 +46,7 @@ impl BlockPool
 	}
 	
 	#[inline(always)]
-	pub fn create(poolSetFilePath: &Path, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<Self, GenericError>
+	pub fn create(poolSetFilePath: &Path, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
 		poolSetFilePath.createPersistentMemoryBlockPool(blockSize, poolSize, mode).map(Self::fromHandle)
 	}

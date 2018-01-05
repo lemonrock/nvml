@@ -2,7 +2,13 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+use ::errno::errno;
 use ::libc::c_char;
+use ::nvml_sys::pmem_errormsg;
+use ::nvml_sys::pmemblk_errormsg;
+use ::nvml_sys::pmemcto_errormsg;
+use ::nvml_sys::pmemlog_errormsg;
+use ::nvml_sys::pmemobj_errormsg;
 use ::rust_extra::likely;
 use ::std::error;
 use ::std::ffi::CStr;
@@ -10,9 +16,10 @@ use ::std::ffi::CString;
 use ::std::fmt;
 use ::std::fmt::Display;
 use ::std::fmt::Formatter;
-use ::syscall_alt::constants::E;
+use ::syscall_alt::constants::E::EINVAL;
+use ::syscall_alt::constants::E::ENOMEM;
 
 
 include!("ErrorFunction.rs");
-include!("GenericError.rs");
+include!("PmdkError.rs");
 include!("LastErrorMessageOnThisThreadIsInvalidError.rs");

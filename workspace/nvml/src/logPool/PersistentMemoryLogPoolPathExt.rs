@@ -6,50 +6,38 @@ pub trait PersistentMemoryLogPoolPathExt
 {
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	#[inline(always)]
-	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, GenericError>;
+	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, PmdkError>;
 	
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, GenericError>;
+	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, GenericError>;
-}
-
-macro_rules! handleError
-{
-	($function: path) =>
-	{
-		{
-			let osErrorNumber = errno().0;
-			const functionName: &'static str = stringify!($function);
-			Err(GenericError::new(osErrorNumber, pmempool_errormsg, functionName))
-		}
-	}
+	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
 }
 
 impl PersistentMemoryLogPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, GenericError>
+	fn validatePersistentMemoryLogPoolIsConsistent(&self) -> Result<bool, PmdkError>
 	{
-		let result = usePath!(self, pmemlog_check);
+		let result = use_path!(self, pmemlog_check);
 		match result
 		{
 			1 => Ok(false),
 			0 => Ok(true),
-			-1 => handleError!(pmemlog_check),
+			-1 => PmdkError::log("pmemlog_check"),
 			illegal @ _ => panic!("pmemlog_check() returned illegal value '{}'", illegal)
 		}
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, GenericError>
+	fn openPersistentMemoryLogPool(&self) -> Result<*mut PMEMlogpool, PmdkError>
 	{
-		let result = usePath!(self, pmemlog_open);
+		let result = use_path!(self, pmemlog_open);
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemlog_open)
+			PmdkError::log("pmemlog_open")
 		}
 		else
 		{
@@ -58,13 +46,13 @@ impl PersistentMemoryLogPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, GenericError>
+	fn createPersistentMemoryLogPool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>
 	{
-		let result = usePath!(self, pmemlog_create, poolSize, mode);
+		let result = use_path!(self, pmemlog_create, poolSize, mode);
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemlog_create)
+			PmdkError::log("pmemlog_create")
 		}
 		else
 		{

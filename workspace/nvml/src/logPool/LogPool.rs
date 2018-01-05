@@ -24,19 +24,19 @@ impl LogPool
 	}
 	
 	#[inline(always)]
-	pub fn validate(poolSetFilePath: &Path) -> Result<bool, GenericError>
+	pub fn validate(poolSetFilePath: &Path) -> Result<bool, PmdkError>
 	{
 		poolSetFilePath.validatePersistentMemoryLogPoolIsConsistent()
 	}
 	
 	#[inline(always)]
-	pub fn open(poolSetFilePath: &Path) -> Result<Self, GenericError>
+	pub fn open(poolSetFilePath: &Path) -> Result<Self, PmdkError>
 	{
 		poolSetFilePath.openPersistentMemoryLogPool().map(Self::fromHandle)
 	}
 	
 	#[inline(always)]
-	pub fn create(poolSetFilePath: &Path, poolSize: usize, mode: mode_t) -> Result<Self, GenericError>
+	pub fn create(poolSetFilePath: &Path, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
 		poolSetFilePath.createPersistentMemoryLogPool(poolSize, mode).map(Self::fromHandle)
 	}

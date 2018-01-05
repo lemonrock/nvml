@@ -2,8 +2,9 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+use self::AppendError::*;
 use ::errno::errno;
-use ::errors::GenericError;
+use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_int;
 use ::libc::c_void;
@@ -19,7 +20,10 @@ use ::std::collections::HashMap;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::path::Path;
 use ::std::sync::Arc;
-use ::syscall_alt::constants::E;
+use ::syscall_alt::constants::E::EDEADLK;
+use ::syscall_alt::constants::E::EINVAL;
+use ::syscall_alt::constants::E::ENOSPC;
+use ::syscall_alt::constants::E::EROFS;
 
 
 include!("AppendError.rs");

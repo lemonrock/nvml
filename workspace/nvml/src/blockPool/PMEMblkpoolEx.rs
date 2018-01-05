@@ -2,27 +2,35 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Extension trait to make it easier to work with PMEMblkpool.
 pub trait PMEMblkpoolEx
 {
+	/// Close the block pool.
 	#[inline(always)]
 	fn close(self);
 	
+	/// Size of blocks in the block pool.
 	#[inline(always)]
 	fn blockSize(self) -> usize;
 	
+	/// How many blocks are available (free) in the block pool?
 	#[inline(always)]
 	fn numberOfBlocksAvailableInBlockPool(self) -> usize;
 	
-	/// Returns false if the block has previously had its error condition set
+	/// Read from a block.
+	/// Returns false if the block has previously had its error condition set (see `setError()`).
 	#[inline(always)]
 	fn read_from(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool;
 	
+	/// Write to a block.
 	#[inline(always)]
 	fn write_to(self, from: *const c_void, zeroBasedBlockIndex: usize);
 	
+	/// Set a block to all zeros.
 	#[inline(always)]
 	fn setZero(self, zeroBasedBlockIndex: usize);
 	
+	/// Set a block to being in an error state (ie set its error condition).
 	#[inline(always)]
 	fn setError(self, zeroBasedBlockIndex: usize);
 }
@@ -86,7 +94,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 			}
 			else
 			{
-				GenericError::new(osErrorNumber, pmemblk_errormsg, "pmemblk_read").panic();
+				PmdkError::block_panic("pmemblk_read")
 			}
 		}
 	}
@@ -109,7 +117,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 		}
 		else
 		{
-			GenericError::new(errno().0, pmemblk_errormsg, "pmemblk_write").panic();
+			PmdkError::block_panic("pmemblk_write")
 		}
 	}
 	
@@ -130,7 +138,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 		}
 		else
 		{
-			GenericError::new(errno().0, pmemblk_errormsg, "pmemblk_set_zero").panic();
+			PmdkError::block_panic("pmemblk_set_zero")
 		}
 	}
 	
@@ -151,7 +159,7 @@ impl PMEMblkpoolEx for *mut PMEMblkpool
 		}
 		else
 		{
-			GenericError::new(errno().0, pmemblk_errormsg, "pmemblk_set_error").panic();
+			PmdkError::block_panic("pmemblk_set_error")
 		}
 	}
 }

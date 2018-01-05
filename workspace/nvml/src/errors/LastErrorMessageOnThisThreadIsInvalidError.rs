@@ -22,20 +22,22 @@ quick_error!
 impl LastErrorMessageOnThisThreadIsInvalidError
 {
 	#[inline(always)]
-	pub fn lastErrorMessageOnThisThread(errorFunction: ErrorFunction) -> Result<String, LastErrorMessageOnThisThreadIsInvalidError>
+	pub(crate) fn last_error_message_on_this_thread(error_function: ErrorFunction) -> Result<String, LastErrorMessageOnThisThreadIsInvalidError>
 	{
-		let pointer = unsafe { errorFunction() };
+		use self::LastErrorMessageOnThisThreadIsInvalidError::*;
+		
+		let pointer = unsafe { error_function() };
 		if pointer.is_null()
 		{
-			return Err(LastErrorMessageOnThisThreadIsInvalidError::Null)
+			return Err(Null)
 		}
 		
-		let threadSafeCStringPointer = unsafe { CStr::from_ptr(pointer) };
-		let x: CString = threadSafeCStringPointer.into();
+		let thread_safe_c_string_pointer = unsafe { CStr::from_ptr(pointer) };
+		let x: CString = thread_safe_c_string_pointer.into();
 		match x.into_string()
 		{
 			Ok(value) => Ok(value),
-			Err(_) => Err(LastErrorMessageOnThisThreadIsInvalidError::InvalidUtf8)
+			Err(_) => Err(InvalidUtf8)
 		}
 	}
 }

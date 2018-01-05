@@ -73,7 +73,7 @@ impl FileBackedMemory for MappedFileBackedMemory
 impl MappedFileBackedMemory
 {
 	#[inline(always)]
-	pub fn createAndOpen(persistentMemoryFilePath: &Path, length: usize, mode: mode_t, sparse: bool, temporaryFile: bool, exclusive: bool) -> Result<Option<Self>, GenericError>
+	pub fn createAndOpen(persistentMemoryFilePath: &Path, length: usize, mode: mode_t, sparse: bool, temporaryFile: bool, exclusive: bool) -> Result<Option<Self>, PmdkError>
 	{
 		assert!(length != 0, "length can not be zero when creating");
 		

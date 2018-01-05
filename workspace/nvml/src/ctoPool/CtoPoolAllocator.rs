@@ -68,7 +68,7 @@ impl<'ctopool> CtoPoolAllocator<'ctopool>
 	}
 	
 	#[inline(always)]
-	fn aligned_allocate<T: CtoSafe>(&self) -> Result<*mut T, GenericError>
+	fn aligned_allocate<T: CtoSafe>(&self) -> Result<*mut T, PmdkError>
 	{
 		self.0.deref().0.aligned_alloc::<T>()
 	}

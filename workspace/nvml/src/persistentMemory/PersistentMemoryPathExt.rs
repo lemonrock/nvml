@@ -5,13 +5,13 @@
 pub trait PersistentMemoryPathExt
 {
 	#[inline(always)]
-	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>;
+	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), PmdkError>;
 }
 
 impl PersistentMemoryPathExt for Path
 {
 	#[inline(always)]
-	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), GenericError>
+	fn mapMemoryFile(&self, length: usize, flags: PersistentMemoryFileFlags, mode: mode_t) -> Result<(*mut c_void, usize, bool), PmdkError>
 	{
 		let mut mappedLength: usize = unsafe { uninitialized() };
 		let mappedLengthPointer = &mut mappedLength as *mut _;
@@ -19,12 +19,11 @@ impl PersistentMemoryPathExt for Path
 		let mut isPersistentMemory: i32 = unsafe { uninitialized() };
 		let isPersistentMemoryPointer = &mut isPersistentMemory as *mut _;
 		
-		let result = usePath!(self, pmem_map_file, length, flags.bits(), mode, mappedLengthPointer, isPersistentMemoryPointer);
+		let result = use_path!(self, pmem_map_file, length, flags.bits(), mode, mappedLengthPointer, isPersistentMemoryPointer);
 		
 		if unlikely(result.is_null())
 		{
-			let osErrorNumber = errno().0;
-			Err(GenericError::new(osErrorNumber, pmem_errormsg, "pmem_map_file"))
+			PmdkError::pmem("pmem_map_file")
 		}
 		else
 		{

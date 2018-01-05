@@ -2,30 +2,40 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Extension trait to make it easier to work with PMEMlogpool.
 pub trait PMEMlogpoolEx
 {
+	/// Constant to stop walking log.
 	const StopWalking: WalkCallbackResult = 0;
 	
+	/// Constant to continue walking log.
 	const ContinueWalking: WalkCallbackResult = 1;
 	
+	/// Close the log pool.
 	#[inline(always)]
 	fn close(self);
 	
+	/// How many bytes are free in the log pool.
 	#[inline(always)]
 	fn amountOfUsableSpaceInTheLogPoolInBytes(self) -> usize;
 	
+	/// Atomically append to the log (roughly equivalent to `write`).
 	#[inline(always)]
 	fn appendAtomically(self, buffer: *const c_void, count: usize) -> Result<(), AppendError>;
 	
+	/// Atomically append to the log using an `iovec` (roughly equivalent to `writev`).
 	#[inline(always)]
 	fn appendVectorAtomically(self, buffer: *const iovec, count: u31) -> Result<(), AppendError>;
 	
+	/// Tell the log (?)
 	#[inline(always)]
 	fn tell(self) -> i64;
 	
+	/// Rewind the log.
 	#[inline(always)]
 	fn rewind(self);
 	
+	/// Walk ('read') the log.
 	/// chunkSize may be zero, in which case callback is called just once
 	#[inline(always)]
 	fn walk(self, chunkSize: usize, callback: unsafe extern "C" fn(dataInLog: *const c_void, length: usize, callbackArgument: *mut c_void) -> WalkCallbackResult, callbackArgument: *mut c_void);
@@ -80,12 +90,12 @@ impl PMEMlogpoolEx for *mut PMEMlogpool
 		{
 			match errno().0
 			{
-				E::ENOSPC => Err(AppendError::OutOfSpace),
-				E::EROFS => Err(AppendError::ReadOnly),
+				ENOSPC => Err(OutOfSpace),
+				EROFS => Err(ReadOnly),
 				
 				// From pthread_rwlock_wrlock
-				E::EINVAL => panic!("pmemlog_append() pthread_rwlock_wrlock() EINVAL (The value specified by rwlock does not refer to an initialized read-write lock object)"),
-				E::EDEADLK => panic!("pmemlog_append() pthread_rwlock_wrlock() EDEADLK (The current thread already owns the read-write lock for writing or reading)"),
+				EINVAL => panic!("pmemlog_append() pthread_rwlock_wrlock() EINVAL (The value specified by rwlock does not refer to an initialized read-write lock object)"),
+				EDEADLK => panic!("pmemlog_append() pthread_rwlock_wrlock() EDEADLK (The current thread already owns the read-write lock for writing or reading)"),
 				
 				unexpected @ _ => panic!("Unexpected error number '{}'", unexpected),
 			}
@@ -113,12 +123,12 @@ impl PMEMlogpoolEx for *mut PMEMlogpool
 		{
 			match errno().0
 			{
-				E::ENOSPC => Err(AppendError::OutOfSpace),
-				E::EROFS => Err(AppendError::ReadOnly),
+				ENOSPC => Err(OutOfSpace),
+				EROFS => Err(ReadOnly),
 				
 				// From pthread_rwlock_wrlock
-				E::EINVAL => panic!("pmemlog_appendv() pthread_rwlock_wrlock() EINVAL (The value specified by rwlock does not refer to an initialized read-write lock object)"),
-				E::EDEADLK => panic!("pmemlog_appendv() pthread_rwlock_wrlock() EDEADLK (The current thread already owns the read-write lock for writing or reading)"),
+				EINVAL => panic!("pmemlog_appendv() pthread_rwlock_wrlock() EINVAL (The value specified by rwlock does not refer to an initialized read-write lock object)"),
+				EDEADLK => panic!("pmemlog_appendv() pthread_rwlock_wrlock() EDEADLK (The current thread already owns the read-write lock for writing or reading)"),
 				
 				unexpected @ _ => panic!("Unexpected error number '{}'", unexpected),
 			}

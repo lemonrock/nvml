@@ -15,49 +15,49 @@ pub struct PersistentCircularDoublyLinkedListHead<T: ListEntryPersistable>
 impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedListHead<T>
 {
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.pe_first = PersistentObject::null();
-		(&mut instance.lock as *mut _).zero(objectPool);
+		(&mut instance.lock as *mut _).zero(object_pool);
 	}
 }
 
 impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 {
 	#[inline(always)]
-	pub fn insertAtHead(&mut self, objectPool: &ObjectPool, element: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn insertAtHead(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>) -> Result<(), PmdkError>
 	{
-		self.insert(objectPool, element, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
+		self.insert(object_pool, element, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn insertBefore(&mut self, objectPool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn insertBefore(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
-		self.insert(objectPool, element, index, POBJ_LIST_DEST_HEAD as i32)
+		self.insert(object_pool, element, index, POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn insertAfter(&mut self, objectPool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn insertAfter(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
-		self.insert(objectPool, element, index, POBJ_LIST_DEST_TAIL as i32)
+		self.insert(object_pool, element, index, POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	pub fn insertAtTail(&mut self, objectPool: &ObjectPool, element: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn insertAtTail(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>) -> Result<(), PmdkError>
 	{
-		self.insert(objectPool, element, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
+		self.insert(object_pool, element, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	fn insert(&mut self, objectPool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>, directionTowards: c_int) -> Result<(), GenericError>
+	fn insert(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>, direction_towards: c_int) -> Result<(), PmdkError>
 	{
 		debug_assert!(!element.is_null(), "element is null");
 		
-		let result = unsafe { pmemobj_list_insert(objectPool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, directionTowards, element.oid) };
+		let result = unsafe { pmemobj_list_insert(object_pool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, direction_towards, element.oid) };
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
 		if likely(result == 0)
 		{
@@ -65,36 +65,36 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 		}
 		else
 		{
-			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_insert"))
+			PmdkError::obj("pmemobj_list_insert")
 		}
 	}
 	
 	#[inline(always)]
-	pub fn allocateAndInsertAtHead(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, GenericError>
+	pub fn allocateAndInsertAtHead(&mut self, object_pool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, PmdkError>
 	{
-		self.allocateAndInsert(objectPool, arguments, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
+		self.allocateAndInsert(object_pool, arguments, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn allocateAndInsertBefore(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, GenericError>
+	pub fn allocateAndInsertBefore(&mut self, object_pool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, PmdkError>
 	{
-		self.allocateAndInsert(objectPool, arguments, index, POBJ_LIST_DEST_HEAD as i32)
+		self.allocateAndInsert(object_pool, arguments, index, POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn allocateAndInsertAfter(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, GenericError>
+	pub fn allocateAndInsertAfter(&mut self, object_pool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>) -> Result<PersistentObject<T>, PmdkError>
 	{
-		self.allocateAndInsert(objectPool, arguments, index, POBJ_LIST_DEST_TAIL as i32)
+		self.allocateAndInsert(object_pool, arguments, index, POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	pub fn allocateAndInsertAtTail(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, GenericError>
+	pub fn allocateAndInsertAtTail(&mut self, object_pool: &ObjectPool, arguments: &mut T::Arguments) -> Result<PersistentObject<T>, PmdkError>
 	{
-		self.allocateAndInsert(objectPool, arguments, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
+		self.allocateAndInsert(object_pool, arguments, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	fn allocateAndInsert(&mut self, objectPool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>, directionTowards: c_int) -> Result<PersistentObject<T>, GenericError>
+	fn allocateAndInsert(&mut self, object_pool: &ObjectPool, arguments: &mut T::Arguments, index: PersistentObject<T>, directionTowards: c_int) -> Result<PersistentObject<T>, PmdkError>
 	{
 		let size = T::size();
 		debug_assert!(size != 0, "size can not be zero");
@@ -125,27 +125,27 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 			}
 		}
 		
-		let result = unsafe { pmemobj_list_insert_new(objectPool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, directionTowards, T::size(), T::TypeNumber, Some(constructor::<T>), arguments as *mut _ as * mut _) };
+		let result = unsafe { pmemobj_list_insert_new(object_pool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, directionTowards, T::size(), T::TypeNumber, Some(constructor::<T>), arguments as *mut _ as * mut _) };
 		
 		if unlikely(result.is_null())
 		{
-			let osErrorNumber = errno().0;
-			match osErrorNumber
+			let os_error_number = errno().0;
+			match os_error_number
 			{
-				E::ECANCELED =>
+				ECANCELED =>
 				{
 					if let Some(capturedPanic) = unsafe { replace(&mut CapturedPanic, None) }
 					{
 						resume_unwind(capturedPanic);
 					}
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_alloc or pmemobj_root_construct"))
+					PmdkError::obj("pmemobj_alloc or pmemobj_root_construct")
 				},
 				
 				_ =>
 				{
-					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", osErrorNumber);
+					debug_assert!(unsafe { CapturedPanic.is_none() }, "CapturedPanic was set and error was '{}'", os_error_number);
 					
-					Err(GenericError::new(osErrorNumber, pmemobj_errormsg, "pmemobj_list_insert_new"))
+					PmdkError::obj("pmemobj_list_insert_new")
 				}
 			}
 		}
@@ -158,19 +158,19 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 	}
 	
 	#[inline(always)]
-	pub fn remove(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn remove(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeInternal(objectPool, index, 0)
 	}
 	
 	#[inline(always)]
-	pub fn removeAndFree(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn removeAndFree(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeInternal(objectPool, index, 1)
 	}
 	
 	#[inline(always)]
-	fn removeInternal(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>, free: c_int) -> Result<(), GenericError>
+	fn removeInternal(&mut self, objectPool: &ObjectPool, index: PersistentObject<T>, free: c_int) -> Result<(), PmdkError>
 	{
 		debug_assert!(!index.is_null(), "index is null");
 		
@@ -182,36 +182,36 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 		}
 		else
 		{
-			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_insert"))
+			PmdkError::obj("pmemobj_list_insert")
 		}
 	}
 	
 	#[inline(always)]
-	pub fn removeFromThisListAndInsertNewListAtHead(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn removeFromThisListAndInsertNewListAtHead(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeFromThisListAndInsertNewList(objectPool, to, element, PersistentObject::null(), POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn removeFromThisListAndInsertNewListBefore(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn removeFromThisListAndInsertNewListBefore(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeFromThisListAndInsertNewList(objectPool, to, element, index, POBJ_LIST_DEST_HEAD as i32)
 	}
 	
 	#[inline(always)]
-	pub fn removeFromThisListAndInsertNewListAfter(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn removeFromThisListAndInsertNewListAfter(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeFromThisListAndInsertNewList(objectPool, to, element, index, POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	pub fn removeFromThisListAndInsertNewListAtTail(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), GenericError>
+	pub fn removeFromThisListAndInsertNewListAtTail(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>) -> Result<(), PmdkError>
 	{
 		self.removeFromThisListAndInsertNewList(objectPool, to, element, PersistentObject::null(), POBJ_LIST_DEST_TAIL as i32)
 	}
 	
 	#[inline(always)]
-	fn removeFromThisListAndInsertNewList(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>, directionTowards: c_int) -> Result<(), GenericError>
+	fn removeFromThisListAndInsertNewList(&mut self, objectPool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>, directionTowards: c_int) -> Result<(), PmdkError>
 	{
 		debug_assert!(!element.is_null(), "element is null");
 		
@@ -223,7 +223,7 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 		}
 		else
 		{
-			Err(GenericError::new(errno().0, pmemobj_errormsg, "pmemobj_list_move"))
+			PmdkError::obj("pmemobj_list_move")
 		}
 	}
 }

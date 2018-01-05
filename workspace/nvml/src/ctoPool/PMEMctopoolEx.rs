@@ -28,24 +28,34 @@ pub trait PMEMctopoolEx
 	fn set_root<T>(self, root: *mut T);
 	
 	/// The size_of::<T> must not be zero.
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn malloc<T>(self) -> Result<*mut T, GenericError>;
+	fn malloc<T>(self) -> Result<*mut T, PmdkError>;
 	
 	/// The size_of::<T> must not be zero.
 	/// The align_of::<T> must be a power of two.
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn aligned_alloc<T>(self) -> Result<*mut T, GenericError>;
+	fn aligned_alloc<T>(self) -> Result<*mut T, PmdkError>;
+	
+	/// Aligned allocation.
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
+	#[inline(always)]
+	fn aligned_allocate_from_layout(self, layout: &Layout) -> Result<*mut u8, PmdkError>;
 	
 	/// The size_of::<T> must not be zero.
 	/// Count can not be zero.
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn calloc<T>(self, count: size_t) -> Result<*mut T, GenericError>;
+	fn calloc<T>(self, count: size_t) -> Result<*mut T, PmdkError>;
 	
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn strdup(self, value: &CStr) -> Result<*mut c_char, GenericError>;
+	fn strdup(self, value: &CStr) -> Result<*mut c_char, PmdkError>;
 	
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn wcsdup(self, value: *const wchar_t) -> Result<*mut wchar_t, GenericError>;
+	fn wcsdup(self, value: *const wchar_t) -> Result<*mut wchar_t, PmdkError>;
 	
 	/// Pointer must not be null.
 	#[inline(always)]
@@ -53,8 +63,9 @@ pub trait PMEMctopoolEx
 	
 	/// Pointer must not be null.
 	/// new_size can not be zero.
+	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	#[inline(always)]
-	fn realloc(self, pointer: *mut c_void, new_size: size_t) -> Result<*mut c_void, GenericError>;
+	fn realloc(self, pointer: *mut c_void, new_size: size_t) -> Result<*mut c_void, PmdkError>;
 	
 	/// Pointer must not be null.
 	#[inline(always)]
@@ -97,7 +108,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn malloc<T>(self) -> Result<*mut T, GenericError>
+	fn malloc<T>(self) -> Result<*mut T, PmdkError>
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		
@@ -107,7 +118,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 		let result = unsafe { pmemcto_malloc(self, size) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_malloc)
+			PmdkError::cto("pmemcto_malloc")
 		}
 		else
 		{
@@ -116,7 +127,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn aligned_alloc<T>(self) -> Result<*mut T, GenericError>
+	fn aligned_alloc<T>(self) -> Result<*mut T, PmdkError>
 	{
 		#[inline(always)]
 		fn is_power_of_two(value: size_t) -> bool
@@ -135,7 +146,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 		let result = unsafe { pmemcto_aligned_alloc(self, alignment, size) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_malloc)
+			PmdkError::cto("pmemcto_aligned_alloc")
 		}
 		else
 		{
@@ -144,7 +155,33 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn calloc<T>(self, count: size_t) -> Result<*mut T, GenericError>
+	fn aligned_allocate_from_layout(self, layout: &Layout) -> Result<*mut u8, PmdkError>
+	{
+		#[inline(always)]
+		fn is_power_of_two(value: size_t) -> bool
+		{
+			(value != 0) && ((value & (value - 1)) == 0)
+		}
+		
+		let alignment = layout.align();
+		debug_assert!(!is_power_of_two(alignment), "align() must be a power of two");
+		
+		let size = layout.size();
+		debug_assert!(size != 0, "size() can not be zero");
+		
+		let result = unsafe { pmemcto_aligned_alloc(self, alignment, size) };
+		if unlikely(result.is_null())
+		{
+			PmdkError::cto("pmemcto_aligned_alloc")
+		}
+		else
+		{
+			Ok(result as *mut u8)
+		}
+	}
+	
+	#[inline(always)]
+	fn calloc<T>(self, count: size_t) -> Result<*mut T, PmdkError>
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		debug_assert!(count != 0, "count can not be zero");
@@ -155,7 +192,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 		let result = unsafe { pmemcto_calloc(self, count, size) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_calloc)
+			PmdkError::cto("pmemcto_calloc")
 		}
 		else
 		{
@@ -164,14 +201,14 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn strdup(self, string: &CStr) -> Result<*mut c_char, GenericError>
+	fn strdup(self, string: &CStr) -> Result<*mut c_char, PmdkError>
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		
 		let result = unsafe { pmemcto_strdup(self, string.as_ptr()) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_strdup)
+			PmdkError::cto("pmemcto_strdup")
 		}
 		else
 		{
@@ -180,7 +217,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn wcsdup(self, string: *const wchar_t) -> Result<*mut wchar_t, GenericError>
+	fn wcsdup(self, string: *const wchar_t) -> Result<*mut wchar_t, PmdkError>
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		debug_assert!(!string.is_null(), "string can not be null");
@@ -188,7 +225,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 		let result = unsafe { pmemcto_wcsdup(self, string) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_wcsdup)
+			PmdkError::cto("pmemcto_wcsdup")
 		}
 		else
 		{
@@ -206,7 +243,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn realloc(self, pointer: *mut c_void, new_size: size_t) -> Result<*mut c_void, GenericError>
+	fn realloc(self, pointer: *mut c_void, new_size: size_t) -> Result<*mut c_void, PmdkError>
 	{
 		debug_assert!(!self.is_null(), "self can not be null");
 		debug_assert!(!pointer.is_null(), "pointer can not be null");
@@ -215,7 +252,7 @@ impl PMEMctopoolEx for *mut PMEMctopool
 		let result = unsafe { pmemcto_realloc(self, pointer, new_size) };
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_realloc)
+			PmdkError::cto("pmemcto_realloc")
 		}
 		else
 		{

@@ -5,39 +5,39 @@
 pub trait PersistentMemoryCtoPoolPathExt
 {
 	#[inline(always)]
-	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, GenericError>;
+	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>;
 	
 	/// blockSize can be zero, in which case it is not explicitly checked for a match; EINVAL occurs in this case
 	#[inline(always)]
-	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, GenericError>;
+	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, GenericError>;
+	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>;
 }
 
 impl PersistentMemoryCtoPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, GenericError>
+	fn validatePersistentMemoryCtoPoolIsConsistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>
 	{
-		let result = usePath!(self, pmemcto_check, layout_name.as_ptr());
+		let result = use_path!(self, pmemcto_check, layout_name.as_ptr());
 		match result
 		{
 			1 => Ok(false),
 			0 => Ok(true),
-			-1 => handleError!(pmemcto_check),
+			-1 => PmdkError::cto("pmemcto_check"),
 			illegal @ _ => panic!("pmemcto_check() returned illegal value '{}'", illegal)
 		}
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, GenericError>
+	fn openPersistentMemoryCtoPool(&self, layout_name: &CStr) -> Result<*mut PMEMctopool, PmdkError>
 	{
-		let result = usePath!(self, pmemcto_open, layout_name.as_ptr());
+		let result = use_path!(self, pmemcto_open, layout_name.as_ptr());
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_open)
+			PmdkError::cto("pmemcto_open")
 		}
 		else
 		{
@@ -46,13 +46,13 @@ impl PersistentMemoryCtoPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, GenericError>
+	fn createPersistentMemoryCtoPool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>
 	{
-		let result = usePath!(self, pmemcto_create, layout_name.as_ptr(), pool_size, mode);
+		let result = use_path!(self, pmemcto_create, layout_name.as_ptr(), pool_size, mode);
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemcto_create)
+			PmdkError::cto("pmemcto_create")
 		}
 		else
 		{

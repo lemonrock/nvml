@@ -7,51 +7,39 @@ pub trait PersistentMemoryBlockPoolPathExt
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	/// blockSize can be zero, in which case it is not explicitly checked for a match
 	#[inline(always)]
-	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, GenericError>;
+	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, PmdkError>;
 	
 	/// blockSize can be zero, in which case it is not explicitly checked for a match; EINVAL occurs in this case
 	#[inline(always)]
-	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>;
+	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>;
-}
-
-macro_rules! handleError
-{
-	($function: path) =>
-	{
-		{
-			let osErrorNumber = errno().0;
-			const functionName: &'static str = stringify!($function);
-			Err(GenericError::new(osErrorNumber, pmempool_errormsg, functionName))
-		}
-	}
+	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>;
 }
 
 impl PersistentMemoryBlockPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, GenericError>
+	fn validatePersistentMemoryBlockPoolIsConsistent(&self, blockSize: usize) -> Result<bool, PmdkError>
 	{
-		let result = usePath!(self, pmemblk_check, blockSize);
+		let result = use_path!(self, pmemblk_check, blockSize);
 		match result
 		{
 			1 => Ok(false),
 			0 => Ok(true),
-			-1 => handleError!(pmemblk_check),
+			-1 => PmdkError::block("pmemblk_check"),
 			illegal @ _ => panic!("pmemblk_check() returned illegal value '{}'", illegal)
 		}
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, GenericError>
+	fn openPersistentMemoryBlockPool(&self, blockSize: usize) -> Result<*mut PMEMblkpool, PmdkError>
 	{
-		let result = usePath!(self, pmemblk_open, blockSize);
+		let result = use_path!(self, pmemblk_open, blockSize);
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemblk_open)
+			PmdkError::block("pmemblk_open")
 		}
 		else
 		{
@@ -60,13 +48,13 @@ impl PersistentMemoryBlockPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, GenericError>
+	fn createPersistentMemoryBlockPool(&self, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>
 	{
-		let result = usePath!(self, pmemblk_create, blockSize, poolSize, mode);
+		let result = use_path!(self, pmemblk_create, blockSize, poolSize, mode);
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemblk_create)
+			PmdkError::block("pmemblk_create")
 		}
 		else
 		{

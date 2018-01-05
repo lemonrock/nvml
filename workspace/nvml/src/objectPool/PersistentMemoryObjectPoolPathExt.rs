@@ -7,55 +7,43 @@ pub trait PersistentMemoryObjectPoolPathExt
 {
 	/// Not supported if the path is a /dev/daxN ('Device DAX') device file path
 	#[inline(always)]
-	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, GenericError>;
+	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>;
 	
 	#[inline(always)]
-	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, GenericError>;
+	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>;
 	
 	#[inline(always)]
-	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, GenericError>;
-}
-
-macro_rules! handleError
-{
-	($function: path) =>
-	{
-		{
-			let osErrorNumber = errno().0;
-			const functionName: &'static str = stringify!($function);
-			Err(GenericError::new(osErrorNumber, pmemobj_errormsg, functionName))
-		}
-	}
+	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>;
 }
 
 impl PersistentMemoryObjectPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, GenericError>
+	fn validatePersistentMemoryObjectPoolIsConsistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
-		let result = usePath!(self, pmemobj_check, layout);
+		let result = use_path!(self, pmemobj_check, layout);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
 		match result
 		{
 			1 => Ok(false),
 			0 => Ok(true),
-			-1 => handleError!(pmemobj_check),
+			-1 => PmdkError::obj("pmemobj_check"),
 			illegal @ _ => panic!("pmemobj_check() returned illegal value '{}'", illegal)
 		}
 	}
 	
 	#[inline(always)]
-	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, GenericError>
+	fn openPersistentMemoryObjectPool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
-		let result = usePath!(self, pmemobj_open, layout);
+		let result = use_path!(self, pmemobj_open, layout);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemobj_open)
+			PmdkError::obj("pmemobj_open")
 		}
 		else
 		{
@@ -64,15 +52,15 @@ impl PersistentMemoryObjectPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, GenericError>
+	fn createPersistentMemoryObjectPool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>
 	{
 		let layout = layoutAsRawPointer(layoutName);
-		let result = usePath!(self, pmemobj_create, layout, poolSize, mode);
+		let result = use_path!(self, pmemobj_create, layout, poolSize, mode);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
 		if unlikely(result.is_null())
 		{
-			handleError!(pmemobj_create)
+			PmdkError::obj("pmemobj_create")
 		}
 		else
 		{

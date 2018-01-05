@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+#![feature(allocator_api)]
 #![feature(const_fn)]
 #![feature(optin_builtin_traits)]
 #![feature(specialization)]
@@ -24,7 +25,7 @@ extern crate syscall_alt;
 
 
 include!("offset_of.rs");
-include!("usePath.rs");
+include!("use_path.rs");
 pub mod blockPool;
 pub mod ctoPool;
 pub mod errors;

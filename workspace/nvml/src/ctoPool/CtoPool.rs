@@ -26,6 +26,86 @@ impl<T: CtoSafe + Send + Sync> Eq for CtoPool<T>
 {
 }
 
+/*
+use ::std::heap::Alloc;
+use ::std::heap::AllocErr;
+use ::std::heap::Layout;
+
+unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
+{
+	#[inline(always)]
+	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>
+	{
+		let pointer = (self.0).0.aligned_allocate_from_layout(&layout).map_err(|_| AllocError::Unsupported
+		{
+			details: "Not easily supplied"
+		})?;
+		if pointer.is_null()
+		{
+			Err(AllocError::Exhausted
+			{
+				request: layout
+			})
+		}
+		else
+		{
+			Ok(pointer)
+		}
+		
+		TODO:
+		xxx; // adjust all other methods in PMEMctopoolEx to check for null from malloc, etc..
+	}
+	
+	#[inline(always)]
+	unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout)
+	{
+		debug_assert!(!ptr.is_null(), "ptr is null");
+		
+		(self.0).0.free(ptr)
+	}
+	
+	xxxx - use realloc
+	unsafe fn realloc(&mut self,
+		ptr: *mut u8,
+		layout: Layout,
+		new_layout: Layout) -> Result<*mut u8, AllocErr> {
+		let new_size = new_layout.size();
+		let old_size = layout.size();
+		let aligns_match = layout.align == new_layout.align;
+		
+		if new_size >= old_size && aligns_match {
+			if let Ok(()) = self.grow_in_place(ptr, layout.clone(), new_layout.clone()) {
+				return Ok(ptr);
+			}
+		} else if new_size < old_size && aligns_match {
+			if let Ok(()) = self.shrink_in_place(ptr, layout.clone(), new_layout.clone()) {
+				return Ok(ptr);
+			}
+		}
+		
+		// otherwise, fall back on alloc + copy + dealloc.
+		let result = self.alloc(new_layout);
+		if let Ok(new_ptr) = result {
+			ptr::copy_nonoverlapping(ptr as *const u8, new_ptr, cmp::min(old_size, new_size));
+			self.dealloc(ptr, layout);
+		}
+		result
+	}
+	
+	unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
+		
+		(self.0).0.usable_size(xxxxx)
+		
+	//	let usable_size = self.usable_size(&layout);
+		self.alloc(layout).map(|p| Excess(p, usable_size.1))
+	}
+	
+	unsafe fn realloc_excess(&mut self,
+		ptr: *mut u8,
+		layout: Layout,
+		new_layout: Layout) -> Result<Excess, AllocErr> {
+}
+
 impl<T: CtoSafe + Send + Sync> CtoPool<T>
 {
 	/// Opens a pool, creating it if necessary, and instantiating a root object if one is missing.
@@ -96,3 +176,4 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 		&self.1
 	}
 }
+*/

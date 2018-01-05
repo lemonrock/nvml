@@ -3,7 +3,7 @@
 
 
 use ::errno::errno;
-use ::errors::GenericError;
+use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_void;
 use ::libc::mode_t;
