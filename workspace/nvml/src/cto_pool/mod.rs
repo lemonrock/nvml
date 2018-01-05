@@ -55,5 +55,5 @@ include!("CtoRootBox.rs");
 include!("CtoSafe.rs");
 include!("initialise_memory_functions.rs");
 include!("PersistentMemoryCtoPoolPathExt.rs");
-include!("PMEMctopoolEx.rs");
+include!("PMEMctopoolExt.rs");
 include!("WeakCtoRc.rs");

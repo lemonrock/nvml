@@ -69,7 +69,7 @@ include!("Persistable.rs");
 include!("PersistentCircularDoublyLinkedListEntry.rs");
 include!("PersistentCircularDoublyLinkedListHead.rs");
 include!("PersistentMemoryObjectPoolPathExt.rs");
-include!("PMEMobjpoolEx.rs");
+include!("PMEMobjpoolExt.rs");
 include!("PMEMoidIterator.rs");
 include!("ReadLockUnlock.rs");
 include!("ReadWriteLock.rs");

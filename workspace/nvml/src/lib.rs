@@ -58,7 +58,6 @@ pub mod persistent_memory;
 
 use ::block_pool::BlockPool;
 use ::block_pool::BlockPoolsConfiguration;
-pub use errors::PmdkError;
 use ::libc::mode_t;
 use ::log_pool::LogPool;
 use ::log_pool::LogPoolsConfiguration;

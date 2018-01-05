@@ -3,7 +3,7 @@
 
 
 /// Extension trait to make it easier to work with PMEMblkpool.
-pub trait PMEMblkpoolEx
+trait PMEMblkpoolExt
 {
 	/// Close the block pool.
 	/// self can not be null.
@@ -52,7 +52,7 @@ macro_rules! debug_assert_self_is_not_null
 	}
 }
 
-impl PMEMblkpoolEx for *mut PMEMblkpool
+impl PMEMblkpoolExt for *mut PMEMblkpool
 {
 	#[inline(always)]
 	fn close(self)

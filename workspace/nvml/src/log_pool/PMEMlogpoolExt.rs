@@ -3,7 +3,7 @@
 
 
 /// Extension trait to make it easier to work with PMEMlogpool.
-pub trait PMEMlogpoolEx
+trait PMEMlogpoolExt
 {
 	/// Constant to stop walking log.
 	const StopWalking: WalkCallbackResult = 0;
@@ -58,7 +58,7 @@ macro_rules! debug_assert_buffer_is_not_null
 	}
 }
 
-impl PMEMlogpoolEx for *mut PMEMlogpool
+impl PMEMlogpoolExt for *mut PMEMlogpool
 {
 	#[inline(always)]
 	fn close(self)

@@ -27,4 +27,4 @@ include!("BlockPoolDropWrapper.rs");
 include!("BlockPoolsConfiguration.rs");
 include!("initialise_memory_functions.rs");
 include!("PersistentMemoryBlockPoolPathExt.rs");
-include!("PMEMblkpoolEx.rs");
+include!("PMEMblkpoolExt.rs");

@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-pub trait PMEMobjpoolEx
+trait PMEMobjpoolExt
 {
 	#[inline(always)]
 	fn close(self);
@@ -19,7 +19,7 @@ pub trait PMEMobjpoolEx
 	fn write_bytes_then_persist(self, address: *mut c_void, count: usize, value: u8);
 }
 
-impl PMEMobjpoolEx for *mut PMEMobjpool
+impl PMEMobjpoolExt for *mut PMEMobjpool
 {
 	#[inline(always)]
 	fn close(self)

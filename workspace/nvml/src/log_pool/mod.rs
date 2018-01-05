@@ -34,5 +34,5 @@ include!("LogPoolConfiguration.rs");
 include!("LogPoolDropWrapper.rs");
 include!("LogPoolsConfiguration.rs");
 include!("PersistentMemoryLogPoolPathExt.rs");
-include!("PMEMlogpoolEx.rs");
+include!("PMEMlogpoolExt.rs");
 include!("WalkCallbackResult.rs");

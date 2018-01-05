@@ -3,7 +3,7 @@
 
 
 /// A convenient way to use the methods on a cto pool.
-pub trait PMEMctopoolEx
+trait PMEMctopoolExt
 {
 	/// Prints statistics to standard error or calls the callback specified using `print` in `initialise_memory_functions()`.
 	/// self can not be null.
@@ -86,7 +86,7 @@ pub trait PMEMctopoolEx
 	fn free<T>(self, pointer: *mut T);
 }
 
-impl PMEMctopoolEx for *mut PMEMctopool
+impl PMEMctopoolExt for *mut PMEMctopool
 {
 	#[inline(always)]
 	fn print_statistics(self)
