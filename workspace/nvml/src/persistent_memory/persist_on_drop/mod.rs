@@ -3,13 +3,8 @@
 
 
 use super::*;
-use super::persist_on_drop::*;
-#[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 
 
-include!("DirectlyAccessibleFileBackedMemory.rs");
-include!("FileBackedMemory.rs");
-include!("FileBackedMemoryDropWrapper.rs");
-include!("FileBackedMemoryOpenFlags.rs");
-include!("FileBackedMemoryPathExt.rs");
-include!("MappedFileBackedMemory.rs");
+include!("DirectlyAccessiblePersistOnDrop.rs");
+include!("PersistOnDrop.rs");
+include!("MappedPersistOnDrop.rs");

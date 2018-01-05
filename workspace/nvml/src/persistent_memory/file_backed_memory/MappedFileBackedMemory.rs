@@ -18,13 +18,39 @@ unsafe impl Sync for MappedFileBackedMemory
 {
 }
 
-impl FileBackedMemory for MappedFileBackedMemory
+impl<'memory> FileBackedMemory<'memory> for MappedFileBackedMemory
 {
+	type PersistOnDropT = MappedPersistOnDrop<'memory>;
+	
 	const Alignment: usize = 4096;
 	
 	const IsPersistent: bool = true;
 	
 	const SupportsExclusiveOpen: bool = true;
+	
+	#[inline(always)]
+	fn address(&self) -> *mut c_void
+	{
+		self.address
+	}
+	
+	#[inline(always)]
+	fn mapped_length(&self) -> usize
+	{
+		self.file_backed_memory_drop_wrapper.mapped_length
+	}
+	
+	#[inline(always)]
+	fn persist_on_drop_from(&'memory self, offset: usize) -> Self::PersistOnDropT
+	{
+		MappedPersistOnDrop(self.offset(offset), PhantomData, Cell::new(0))
+	}
+	
+	#[inline(always)]
+	fn persist_on_drop(&'memory self) -> Self::PersistOnDropT
+	{
+		MappedPersistOnDrop(self.address(), PhantomData, Cell::new(0))
+	}
 	
 	#[doc(hidden)]
 	#[inline(always)]
@@ -56,20 +82,6 @@ impl FileBackedMemory for MappedFileBackedMemory
 			address,
 			file_backed_memory_drop_wrapper: FileBackedMemoryDropWrapper::new(address, mapped_length)
 		}
-	}
-	
-	#[doc(hidden)]
-	#[inline(always)]
-	fn _address(&self) -> *mut c_void
-	{
-		self.address
-	}
-	
-	#[doc(hidden)]
-	#[inline(always)]
-	fn _mapped_length(&self) -> usize
-	{
-		self.file_backed_memory_drop_wrapper.mapped_length
 	}
 }
 

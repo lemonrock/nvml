@@ -3,8 +3,11 @@
 
 
 /// Represents the operations commonly possible across different kinds of file-backed memory.
-pub trait FileBackedMemory : Sized + Send + Sync
+pub trait FileBackedMemory<'memory> : Sized + Send + Sync
 {
+	/// The associated type used for PersistOnDrop.
+	type PersistOnDropT: PersistOnDrop<'memory>;
+	
 	/// The (power-of-two, non-zero) alignment of this memory.
 	/// Look in bits/limits.h in musl for #define PAGE_SIZE
 	/// Is 4096 for all musl architectures, except or1k, where it is 8192 (statement true as of April 25th 2017)
@@ -34,14 +37,39 @@ pub trait FileBackedMemory : Sized + Send + Sync
 		Self::_map(persistent_memory_file_path, length, flags, IrrelevantMode)
 	}
 	
-	/// offset and length will be adjusted to page size granularity
+	/// offset and length will be adjusted to page size granularity.
 	#[allow(deprecated)]
 	#[inline(always)]
 	fn persist_slowly_at_page_size_granularity(&self, offset: usize, length: usize)
 	{
-		debug_assert!(offset + length <= self._mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self._mapped_length());
+		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
 		
-		self._offset(offset).persist_or_msync_regardless_of_whether_self_is_persistent_or_regular_memory(length)
+		self.offset(offset).persist_or_msync_regardless_of_whether_self_is_persistent_or_regular_memory(length)
+	}
+	
+	/// Starting address of this memory.
+	#[inline(always)]
+	fn address(&self) -> *mut c_void;
+	
+	/// actual length of this memory.
+	#[inline(always)]
+	fn mapped_length(&self) -> usize;
+	
+	/// Returns a `PersistOnDrop` based on a specific `offset` into this memory.
+	#[inline(always)]
+	fn persist_on_drop_from(&'memory self, offset: usize) -> Self::PersistOnDropT;
+	
+	/// Returns a `PersistOnDrop` based on an `offset` of zero this memory.
+	#[inline(always)]
+	fn persist_on_drop(&'memory self) -> Self::PersistOnDropT;
+	
+	/// offset into this memory (debug asserts it is within `mapped_length()`)
+	#[inline(always)]
+	fn offset(&self, offset: usize) -> *mut c_void
+	{
+		debug_assert!(offset <= self.mapped_length(), "offset '{}' is greater than mapped length '{}'", offset, self.mapped_length());
+		
+		unsafe { self.address().offset(offset as isize) }
 	}
 	
 	#[doc(hidden)]
@@ -84,21 +112,4 @@ pub trait FileBackedMemory : Sized + Send + Sync
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _new(address: *mut c_void, mapped_length: usize) -> Self;
-	
-	#[doc(hidden)]
-	#[inline(always)]
-	fn _address(&self) -> *mut c_void;
-	
-	#[doc(hidden)]
-	#[inline(always)]
-	fn _mapped_length(&self) -> usize;
-	
-	#[doc(hidden)]
-	#[inline(always)]
-	fn _offset(&self, offset: usize) -> *mut c_void
-	{
-		debug_assert!(offset <= self._mapped_length(), "offset '{}' is greater than mapped length '{}'", offset, self._mapped_length());
-		
-		unsafe { self._address().offset(offset as isize) }
-	}
 }
