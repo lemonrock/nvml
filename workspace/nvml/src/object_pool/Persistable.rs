@@ -13,12 +13,12 @@ pub trait Persistable: Sized
 	type Arguments;
 	
 	/// # Arguments
-	/// - pointerToUninitializedMemoryToUseForFields is always non-null
-	/// - objectPool is always non-null
+	/// - pointer_to_uninitialized_memory_to_use_for_fields is always non-null
+	/// - object_pool is always non-null
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments);
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments);
 	
-	/// Size in bytes that pointerToUninitializedMemoryToUseForFields in initialize() points to.
+	/// Size in bytes that pointer_to_uninitialized_memory_to_use_for_fields in initialize() points to.
 	/// ie the size of this 'struct'.
 	#[inline(always)]
 	fn size() -> size_t
@@ -55,23 +55,23 @@ impl Persistable for root
 	
 	#[allow(unused_variables)]
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
-		instance.node.allocateUninitializedAndConstruct(objectPool, &mut ()).expect("Allocation failed for node");
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
+		instance.node.allocate_uninitialized_and_construct_object(object_pool, &mut ()).expect("Allocation failed for node");
 	}
 }
 
-/// An example of a Persistable that is quite complex, with different synchronisation properties and children
+/// An example of a Persistable that is quite complex, with different synchronisation properties and children.
 #[repr(C)]
 pub struct node
 {
-	readWriteLock: PMEMrwlock,
-	mutex: PMEMmutex,
-	conditionVariable: PMEMcond,
+	read_write_lock: PMEMrwlock,
+	mutex_lock: PMEMmutex,
+	condition_variable: PMEMcond,
 	next: PersistentObject<node>,
 	foo: PersistentObject<foo>,
 	data: u32,
@@ -85,19 +85,19 @@ impl Persistable for node
 	
 	#[allow(unused_variables)]
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		
-		(&mut instance.readWriteLock as *mut _).zero(objectPool);
-		(&mut instance.mutex as *mut _).zero(objectPool);
-		(&mut instance.conditionVariable as *mut _).zero(objectPool);
+		(&mut instance.read_write_lock as *mut _).zero(object_pool);
+		(&mut instance.mutex_lock as *mut _).zero(object_pool);
+		(&mut instance.condition_variable as *mut _).zero(object_pool);
 		
-		instance.next.allocateUninitializedAndConstruct(objectPool, &mut ()).expect("Allocation failed for next");
-		instance.foo.allocateUninitializedAndConstruct(objectPool, &mut (11)).expect("Allocation failed for foo");
+		instance.next.allocate_uninitialized_and_construct_object(object_pool, &mut ()).expect("Allocation failed for next");
+		instance.foo.allocate_uninitialized_and_construct_object(object_pool, &mut (11)).expect("Allocation failed for foo");
 		instance.data = 0;
 	}
 }
@@ -105,40 +105,41 @@ impl Persistable for node
 impl ReadWriteLockablePersistable for node
 {
 	#[inline(always)]
-	fn pmemReadWriteLock(&mut self) -> &mut PMEMrwlock
+	fn read_write_lock(&mut self) -> &mut PMEMrwlock
 	{
-		&mut self.readWriteLock
+		&mut self.read_write_lock
 	}
 }
 
 impl MutexLockablePersistable for node
 {
 	#[inline(always)]
-	fn pmemMutex(&mut self) -> &mut PMEMmutex
+	fn mutex_lock(&mut self) -> &mut PMEMmutex
 	{
-		&mut self.mutex
+		&mut self.mutex_lock
 	}
 }
 
 impl ConditionVariableMutexLockablePersistable for node
 {
 	#[inline(always)]
-	fn pmemConditionVariable(&mut self) -> &mut PMEMcond
+	fn condition_variable(&mut self) -> &mut PMEMcond
 	{
-		&mut self.conditionVariable
+		&mut self.condition_variable
 	}
 }
 
 impl node
 {
+	/// Example method
 	pub fn manipulate2(this: &mut PersistentObject<Self>)
 	{
 		{
-			let mut lock = this.lock();
+			let mut lock = this.mutex();
 			lock.data = 45;
 		}
 		{
-			let mut lock = this.writeLock();
+			let mut lock = this.write();
 			lock.data = 34;
 		}
 	}
@@ -158,12 +159,12 @@ impl Persistable for foo
 	type Arguments = (u8);
 	
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.address = *arguments;
 	}
 }

@@ -2,14 +2,16 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Represents a transaction.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Transaction;
 
 impl Transaction
 {
-	/// Please note that work() may not ever be called - in which case, the next logic called is onAbort()
+	/// This logic currently does not work properly because Rust does not understand the implications of `setjmp` / `longjmp`.
+	/// Please note that` work` may not ever be called - in which case, the next logic called is `on_abort`.
 	#[inline(always)]
-	pub fn transaction<Committed: Sized, Aborted: Sized, W: Fn(Transaction) -> c_int, C: Fn() -> Committed, A: Fn() -> Aborted>(pop: *mut PMEMobjpool, work: W, onCommit: C, onAbort: A) -> Result<Committed, Aborted>
+	pub fn transaction<Committed: Sized, Aborted: Sized, W: Fn(Transaction) -> c_int, C: Fn() -> Committed, A: Fn() -> Aborted>(pop: *mut PMEMobjpool, work: W, on_commit: C, on_abort: A) -> Result<Committed, Aborted>
 	{
 		// Must be used as a function, to prevent the volatile restrictions of setjmp leaking out
 		#[inline(never)]
@@ -24,22 +26,22 @@ impl Transaction
 		(
 			pop: *mut PMEMobjpool,
 			work: W,
-			onCommit: C,
-			onAbort: A,
-			panicPayload: &mut Option<Box<Any + Send + 'static>>,
-			functionResult: &mut Option<Result<Committed, Aborted>>
+			on_commit: C,
+			on_abort: A,
+			panic_payload: &mut Option<Box<Any + Send + 'static>>,
+			function_result: &mut Option<Result<Committed, Aborted>>
 		)
 		{
-			let txSetJmpEnvironment = zeroed();
+			let tx_set_jmp_environment = zeroed();
 			{
 				// setjmp returns a non-zero value if returning from longjmp()
-				if setjmp(txSetJmpEnvironment) == 0
+				if setjmp(tx_set_jmp_environment) == 0
 				{
-					setErrorNumberIfNecessary(pmemobj_tx_begin(pop, txSetJmpEnvironment, TX_PARAM_NONE, TX_PARAM_NONE));
+					set_error_number_if_necessary(pmemobj_tx_begin(pop, tx_set_jmp_environment, TX_PARAM_NONE, TX_PARAM_NONE));
 				}
 				else
 				{
-					setErrorNumberIfNecessary(pmemobj_tx_errno());
+					set_error_number_if_necessary(pmemobj_tx_errno());
 				}
 				
 				let mut stage;
@@ -53,25 +55,25 @@ impl Transaction
 					{
 						pobj_tx_stage::TX_STAGE_WORK =>
 						{
-							let PanicOsErrorNumber: c_int = E::ENOTSUP;
+							let panic_os_error_nummber: c_int = E::ENOTSUP;
 							
 							match catch_unwind(AssertUnwindSafe(|| work(Transaction)))
 							{
-								Ok(someOsErrorNumberForAbort) =>
+								Ok(some_os_error_number_for_transaction_abort) =>
 								{
-									if likely(someOsErrorNumberForAbort == 0)
+									if likely(some_os_error_number_for_transaction_abort == 0)
 									{
 										pmemobj_tx_commit();
 									}
 									else
 									{
-										pmemobj_tx_abort(PanicOsErrorNumber);
+										pmemobj_tx_abort(panic_os_error_nummber);
 									}
 								},
 								Err(payload) =>
 								{
-									pmemobj_tx_abort(PanicOsErrorNumber);
-									*panicPayload = Some(payload);
+									pmemobj_tx_abort(panic_os_error_nummber);
+									*panic_payload = Some(payload);
 								},
 							};
 							
@@ -80,18 +82,18 @@ impl Transaction
 						
 						pobj_tx_stage::TX_STAGE_ONCOMMIT =>
 						{
-							match catch_unwind(AssertUnwindSafe(|| onCommit()))
+							match catch_unwind(AssertUnwindSafe(|| on_commit()))
 							{
 								Ok(result) =>
 								{
-									*functionResult = Some(Ok(result))
+									*function_result = Some(Ok(result))
 								},
 								
 								Err(payload) =>
 								{
-									if panicPayload.is_none()
+									if panic_payload.is_none()
 									{
-										*panicPayload = Some(payload)
+										*panic_payload = Some(payload)
 									}
 								}
 							};
@@ -101,18 +103,18 @@ impl Transaction
 						
 						pobj_tx_stage::TX_STAGE_ONABORT =>
 						{
-							match catch_unwind(AssertUnwindSafe(|| onAbort()))
+							match catch_unwind(AssertUnwindSafe(|| on_abort()))
 							{
 								Ok(result) =>
 								{
-									*functionResult = Some(Err(result))
+									*function_result = Some(Err(result))
 								},
 								
 								Err(payload) =>
 								{
-									if panicPayload.is_none()
+									if panic_payload.is_none()
 									{
-										*panicPayload = Some(payload)
+										*panic_payload = Some(payload)
 									}
 								}
 							};
@@ -133,29 +135,29 @@ impl Transaction
 				}
 				
 				pmemobj_tx_end();
-				setErrorNumberIfNecessary(pmemobj_tx_end());
+				set_error_number_if_necessary(pmemobj_tx_end());
 			}
 		}
 		
-		let mut panicPayload = None;
-		let mut functionResult = None;
+		let mut panic_payload = None;
+		let mut function_result = None;
 		
-		unsafe { internal(pop, work, onCommit, onAbort, &mut panicPayload, &mut functionResult) };
+		unsafe { internal(pop, work, on_commit, on_abort, &mut panic_payload, &mut function_result) };
 		
-		if let Some(payload) = panicPayload
+		if let Some(payload) = panic_payload
 		{
 			resume_unwind(payload);
 		}
 		
-		functionResult.unwrap()
+		function_result.unwrap()
 	}
 }
 
 #[inline(always)]
-fn setErrorNumberIfNecessary(osErrorNumber: c_int)
+fn set_error_number_if_necessary(os_error_number: c_int)
 {
-	if unlikely(osErrorNumber != 0)
+	if unlikely(os_error_number != 0)
 	{
-		set_errno(Errno(osErrorNumber));
+		set_errno(Errno(os_error_number));
 	}
 }

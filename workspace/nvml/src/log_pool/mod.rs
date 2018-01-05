@@ -32,7 +32,7 @@ include!("initialise_memory_functions.rs");
 include!("LogPool.rs");
 include!("LogPoolConfiguration.rs");
 include!("LogPoolDropWrapper.rs");
+include!("LogPoolPathExt.rs");
 include!("LogPoolsConfiguration.rs");
-include!("PersistentMemoryLogPoolPathExt.rs");
 include!("PMEMlogpoolExt.rs");
 include!("WalkCallbackResult.rs");

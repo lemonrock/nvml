@@ -2,11 +2,14 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// An extension trait to make it easier to work the PMEMobjpool object pool instances.
 trait PMEMobjpoolExt
 {
+	/// Close the object pool.
 	#[inline(always)]
 	fn close(self);
 	
+	/// Persist data in the object pool.
 	#[inline(always)]
 	fn persist(self, address: *const c_void, length: usize);
 	

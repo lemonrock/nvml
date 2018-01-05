@@ -2,8 +2,10 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A persistable Read-Write Lock.
 pub trait ReadWriteLockablePersistable: Persistable
 {
+	/// Obtain a mutable reference to a libpmemobj Read-Write Lock.
 	#[inline(always)]
-	fn pmemReadWriteLock(&mut self) -> &mut PMEMrwlock;
+	fn read_write_lock(&mut self) -> &mut PMEMrwlock;
 }

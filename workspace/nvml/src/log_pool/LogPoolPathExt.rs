@@ -3,7 +3,7 @@
 
 
 /// An extension trait to make it easier to use a Path to access a log pool.
-pub trait PersistentMemoryLogPoolPathExt
+pub trait LogPoolPathExt
 {
 	/// Validate a log pool.
 	/// Not supported if the path is a `/dev/daxN` ('Device DAX') device file path.
@@ -19,7 +19,7 @@ pub trait PersistentMemoryLogPoolPathExt
 	fn create_log_pool(&self, pool_size: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
 }
 
-impl PersistentMemoryLogPoolPathExt for Path
+impl LogPoolPathExt for Path
 {
 	#[inline(always)]
 	fn validate_log_pool_is_consistent(&self) -> Result<bool, PmdkError>

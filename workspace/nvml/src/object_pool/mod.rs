@@ -2,10 +2,6 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-#![allow(missing_docs)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-
 use ::errno::Errno;
 use ::errno::errno;
 use ::errno::set_errno;
@@ -48,7 +44,15 @@ use ::std::ptr::null;
 use ::std::ptr::null_mut;
 use ::std::sync::Arc;
 use ::syscall_alt::constants::E;
+use ::syscall_alt::constants::E::EAGAIN;
+use ::syscall_alt::constants::E::EBUSY;
 use ::syscall_alt::constants::E::ECANCELED;
+use ::syscall_alt::constants::E::EDEADLK;
+use ::syscall_alt::constants::E::EINVAL;
+use ::syscall_alt::constants::E::ENOTRECOVERABLE;
+use ::syscall_alt::constants::E::EOWNERDEAD;
+use ::syscall_alt::constants::E::EPERM;
+use ::syscall_alt::constants::E::ETIMEDOUT;
 
 
 include!("ConditionVariable.rs");
@@ -64,13 +68,13 @@ include!("ObjectPoolConfiguration.rs");
 include!("ObjectPoolControl.rs");
 include!("ObjectPoolDropWrapper.rs");
 include!("ObjectPoolPersistOnDrop.rs");
+include!("ObjectPoolPathExt.rs");
 include!("ObjectPoolsConfiguration.rs");
 include!("OID.rs");
 include!("PersistentObject.rs");
 include!("Persistable.rs");
 include!("PersistentCircularDoublyLinkedListEntry.rs");
 include!("PersistentCircularDoublyLinkedListHead.rs");
-include!("PersistentMemoryObjectPoolPathExt.rs");
 include!("PMEMobjpoolExt.rs");
 include!("PMEMoidIterator.rs");
 include!("ReadLockUnlock.rs");

@@ -13,11 +13,11 @@ pub struct BlockPoolConfiguration
 	pub permissions: mode_t,
 	
 	/// Pool size in bytes. Ought to be a power of 2 and a multiple of block_size.
-	/// Must be at least PMEMBLK_MIN_POOL (As of May 7th 2017, 16MB + 4KB)
+	/// Must be at least `nvml_sys::PMEMBLK_MIN_POOL` (As of May 7th 2017, 16MB + 4KB)
 	pub pool_size: Option<usize>,
 	
 	/// Block size in bytes. Ought to be a power of 2.
-	/// Rounded up to PMEMBLK_MIN_BLK. (As of May 7th 2017, 512 bytes).
+	/// Rounded up to `nvml_sys::PMEMBLK_MIN_BLK`. (As of May 7th 2017, 512 bytes).
 	pub block_size: Option<usize>,
 }
 

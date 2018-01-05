@@ -2,8 +2,8 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
-// This struct is intended to be inlined, ie used anonymously, within a Persistable
-// Also known as 'list_entry'
+/// This struct is intended to be inlined, ie used anonymously, within a Persistable.
+/// Also known as 'list_entry'.
 #[repr(C)]
 pub struct PersistentCircularDoublyLinkedListEntry<T: ListEntryPersistable>
 {
@@ -14,12 +14,12 @@ pub struct PersistentCircularDoublyLinkedListEntry<T: ListEntryPersistable>
 impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedListEntry<T>
 {
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.pe_next = PersistentObject::null();
 		instance.pe_prev = PersistentObject::null();
 	}
@@ -27,8 +27,8 @@ impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedLi
 
 impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListEntry<T>
 {
-	/// Returns None if there isn't a next entry
-	/// If returns Some(x), then x.is_null() is ALWAYS false
+	/// Returns None if there isn't a next entry.
+	/// If returns Some(x), then x.is_null() is ALWAYS false.
 	#[inline(always)]
 	pub fn next(&self) -> Option<&PersistentObject<T>>
 	{
@@ -42,8 +42,8 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListEntry<T>
 		}
 	}
 	
-	/// Returns None if there isn't a next entry
-	/// If returns Some(x), then x.is_null() is ALWAYS false
+	/// Returns None if there isn't a next entry.
+	/// If returns Some(x), then x.is_null() is ALWAYS false.
 	#[inline(always)]
 	pub fn previous(&self) -> Option<&PersistentObject<T>>
 	{
@@ -58,12 +58,12 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListEntry<T>
 	}
 }
 
-/// An example of a list entry
+/// An example of a list entry.
 #[repr(C)]
 pub struct fooListEntry
 {
-	LIST_ENTRY_FIELD: PersistentCircularDoublyLinkedListEntry<fooListEntry>,
-	someData: u32,
+	list_entry_field: PersistentCircularDoublyLinkedListEntry<fooListEntry>,
+	some_data: u32,
 }
 
 impl Persistable for fooListEntry
@@ -73,23 +73,23 @@ impl Persistable for fooListEntry
 	type Arguments = (u32);
 	
 	#[inline(always)]
-	unsafe fn initialize(pointerToUninitializedMemoryToUseForFields: *mut Self, objectPool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
+	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointerToUninitializedMemoryToUseForFields.is_null(), "pointerToUninitializedMemoryToUseForFields is null");
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		
-		let instance = &mut *pointerToUninitializedMemoryToUseForFields;
-		PersistentCircularDoublyLinkedListEntry::initialize(&mut instance.LIST_ENTRY_FIELD, objectPool);
+		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
+		PersistentCircularDoublyLinkedListEntry::initialize(&mut instance.list_entry_field, object_pool);
 		
-		instance.someData = *arguments;
+		instance.some_data = *arguments;
 	}
 }
 
 impl ListEntryPersistable for fooListEntry
 {
 	#[inline(always)]
-	fn listEntryField(&self) -> &PersistentCircularDoublyLinkedListEntry<Self>
+	fn list_entry_field(&self) -> &PersistentCircularDoublyLinkedListEntry<Self>
 	{
-		&self.LIST_ENTRY_FIELD
+		&self.list_entry_field
 	}
 }

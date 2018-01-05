@@ -11,16 +11,16 @@ trait ObjectPoolControl
 	fn set_bool_global(self, argument: bool);
 	
 	#[inline(always)]
-	fn get_bool(self, objectPool: *mut PMEMobjpool) -> bool;
+	fn get_bool(self, object_pool: *mut PMEMobjpool) -> bool;
 	
 	#[inline(always)]
-	fn set_bool(self, objectPool: *mut PMEMobjpool, argument: bool);
+	fn set_bool(self, object_pool: *mut PMEMobjpool, argument: bool);
 	
 	#[inline(always)]
-	fn get_integer(self, objectPool: *mut PMEMobjpool) -> i64;
+	fn get_integer(self, object_pool: *mut PMEMobjpool) -> i64;
 	
 	#[inline(always)]
-	fn set_integer(self, objectPool: *mut PMEMobjpool, argument: i64);
+	fn set_integer(self, object_pool: *mut PMEMobjpool, argument: i64);
 	
 	#[doc(hidden)]
 	#[inline(always)]
@@ -28,11 +28,11 @@ trait ObjectPoolControl
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _get<T: Sized>(self, objectPool: *mut PMEMobjpool, argument: &mut T) -> c_int;
+	fn _get<T: Sized>(self, object_pool: *mut PMEMobjpool, argument: &mut T) -> c_int;
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _set<T: Sized>(self, objectPool: *mut PMEMobjpool, argument: &mut T) -> c_int;
+	fn _set<T: Sized>(self, object_pool: *mut PMEMobjpool, argument: &mut T) -> c_int;
 }
 
 impl ObjectPoolControl for &'static [u8]
@@ -50,10 +50,10 @@ impl ObjectPoolControl for &'static [u8]
 	}
 	
 	#[inline(always)]
-	fn get_bool(self, objectPool: *mut PMEMobjpool) -> bool
+	fn get_bool(self, object_pool: *mut PMEMobjpool) -> bool
 	{
 		let mut argument: c_int = unsafe { uninitialized() };
-		let result = self._get(objectPool, &mut argument);
+		let result = self._get(object_pool, &mut argument);
 		debug_assert!(result == 0, "result was '{}'", result);
 		
 		if unlikely(result == -1)
@@ -65,7 +65,7 @@ impl ObjectPoolControl for &'static [u8]
 	}
 	
 	#[inline(always)]
-	fn set_bool(self, objectPool: *mut PMEMobjpool, argument: bool)
+	fn set_bool(self, object_pool: *mut PMEMobjpool, argument: bool)
 	{
 		let mut argument = if argument
 		{
@@ -75,7 +75,7 @@ impl ObjectPoolControl for &'static [u8]
 		{
 			0
 		};
-		let result = self._set(objectPool, &mut argument);
+		let result = self._set(object_pool, &mut argument);
 		debug_assert!(result == 0, "result was '{}'", result);
 		
 		if unlikely(result == -1)
@@ -85,10 +85,10 @@ impl ObjectPoolControl for &'static [u8]
 	}
 	
 	#[inline(always)]
-	fn get_integer(self, objectPool: *mut PMEMobjpool) -> i64
+	fn get_integer(self, object_pool: *mut PMEMobjpool) -> i64
 	{
 		let mut argument: c_longlong = unsafe { uninitialized() };
-		let result = self._get(objectPool, &mut argument);
+		let result = self._get(object_pool, &mut argument);
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
 		
 		if unlikely(result == -1)
@@ -100,9 +100,9 @@ impl ObjectPoolControl for &'static [u8]
 	}
 	
 	#[inline(always)]
-	fn set_integer(self, objectPool: *mut PMEMobjpool, mut argument: i64)
+	fn set_integer(self, object_pool: *mut PMEMobjpool, mut argument: i64)
 	{
-		let result = self._set(objectPool, &mut argument);
+		let result = self._set(object_pool, &mut argument);
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
 		
 		if unlikely(result == -1)
@@ -120,15 +120,15 @@ impl ObjectPoolControl for &'static [u8]
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _get<T: Sized>(self, objectPool: *mut PMEMobjpool, argument: &mut T) -> c_int
+	fn _get<T: Sized>(self, object_pool: *mut PMEMobjpool, argument: &mut T) -> c_int
 	{
-		unsafe { pmemobj_ctl_get(objectPool, self._as_c_char_ptr(), argument as *mut _ as *mut c_void) }
+		unsafe { pmemobj_ctl_get(object_pool, self._as_c_char_ptr(), argument as *mut _ as *mut c_void) }
 	}
 	
 	#[doc(hidden)]
 	#[inline(always)]
-	fn _set<T: Sized>(self, objectPool: *mut PMEMobjpool, argument: &mut T) -> c_int
+	fn _set<T: Sized>(self, object_pool: *mut PMEMobjpool, argument: &mut T) -> c_int
 	{
-		unsafe { pmemobj_ctl_set(objectPool, self._as_c_char_ptr(), argument as *mut _ as *mut c_void) }
+		unsafe { pmemobj_ctl_set(object_pool, self._as_c_char_ptr(), argument as *mut _ as *mut c_void) }
 	}
 }

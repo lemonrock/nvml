@@ -16,56 +16,58 @@ unsafe impl Sync for ObjectPool
 
 impl ObjectPool
 {
+	/// Validate an existing pool.
 	#[inline(always)]
-	fn fromHandle(handle: *mut PMEMobjpool) -> Self
+	pub fn validate(pool_set_file_path: &Path, layout_name: Option<&str>) -> Result<bool, PmdkError>
 	{
-		debug_assert!(!handle.is_null(), "PMEMobjpool handle is null");
-		
-		ObjectPool(handle, ObjectPoolDropWrapper::new(handle))
+		pool_set_file_path.validate_object_pool_is_consistent(layout_name)
 	}
 	
+	/// Open an existing pool.
+	/// Prefer the use of `ObjectPoolConfiguration.open_or_create()`.
 	#[inline(always)]
-	pub fn validate(pool_set_file_path: &Path, layoutName: Option<&str>) -> Result<bool, PmdkError>
+	pub fn open(pool_set_file_path: &Path, layout_name: Option<&str>) -> Result<Self, PmdkError>
 	{
-		pool_set_file_path.validate_object_pool_is_consistent(layoutName)
+		pool_set_file_path.open_object_pool(layout_name).map(Self::from_handle)
 	}
 	
+	/// Create a new pool.
+	/// Prefer the use of `ObjectPoolConfiguration.open_or_create()`.
 	#[inline(always)]
-	pub fn open(pool_set_file_path: &Path, layoutName: Option<&str>) -> Result<Self, PmdkError>
+	pub fn create(pool_set_file_path: &Path, layout_name: Option<&str>, pool_size: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
-		pool_set_file_path.open_object_pool(layoutName).map(Self::fromHandle)
+		pool_set_file_path.create_object_pool(layout_name, pool_size, mode).map(Self::from_handle)
 	}
 	
-	#[inline(always)]
-	pub fn create(pool_set_file_path: &Path, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
-	{
-		pool_set_file_path.create_object_pool(layoutName, poolSize, mode).map(Self::fromHandle)
-	}
-	
+	/// Persist this pool.
 	#[inline(always)]
 	pub fn persist(&self, address: *const c_void, length: usize)
 	{
 		self.0.persist(address, length)
 	}
 	
+	/// aka 'memcpy' in C.
 	#[inline(always)]
 	pub fn copy_nonoverlapping_then_persist(&self, address: *mut c_void, length: usize, from: *const c_void)
 	{
 		self.0.copy_nonoverlapping_then_persist(address, length, from)
 	}
 	
+	/// aka 'memset' in C.
 	#[inline(always)]
 	pub fn write_bytes_then_persist(&self, address: *mut c_void, count: usize, value: u8)
 	{
 		self.0.write_bytes_then_persist(address, count, value)
 	}
 	
+	/// Obtain a persist on drop object to make sure persistence occurs after a number of write operations.
 	#[inline(always)]
 	pub fn persist_on_drop<'a>(&'a self, address: *mut c_void) -> ObjectPoolPersistOnDrop<'a>
 	{
 		ObjectPoolPersistOnDrop(self.0, address, PhantomData)
 	}
 	
+	/// First persisted object in pool.
 	/// Result may be null, use `.is_null()` to check
 	#[inline(always)]
 	pub fn first(&self) -> PMEMoid
@@ -73,6 +75,7 @@ impl ObjectPool
 		unsafe { pmemobj_first(self.0) }
 	}
 	
+	/// First persisted object of type in pool.
 	#[inline(always)]
 	pub fn first_of_type<T: Persistable>(&self) -> Option<PersistentObject<T>>
 	{
@@ -81,7 +84,7 @@ impl ObjectPool
 		{
 			None
 		}
-		else if likely(first.typeNumber() == T::TypeNumber)
+		else if likely(first.type_number() == T::TypeNumber)
 		{
 			Some(PersistentObject::new(first))
 		}
@@ -95,7 +98,7 @@ impl ObjectPool
 				{
 					return None
 				}
-				else if likely(next.typeNumber() == T::TypeNumber)
+				else if likely(next.type_number() == T::TypeNumber)
 				{
 					return Some(PersistentObject::new(next))
 				}
@@ -104,8 +107,9 @@ impl ObjectPool
 		}
 	}
 	
-	/// Returns None if there is no root object
-	/// Never returns Some(0)
+	/// Size in bytes of root object.
+	/// Returns None if there is no root object.
+	/// Never returns Some(0).
 	#[inline(always)]
 	pub fn root_object_size(&self) -> Option<size_t>
 	{
@@ -120,100 +124,119 @@ impl ObjectPool
 		}
 	}
 	
-	/// Only affects calls to pmemobj_create()
+	/// Find if a potential performance improvement is enabled.
+	/// Only affects calls to pmemobj_create().
 	#[inline(always)]
-	pub fn getPrefaultAtCreate() -> bool
+	pub fn get_prefault_at_create() -> bool
 	{
 		PrefaultAtCreateKey.get_bool_global()
 	}
 	
-	/// Only affects calls to pmemobj_create()
+	/// Enable a potential performance improvement.
+	/// Only affects calls to pmemobj_create().
 	#[inline(always)]
-	pub fn setPrefaultAtCreate(prefaultAtCreate: bool)
+	pub fn set_prefault_at_create(enable: bool)
 	{
-		PrefaultAtCreateKey.set_bool_global(prefaultAtCreate);
+		PrefaultAtCreateKey.set_bool_global(enable);
 	}
 	
-	/// Only affects calls to pmemobj_open()
+	/// Find if a potential performance improvement is enabled.
+	/// Only affects calls to pmemobj_open().
 	#[inline(always)]
-	pub fn getPrefaultAtOpen() -> bool
+	pub fn get_prefault_at_open() -> bool
 	{
 		PrefaultAtOpenKey.get_bool_global()
 	}
 	
-	/// Only affects calls to pmemobj_open()
+	/// Enable a potential performance improvement.
+	/// Only affects calls to pmemobj_open().
 	#[inline(always)]
-	pub fn setPrefaultAtOpen(prefaultAtOpen: bool)
+	pub fn set_prefault_at_open(enable: bool)
 	{
-		PrefaultAtOpenKey.set_bool_global(prefaultAtOpen);
+		PrefaultAtOpenKey.set_bool_global(enable);
 	}
 	
+	/// Find if a potential performance improvement is enabled.
+	/// Get whether transaction debug skip expensive checks are enabled.
 	#[inline(always)]
-	pub fn getTransactionDebugSkipExpensiveChecks(&self) -> bool
+	pub fn get_transaction_debug_skip_expensive_checks(&self) -> bool
 	{
 		TransactionDebugSkipExpensiveChecksKey.get_bool(self.0)
 	}
 	
+	/// Enable a potential performance improvement.
+	/// Set whether transaction debug skip expensive checks are enabled.
 	#[inline(always)]
-	pub fn setTransactionDebugSkipExpensiveChecks(&self, skipExpensiveChecks: bool)
+	pub fn set_transaction_debug_skip_expensive_checks(&self, enable: bool)
 	{
-		TransactionDebugSkipExpensiveChecksKey.set_bool(self.0, skipExpensiveChecks);
+		TransactionDebugSkipExpensiveChecksKey.set_bool(self.0, enable);
+	}
+	
+	/// Get transaction cache size and threshold in bytes.
+	/// Maximum transaction cache size is 15Gb, `nvml_sys::PMEMOBJ_MAX_ALLOC_SIZE`.
+	#[inline(always)]
+	pub fn get_transaction_cache_size_and_threshold(&self) -> (u64, u64)
+	{
+		(self.get_transaction_cache_size(), self.get_transaction_cache_threshold())
+	}
+	
+	/// Set transaction cache size and threshold in bytes.
+	/// Maximum transaction cache size is 15Gb,`nvml_sys::PMEMOBJ_MAX_ALLOC_SIZE`.
+	#[inline(always)]
+	pub fn set_transaction_cache_size_and_threshold(&self, cache_size: u64, cache_threshold: u64)
+	{
+		debug_assert!(cache_threshold <= cache_size, "cache_threshold '{}' exceeds cache_size '{}'", cache_threshold, cache_size);
+		
+		self.set_transaction_cache_size(cache_size);
+		self.set_transaction_cache_threshold(cache_threshold);
 	}
 	
 	#[inline(always)]
-	pub fn getTransactionCacheSizeAndThreshold(&self) -> (u64, u64)
+	fn get_transaction_cache_size(&self) -> u64
 	{
-		(self.getTransactionCacheSize(), self.getTransactionCacheThreshold())
+		let transaction_cache_size = TransactionCacheSizeKey.get_integer(self.0);
+		debug_assert!(transaction_cache_size < 0, "transaction_cache_size '{}' is negative", transaction_cache_size);
+		
+		let transaction_cache_size = transaction_cache_size as u64;
+		debug_assert!(transaction_cache_size <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transaction_cache_size '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transaction_cache_size, PMEMOBJ_MAX_ALLOC_SIZE);
+		
+		transaction_cache_size
 	}
 	
 	#[inline(always)]
-	pub fn setTransactionCacheSizeAndThreshold(&self, cacheSize: u64, cacheThreshold: u64)
+	fn set_transaction_cache_size(&self, cache_size: u64)
 	{
-		debug_assert!(cacheThreshold <= cacheSize, "cacheThreshold '{}' exceeds cacheSize '{}'", cacheThreshold, cacheSize);
+		debug_assert!(cache_size <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cache_size '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cache_size, PMEMOBJ_MAX_ALLOC_SIZE);
 		
-		self.setTransactionCacheSize(cacheSize);
-		self.setTransactionCacheThreshold(cacheThreshold);
+		TransactionCacheSizeKey.set_integer(self.0, cache_size as i64);
 	}
 	
 	#[inline(always)]
-	fn getTransactionCacheSize(&self) -> u64
+	fn get_transaction_cache_threshold(&self) -> u64
 	{
-		let transactionCacheSize = TransactionCacheSizeKey.get_integer(self.0);
-		debug_assert!(transactionCacheSize < 0, "transactionCacheSize '{}' is negative", transactionCacheSize);
+		let transaction_cache_threshold = TransactionCacheThresholdKey.get_integer(self.0);
+		debug_assert!(transaction_cache_threshold < 0, "transaction_cache_threshold '{}' is negative", transaction_cache_threshold);
 		
-		let transactionCacheSize = transactionCacheSize as u64;
-		debug_assert!(transactionCacheSize <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transactionCacheSize '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transactionCacheSize, PMEMOBJ_MAX_ALLOC_SIZE);
+		let transaction_cache_threshold = transaction_cache_threshold as u64;
+		debug_assert!(transaction_cache_threshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transaction_cache_threshold '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transaction_cache_threshold, PMEMOBJ_MAX_ALLOC_SIZE);
 		
-		transactionCacheSize
-	}
-	
-	/// Maximum is 15Gb, PMEMOBJ_MAX_ALLOC_SIZE
-	#[inline(always)]
-	fn setTransactionCacheSize(&self, cacheSize: u64)
-	{
-		debug_assert!(cacheSize <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cacheSize '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cacheSize, PMEMOBJ_MAX_ALLOC_SIZE);
-		
-		TransactionCacheSizeKey.set_integer(self.0, cacheSize as i64);
+		transaction_cache_threshold
 	}
 	
 	#[inline(always)]
-	fn getTransactionCacheThreshold(&self) -> u64
+	fn set_transaction_cache_threshold(&self, cache_threshold: u64)
 	{
-		let transactionCacheThreshold = TransactionCacheThresholdKey.get_integer(self.0);
-		debug_assert!(transactionCacheThreshold < 0, "transactionCacheThreshold '{}' is negative", transactionCacheThreshold);
+		debug_assert!(cache_threshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cache_threshold '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cache_threshold, PMEMOBJ_MAX_ALLOC_SIZE);
 		
-		let transactionCacheThreshold = transactionCacheThreshold as u64;
-		debug_assert!(transactionCacheThreshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "transactionCacheThreshold '{}' exceeds PMEMOBJ_MAX_ALLOC_SIZE, '{}'", transactionCacheThreshold, PMEMOBJ_MAX_ALLOC_SIZE);
-		
-		transactionCacheThreshold
+		TransactionCacheThresholdKey.set_integer(self.0, cache_threshold as i64);
 	}
 	
 	#[inline(always)]
-	fn setTransactionCacheThreshold(&self, cacheThreshold: u64)
+	fn from_handle(handle: *mut PMEMobjpool) -> Self
 	{
-		debug_assert!(cacheThreshold <= PMEMOBJ_MAX_ALLOC_SIZE as u64, "cacheThreshold '{}' exceeds 0 and PMEMOBJ_MAX_ALLOC_SIZE '{}'", cacheThreshold, PMEMOBJ_MAX_ALLOC_SIZE);
+		debug_assert!(!handle.is_null(), "PMEMobjpool handle is null");
 		
-		TransactionCacheThresholdKey.set_integer(self.0, cacheThreshold as i64);
+		ObjectPool(handle, ObjectPoolDropWrapper::new(handle))
 	}
 }
 

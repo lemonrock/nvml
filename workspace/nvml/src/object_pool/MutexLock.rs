@@ -5,7 +5,7 @@
 /// A structure that represents a Mutex lock.
 pub struct MutexLock<'a, T: Persistable + 'a>
 {
-	objectPool: *mut PMEMobjpool,
+	object_pool: *mut PMEMobjpool,
 	mutex: *mut PMEMmutex,
 	object: &'a mut T
 }
@@ -13,62 +13,49 @@ pub struct MutexLock<'a, T: Persistable + 'a>
 impl<'a, T: Persistable> MutexLock<'a, T>
 {
 	#[inline(always)]
-	fn new(objectPool: *mut PMEMobjpool, mutex: *mut PMEMmutex, object: &'a mut T) -> Self
+	fn new(object_pool: *mut PMEMobjpool, mutex: *mut PMEMmutex, object: &'a mut T) -> Self
 	{
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
 		debug_assert!(!mutex.is_null(), "mutex is null");
 		
 		Self
 		{
-			objectPool,
+			object_pool,
 			mutex,
 			object,
 		}
 	}
 	
+	/// Obtain a mutex lock within a transaction.
 	#[allow(unused_variables)]
 	#[inline(always)]
-	pub fn lockInTransaction(self, transaction: Transaction)
+	pub fn mutex_in_transaction(self, transaction: Transaction)
 	{
 		let result = unsafe { pmemobj_tx_lock(pobj_tx_param::TX_PARAM_MUTEX, self.mutex as *mut c_void) };
 		if likely(result == 0)
 		{
 			return;
 		}
-		Self::lockErrorHandling(result);
+		Self::lock_error_handling(result);
 	}
 	
+	/// Obtain a mutex lock.
 	#[inline(always)]
-	pub fn lock(self) -> MutexUnlock<'a, T>
+	pub fn mutex(self) -> MutexUnlock<'a, T>
 	{
-		let result = unsafe { pmemobj_mutex_lock(self.objectPool, self.mutex) };
+		let result = unsafe { pmemobj_mutex_lock(self.object_pool, self.mutex) };
 		if likely(result == 0)
 		{
 			return MutexUnlock(self);
 		}
-		Self::lockErrorHandling(result)
+		Self::lock_error_handling(result)
 	}
 	
+	/// Try to obtain a mutex lock.
 	#[inline(always)]
-	fn lockErrorHandling(result: c_int) -> MutexUnlock<'a, T>
+	pub fn try_mutex(self) -> Option<MutexUnlock<'a, T>>
 	{
-		match result
-		{
-			E::EDEADLK => panic!("Deadlock"),
-			
-			E::EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
-			E::EOWNERDEAD => panic!("This should only occur with a Robust mutex, which it is believed libpmemobj is not using"),
-			E::ENOTRECOVERABLE => panic!("This does not occur on Linux or Mac OS X"),
-			E::EINVAL => panic!("objectPool or mutex was null or mutex was invalid (none of these things should occur)"),
-			
-			_ => panic!("Unexpected error '{}'", result),
-		}
-	}
-	
-	#[inline(always)]
-	pub fn tryLock(self) -> Option<MutexUnlock<'a, T>>
-	{
-		let result = unsafe { pmemobj_mutex_trylock(self.objectPool, self.mutex) };
+		let result = unsafe { pmemobj_mutex_trylock(self.object_pool, self.mutex) };
 		if likely(result == 0)
 		{
 			return Some(MutexUnlock(self));
@@ -76,21 +63,22 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 		
 		match result
 		{
-			E::EBUSY => None,
+			EBUSY => None,
 			
-			E::EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
-			E::EOWNERDEAD => panic!("This should only occur with a Robust mutex, which it is believed libpmemobj is not using"),
-			E::ENOTRECOVERABLE => panic!("This does not occur on Linux or Mac OS X"),
-			E::EINVAL => panic!("objectPool or mutex was null or mutex was invalid (none of these things should occur)"),
+			EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
+			EOWNERDEAD => panic!("This should only occur with a Robust mutex, which it is believed libpmemobj is not using"),
+			ENOTRECOVERABLE => panic!("This does not occur on Linux or Mac OS X"),
+			EINVAL => panic!("object_pool or mutex was null or mutex was invalid (none of these things should occur)"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}
 	}
 	
+	/// Obtain a mutex lock. Time out if the mutex lock is not obtained in `absolute_time_out`.
 	#[inline(always)]
-	pub fn timedLock(self, absoluteTimeOut: &timespec) -> Option<MutexUnlock<'a, T>>
+	pub fn timed_mutex(self, absolute_time_out: &timespec) -> Option<MutexUnlock<'a, T>>
 	{
-		let result = unsafe { pmemobj_mutex_timedlock(self.objectPool, self.mutex, absoluteTimeOut) };
+		let result = unsafe { pmemobj_mutex_timedlock(self.object_pool, self.mutex, absolute_time_out) };
 		if likely(result == 0)
 		{
 			return Some(MutexUnlock(self));
@@ -98,12 +86,12 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 		
 		match result
 		{
-			E::ETIMEDOUT => None,
+			ETIMEDOUT => None,
 			
-			E::EDEADLK => panic!("Deadlock"),
+			EDEADLK => panic!("Deadlock"),
 			
-			E::EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
-			E::EINVAL => panic!("objectPool or mutex was null or mutex was invalid or absoluteTimeOut is out-of-range (none of these things should occur)"),
+			EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
+			EINVAL => panic!("object_pool or mutex was null or mutex was invalid or absolute_time_out is out-of-range (none of these things should occur)"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}
@@ -112,7 +100,7 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 	#[inline(always)]
 	fn unlock(&self)
 	{
-		let result = unsafe { pmemobj_mutex_unlock(self.objectPool, self.mutex) };
+		let result = unsafe { pmemobj_mutex_unlock(self.object_pool, self.mutex) };
 		if likely(result == 0)
 		{
 			return;
@@ -120,9 +108,25 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 		
 		match result
 		{
-			E::EINVAL => panic!("objectPool or mutex was null or mutex was invalid (none of these things should occur)"),
-			E::EPERM => panic!("Current thread does not hold this mutex lock"),
-			E::EAGAIN => panic!("EAGAIN is no longer part of POSIX for pthread_mutex_unlock"),
+			EINVAL => panic!("object_pool or mutex was null or mutex was invalid (none of these things should occur)"),
+			EPERM => panic!("Current thread does not hold this mutex lock"),
+			EAGAIN => panic!("EAGAIN is no longer part of POSIX for pthread_mutex_unlock"),
+			
+			_ => panic!("Unexpected error '{}'", result),
+		}
+	}
+	
+	#[inline(always)]
+	fn lock_error_handling(result: c_int) -> MutexUnlock<'a, T>
+	{
+		match result
+		{
+			EDEADLK => panic!("Deadlock"),
+			
+			EAGAIN => panic!("EAGAIN; too many locks of the same lock in this thread"),
+			EOWNERDEAD => panic!("This should only occur with a Robust mutex, which it is believed libpmemobj is not using"),
+			ENOTRECOVERABLE => panic!("This does not occur on Linux or Mac OS X"),
+			EINVAL => panic!("object_pool or mutex was null or mutex was invalid (none of these things should occur)"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}

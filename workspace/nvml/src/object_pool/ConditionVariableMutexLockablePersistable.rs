@@ -2,8 +2,10 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A persistable Condition Variable.
 pub trait ConditionVariableMutexLockablePersistable: MutexLockablePersistable
 {
+	/// Obtain a mutable reference to a libpmemobj condition variable.
 	#[inline(always)]
-	fn pmemConditionVariable(&mut self) -> &mut PMEMcond;
+	fn condition_variable(&mut self) -> &mut PMEMcond;
 }

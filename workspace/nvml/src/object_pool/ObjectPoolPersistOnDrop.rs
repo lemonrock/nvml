@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Ensures the object pool is persisted when dropped.
 #[derive(Debug)]
 pub struct ObjectPoolPersistOnDrop<'a>(*mut PMEMobjpool, *mut c_void, PhantomData<&'a ObjectPool>);
 
@@ -16,12 +17,14 @@ impl<'a> Drop for ObjectPoolPersistOnDrop<'a>
 
 impl<'a> ObjectPoolPersistOnDrop<'a>
 {
+	/// Creates a new instance of this struct.
 	#[inline(always)]
-	pub fn new(objectPool: *mut PMEMobjpool, address: *mut c_void) -> Self
+	pub fn new(object_pool: *mut PMEMobjpool, address: *mut c_void) -> Self
 	{
-		ObjectPoolPersistOnDrop(objectPool, address, PhantomData)
+		ObjectPoolPersistOnDrop(object_pool, address, PhantomData)
 	}
 	
+	/// Moves offset forward.
 	#[inline(always)]
 	pub fn offset(mut self, offset: usize) -> Self
 	{
@@ -29,6 +32,7 @@ impl<'a> ObjectPoolPersistOnDrop<'a>
 		self
 	}
 	
+	/// Flushes data without draining.
 	#[inline(always)]
 	pub fn flush(&self, length: usize)
 	{

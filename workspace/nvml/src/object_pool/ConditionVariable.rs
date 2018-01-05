@@ -2,93 +2,96 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A structure that represents a Condition Variable.
 pub struct ConditionVariable<'a, T: Persistable + 'a>
 {
-	objectPool: *mut PMEMobjpool,
-	conditionVariable: *mut PMEMcond,
-	phantomData: PhantomData<&'a mut T>,
+	object_pool: *mut PMEMobjpool,
+	condition_variable: *mut PMEMcond,
+	phantom_data: PhantomData<&'a mut T>,
 }
 
 impl<'a, T: Persistable> ConditionVariable<'a, T>
 {
 	#[inline(always)]
-	fn new(objectPool: *mut PMEMobjpool, conditionVariable: *mut PMEMcond) -> Self
+	fn new(object_pool: *mut PMEMobjpool, condition_variable: *mut PMEMcond) -> Self
 	{
-		debug_assert!(!objectPool.is_null(), "objectPool is null");
-		debug_assert!(!conditionVariable.is_null(), "conditionVariable is null");
+		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(!condition_variable.is_null(), "condition_variable is null");
 		
 		Self
 		{
-			objectPool,
-			conditionVariable,
-			phantomData: PhantomData,
+			object_pool,
+			condition_variable,
+			phantom_data: PhantomData,
 		}
 	}
 	
-	/// Always recheck whatever predicate we were waiting on after this function returns due to spurious wake ups
+	/// Always recheck whatever predicate we were waiting on after this function returns due to spurious wake ups.
 	#[inline(always)]
-	pub fn wait(&self, lockedMutex: MutexUnlock<'a, T>) -> MutexUnlock<'a, T>
+	pub fn wait(&self, locked_mutex: MutexUnlock<'a, T>) -> MutexUnlock<'a, T>
 	{
-		let result = unsafe { pmemobj_cond_wait(self.objectPool, self.conditionVariable, lockedMutex.0.mutex) };
+		let result = unsafe { pmemobj_cond_wait(self.object_pool, self.condition_variable, locked_mutex.0.mutex) };
 		if likely(result == 0)
 		{
-			return lockedMutex;
+			return locked_mutex;
 		}
 		
 		match result
 		{
-			E::EINVAL => panic!("objectPool or conditionVariable was null or conditionVariable was invalid (none of these things should occur)"),
-			E::EPERM => panic!("Mutex was not owned by calling thread"),
+			EINVAL => panic!("object_pool or condition_variable was null or conditionVariable was invalid (none of these things should occur)"),
+			EPERM => panic!("Mutex was not owned by calling thread"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}
 	}
 	
-	/// Always recheck whatever predicate we were waiting on after this function returns due to spurious wake ups and time out expiry being coincidental with signalOne() or signalAll()
+	/// Always recheck whatever predicate we were waiting on after this function returns due to spurious wake ups and time out expiry being coincidental with signalOne() or signalAll().
 	#[inline(always)]
-	pub fn timedWait(&self, lockedMutex: MutexUnlock<'a, T>, absoluteTimeOut: &timespec) -> (MutexUnlock<'a, T>, bool)
+	pub fn timed_wait(&self, locked_mutex: MutexUnlock<'a, T>, absolute_time_out: &timespec) -> (MutexUnlock<'a, T>, bool)
 	{
-		let result = unsafe { pmemobj_cond_timedwait(self.objectPool, self.conditionVariable, lockedMutex.0.mutex, absoluteTimeOut) };
+		let result = unsafe { pmemobj_cond_timedwait(self.object_pool, self.condition_variable, locked_mutex.0.mutex, absolute_time_out) };
 		if likely(result == 0)
 		{
-			return (lockedMutex, true);
+			return (locked_mutex, true);
 		}
 		
 		match result
 		{
-			E::ETIMEDOUT => (lockedMutex, false),
+			ETIMEDOUT => (locked_mutex, false),
 			
-			E::EINVAL => panic!("objectPool or conditionVariable was null or conditionVariable was invalid or absoluteTimeOut was out of range (none of these things should occur)"),
-			E::EPERM => panic!("Mutex was not owned by calling thread"),
+			EINVAL => panic!("object_pool or condition_variable was null or conditionVariable was invalid or absolute_time_out was out of range (none of these things should occur)"),
+			EPERM => panic!("Mutex was not owned by calling thread"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}
 	}
 	
+	/// signal all waiting threads.
 	#[inline(always)]
-	pub fn signalAll(&self, lockedMutex: MutexUnlock<'a, T>)
+	pub fn signal_all(&self, locked_mutex: MutexUnlock<'a, T>)
 	{
-		Self::signal(unsafe { pmemobj_cond_broadcast(self.objectPool, self.conditionVariable) }, lockedMutex);
+		Self::signal(unsafe { pmemobj_cond_broadcast(self.object_pool, self.condition_variable) }, locked_mutex);
+	}
+	
+	/// signal one of the waiting threads.
+	#[inline(always)]
+	pub fn signal_one(&self, locked_mutex: MutexUnlock<'a, T>)
+	{
+		Self::signal(unsafe { pmemobj_cond_signal(self.object_pool, self.condition_variable) }, locked_mutex);
 	}
 	
 	#[inline(always)]
-	pub fn signalOne(&self, lockedMutex: MutexUnlock<'a, T>)
-	{
-		Self::signal(unsafe { pmemobj_cond_signal(self.objectPool, self.conditionVariable) }, lockedMutex);
-	}
-	
-	#[inline(always)]
-	fn signal(result: c_int, lockedMutex: MutexUnlock<'a, T>)
+	fn signal(result: c_int, locked_mutex: MutexUnlock<'a, T>)
 	{
 		if likely(result == 0)
 		{
-			drop(lockedMutex);
+			drop(locked_mutex);
 			return;
 		}
 		
 		match result
 		{
-			E::EINVAL => panic!("objectPool or conditionVariable was null or conditionVariable was invalid (none of these things should occur)"),
+			EINVAL => panic!("object_pool or condition_variable was null or conditionVariable was invalid (none of these things should occur)"),
 			
 			_ => panic!("Unexpected error '{}'", result),
 		}

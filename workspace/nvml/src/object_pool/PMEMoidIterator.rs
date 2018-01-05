@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// A simple iterator over PMEMoid, ie references to object instances.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct PMEMoidIterator
 {
@@ -27,12 +28,13 @@ impl Iterator for PMEMoidIterator
 
 impl PMEMoidIterator
 {
+	/// Create a new iterator starting at the specific PMEMoid.
 	#[inline(always)]
-	pub fn from(startAt: PMEMoid) -> Self
+	pub fn from(starts_at: PMEMoid) -> Self
 	{
 		Self
 		{
-			next: startAt
+			next: starts_at
 		}
 	}
 }

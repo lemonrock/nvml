@@ -12,7 +12,7 @@ pub struct LogPoolConfiguration
 	pub permissions: mode_t,
 	
 	/// Pool size in bytes. Ought to be a power of 2.
-	/// Must be at least PMEMLOG_MIN_POOL (As of May 7th 2017, 1024 * 1024 * 2 bytes)
+	/// Must be at least `nvml_sys::PMEMLOG_MIN_POOL` (As of May 7th 2017, 1024 * 1024 * 2 bytes)
 	pub pool_size: Option<usize>,
 }
 

@@ -12,9 +12,13 @@
       <w>einval</w>
       <w>enomem</w>
       <w>enospc</w>
+      <w>enotrecoverable</w>
+      <w>eownerdead</w>
+      <w>eperm</w>
       <w>erofs</w>
       <w>errnum</w>
       <w>errormsg</w>
+      <w>etimedout</w>
       <w>funcs</w>
       <w>initializable</w>
       <w>iovcnt</w>

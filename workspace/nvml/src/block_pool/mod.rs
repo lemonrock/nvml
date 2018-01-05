@@ -24,7 +24,7 @@ use ::syscall_alt::constants::E;
 include!("BlockPool.rs");
 include!("BlockPoolConfiguration.rs");
 include!("BlockPoolDropWrapper.rs");
+include!("BlockPoolPathExt.rs");
 include!("BlockPoolsConfiguration.rs");
 include!("initialise_memory_functions.rs");
-include!("PersistentMemoryBlockPoolPathExt.rs");
 include!("PMEMblkpoolExt.rs");

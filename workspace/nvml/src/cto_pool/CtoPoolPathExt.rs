@@ -3,7 +3,7 @@
 
 
 /// An extension trait to make it easier to use a Path to access a CTO pool.
-pub trait PersistentMemoryCtoPoolPathExt
+pub trait CtoPoolPathExt
 {
 	/// Validate that an existing CTO pool is consistent.
 	#[inline(always)]
@@ -18,7 +18,7 @@ pub trait PersistentMemoryCtoPoolPathExt
 	fn create_cto_pool(&self, layout_name: &CStr, pool_size: usize, mode: mode_t) -> Result<*mut PMEMctopool, PmdkError>;
 }
 
-impl PersistentMemoryCtoPoolPathExt for Path
+impl CtoPoolPathExt for Path
 {
 	#[inline(always)]
 	fn validate_cto_pool_is_consistent(&self, layout_name: &CStr) -> Result<bool, PmdkError>

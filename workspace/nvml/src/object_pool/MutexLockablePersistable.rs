@@ -5,6 +5,7 @@
 /// Represents a Persistable Mutex Lock.
 pub trait MutexLockablePersistable: Persistable
 {
+	/// Obtain a mutable reference to a libpmemobj Mutex Lock.
 	#[inline(always)]
-	fn pmemMutex(&mut self) -> &mut PMEMmutex;
+	fn mutex_lock(&mut self) -> &mut PMEMmutex;
 }

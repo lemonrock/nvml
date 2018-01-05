@@ -3,7 +3,7 @@
 
 
 /// An extension trait to make it easier to use a Path to access a block pool.
-pub trait PersistentMemoryBlockPoolPathExt
+pub trait BlockPoolPathExt
 {
 	/// Validate a block pool.
 	/// Not supported if the path is a `/dev/daxN` ('Device DAX') device file path.
@@ -21,7 +21,7 @@ pub trait PersistentMemoryBlockPoolPathExt
 	fn create_block_pool(&self, block_size: usize, pool_size: usize, mode: mode_t) -> Result<*mut PMEMblkpool, PmdkError>;
 }
 
-impl PersistentMemoryBlockPoolPathExt for Path
+impl BlockPoolPathExt for Path
 {
 	#[inline(always)]
 	fn validate_block_pool_is_consistent(&self, block_size: usize) -> Result<bool, PmdkError>

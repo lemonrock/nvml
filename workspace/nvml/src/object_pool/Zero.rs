@@ -2,13 +2,14 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+/// Trait to allow objects containing synchronisation primitives (Mutex, RwLock, CondVar) to be zeroed.
 pub trait Zero: Sized
 {
 	/// # Arguments
 	/// - self is always non-null
-	/// - objectPool is always non-null
+	/// - object_pool is always non-null
 	#[inline(always)]
-	unsafe fn zero(self, objectPool: *mut PMEMobjpool);
+	unsafe fn zero(self, object_pool: *mut PMEMobjpool);
 }
 
 macro_rules! zero_guard
@@ -25,29 +26,29 @@ macro_rules! zero_guard
 impl Zero for *mut PMEMmutex
 {
 	#[inline(always)]
-	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
+	unsafe fn zero(self, object_pool: *mut PMEMobjpool)
 	{
-		zero_guard!(self, objectPool);
-		pmemobj_mutex_zero(objectPool, self)
+		zero_guard!(self, object_pool);
+		pmemobj_mutex_zero(object_pool, self)
 	}
 }
 
 impl Zero for *mut PMEMrwlock
 {
 	#[inline(always)]
-	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
+	unsafe fn zero(self, object_pool: *mut PMEMobjpool)
 	{
-		zero_guard!(self, objectPool);
-		pmemobj_rwlock_zero(objectPool, self)
+		zero_guard!(self, object_pool);
+		pmemobj_rwlock_zero(object_pool, self)
 	}
 }
 
 impl Zero for *mut PMEMcond
 {
 	#[inline(always)]
-	unsafe fn zero(self, objectPool: *mut PMEMobjpool)
+	unsafe fn zero(self, object_pool: *mut PMEMobjpool)
 	{
-		zero_guard!(self, objectPool);
-		pmemobj_cond_zero(objectPool, self)
+		zero_guard!(self, object_pool);
+		pmemobj_cond_zero(object_pool, self)
 	}
 }

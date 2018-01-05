@@ -3,25 +3,28 @@
 
 
 /// Adds additional methods to Path to make it easier to open persistent memory object pools.
-pub trait PersistentMemoryObjectPoolPathExt
+pub trait ObjectPoolPathExt
 {
+	/// Validate an object pool.
 	/// Not supported if the path is a `/dev/daxN` ('Device DAX') device file path.
 	#[inline(always)]
-	fn validate_object_pool_is_consistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>;
+	fn validate_object_pool_is_consistent(&self, layout_name: Option<&str>) -> Result<bool, PmdkError>;
 	
+	/// Open an existing object pool.
 	#[inline(always)]
-	fn open_object_pool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>;
+	fn open_object_pool(&self, layout_name: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>;
 	
+	/// Create (and implicitly open) a new object pool.
 	#[inline(always)]
-	fn create_object_pool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>;
+	fn create_object_pool(&self, layout_name: Option<&str>, pool_size: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>;
 }
 
-impl PersistentMemoryObjectPoolPathExt for Path
+impl ObjectPoolPathExt for Path
 {
 	#[inline(always)]
-	fn validate_object_pool_is_consistent(&self, layoutName: Option<&str>) -> Result<bool, PmdkError>
+	fn validate_object_pool_is_consistent(&self, layout_name: Option<&str>) -> Result<bool, PmdkError>
 	{
-		let layout = layoutAsRawPointer(layoutName);
+		let layout = layout_as_raw_pointer(layout_name);
 		let result = use_path!(self, pmemobj_check, layout);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
@@ -35,9 +38,9 @@ impl PersistentMemoryObjectPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn open_object_pool(&self, layoutName: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>
+	fn open_object_pool(&self, layout_name: Option<&str>) -> Result<*mut PMEMobjpool, PmdkError>
 	{
-		let layout = layoutAsRawPointer(layoutName);
+		let layout = layout_as_raw_pointer(layout_name);
 		let result = use_path!(self, pmemobj_open, layout);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
@@ -52,10 +55,10 @@ impl PersistentMemoryObjectPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn create_object_pool(&self, layoutName: Option<&str>, poolSize: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>
+	fn create_object_pool(&self, layout_name: Option<&str>, pool_size: usize, mode: mode_t) -> Result<*mut PMEMobjpool, PmdkError>
 	{
-		let layout = layoutAsRawPointer(layoutName);
-		let result = use_path!(self, pmemobj_create, layout, poolSize, mode);
+		let layout = layout_as_raw_pointer(layout_name);
+		let result = use_path!(self, pmemobj_create, layout, pool_size, mode);
 		unsafe { CString::from_raw(layout as *mut _) };
 		
 		if unlikely(result.is_null())
@@ -70,15 +73,15 @@ impl PersistentMemoryObjectPoolPathExt for Path
 }
 
 #[inline(always)]
-fn layoutAsRawPointer(layoutName: Option<&str>) -> *const c_char
+fn layout_as_raw_pointer(layout_name: Option<&str>) -> *const c_char
 {
-	if let Some(layoutName) = layoutName
+	if let Some(layout_name) = layout_name
 	{
-		debug_assert!(layoutName.len() + 1 <= PMEMOBJ_MAX_ALLOC_SIZE as usize, "layoutName length '{}' + 1 is greater than PMEMOBJ_MAX_ALLOC_SIZE '{}'", layoutName.len(), PMEMOBJ_MAX_ALLOC_SIZE);
+		debug_assert!(layout_name.len() + 1 <= PMEMOBJ_MAX_ALLOC_SIZE as usize, "layout_name length '{}' + 1 is greater than PMEMOBJ_MAX_ALLOC_SIZE '{}'", layout_name.len(), PMEMOBJ_MAX_ALLOC_SIZE);
 		
-		let cString = CString::new(layoutName).expect("Invalid layout name");
+		let c_string = CString::new(layout_name).expect("Invalid layout name");
 		
-		cString.into_raw()
+		c_string.into_raw()
 	}
 	else
 	{

@@ -8,6 +8,7 @@ pub trait ListEntryPersistable: Persistable
 	/// The offset in bytes of the field in the Persistable-implementing struct that holds the next() pointer
 	const PersistentCircularDoublyLinkedListEntryFieldOffset: size_t = 0;
 	
+	/// Tell calling code which field in this persistable linked list is used to record next / previous entry.
 	#[inline(always)]
-	fn listEntryField(&self) -> &PersistentCircularDoublyLinkedListEntry<Self>;
+	fn list_entry_field(&self) -> &PersistentCircularDoublyLinkedListEntry<Self>;
 }

@@ -10,21 +10,23 @@ pub trait OID
 	#[inline(always)]
 	fn is_null(&self) -> bool;
 	
-	/// Comparision
+	/// Comparision.
 	#[inline(always)]
 	fn equals(&self, other: &Self) -> bool;
 	
-	/// Can be NULL, but only if is_null() is true
+	/// Can be NULL, but only if is_null() is true.
 	#[inline(always)]
-	fn persistentObjectPool(&self) -> *mut PMEMobjpool;
+	fn object_pool(&self) -> *mut PMEMobjpool;
 	
+	/// Actual allocated size.
 	#[inline(always)]
-	fn allocatedUsefulSize(&self) -> size_t;
+	fn allocated_useful_size(&self) -> size_t;
 	
+	/// type number; unique for each type (struct). Root type is number 0.
 	#[inline(always)]
-	fn typeNumber(&self) -> TypeNumber;
+	fn type_number(&self) -> TypeNumber;
 	
-	/// Can be NULL, but only if is_null() is true
+	/// Can be NULL, but only if is_null() is true.
 	#[inline(always)]
 	fn address(&self) -> *mut c_void;
 }
@@ -44,19 +46,19 @@ impl OID for PMEMoid
 	}
 	
 	#[inline(always)]
-	fn persistentObjectPool(&self) -> *mut PMEMobjpool
+	fn object_pool(&self) -> *mut PMEMobjpool
 	{
 		unsafe { pmemobj_pool_by_oid(*self) }
 	}
 	
 	#[inline(always)]
-	fn allocatedUsefulSize(&self) -> size_t
+	fn allocated_useful_size(&self) -> size_t
 	{
 		unsafe { pmemobj_alloc_usable_size(*self) }
 	}
 	
 	#[inline(always)]
-	fn typeNumber(&self) -> TypeNumber
+	fn type_number(&self) -> TypeNumber
 	{
 		unsafe { pmemobj_type_num(*self) }
 	}
@@ -68,12 +70,14 @@ impl OID for PMEMoid
 	}
 }
 
+#[allow(non_snake_case)]
 #[inline(always)]
 fn OID_IS_NULL(o: &PMEMoid) -> bool
 {
 	o.off == 0
 }
 
+#[allow(non_snake_case)]
 #[inline(always)]
 fn OID_EQUALS(lhs: &PMEMoid, rhs: &PMEMoid) -> bool
 {
