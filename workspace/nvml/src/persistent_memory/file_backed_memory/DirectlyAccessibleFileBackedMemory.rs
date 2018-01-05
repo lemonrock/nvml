@@ -105,7 +105,7 @@ impl DirectlyAccessibleFileBackedMemory
 	#[inline(always)]
 	pub fn persist_on_drop<'a>(&'a self) -> PersistOnDrop<'a>
 	{
-		PersistOnDrop(self.address, PhantomData)
+		PersistOnDrop(self._address(), PhantomData)
 	}
 	
 	/// aka 'memmove' in C.
