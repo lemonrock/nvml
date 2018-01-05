@@ -25,6 +25,7 @@
       <w>iovec</w>
       <w>isize</w>
       <w>isystem</w>
+      <w>jemalloc</w>
       <w>libpmem</w>
       <w>libpmemblk</w>
       <w>libpmemcto</w>

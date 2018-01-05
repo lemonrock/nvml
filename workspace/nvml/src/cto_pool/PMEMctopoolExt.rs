@@ -38,18 +38,11 @@ trait PMEMctopoolExt
 	#[inline(always)]
 	fn malloc<T>(self) -> Result<*mut T, PmdkError>;
 	
-	/// The size_of::<T> must not be zero.
-	/// The align_of::<T> must be a power of two.
-	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
-	/// self can not be null.
-	#[inline(always)]
-	fn aligned_alloc<T>(self) -> Result<*mut T, PmdkError>;
-	
 	/// Aligned allocation.
 	/// If memory can not be allocated, returns a PmdkError with `isENOMEM()` true. Never returns `Ok(null_mut())`.
 	/// self can not be null.
 	#[inline(always)]
-	fn aligned_allocate_from_layout(self, layout: &Layout) -> Result<*mut u8, PmdkError>;
+	fn aligned_alloc(self, alignment: usize, size: usize) -> Result<*mut c_void, PmdkError>;
 	
 	/// The size_of::<T> must not be zero.
 	/// Count can not be zero.
@@ -141,7 +134,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	}
 	
 	#[inline(always)]
-	fn aligned_alloc<T>(self) -> Result<*mut T, PmdkError>
+	fn aligned_alloc(self, alignment: usize, size: usize) -> Result<*mut c_void, PmdkError>
 	{
 		#[inline(always)]
 		fn is_power_of_two(value: size_t) -> bool
@@ -151,10 +144,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 		
 		debug_assert!(!self.is_null(), "self can not be null");
 		
-		let alignment = align_of::<T>();
 		debug_assert!(!is_power_of_two(alignment), "alignment must be a power of two");
 		
-		let size = size_of::<T>() as size_t;
 		debug_assert!(size != 0, "size_of::<T>() can not be zero");
 		
 		let result = unsafe { pmemcto_aligned_alloc(self, alignment, size) };
@@ -164,33 +155,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 		}
 		else
 		{
-			Ok(result as *mut T)
-		}
-	}
-	
-	#[inline(always)]
-	fn aligned_allocate_from_layout(self, layout: &Layout) -> Result<*mut u8, PmdkError>
-	{
-		#[inline(always)]
-		fn is_power_of_two(value: size_t) -> bool
-		{
-			(value != 0) && ((value & (value - 1)) == 0)
-		}
-		
-		let alignment = layout.align();
-		debug_assert!(!is_power_of_two(alignment), "align() must be a power of two");
-		
-		let size = layout.size();
-		debug_assert!(size != 0, "size() can not be zero");
-		
-		let result = unsafe { pmemcto_aligned_alloc(self, alignment, size) };
-		if unlikely(result.is_null())
-		{
-			PmdkError::cto("pmemcto_aligned_alloc")
-		}
-		else
-		{
-			Ok(result as *mut u8)
+			Ok(result)
 		}
 	}
 	

@@ -28,72 +28,28 @@ impl<T: CtoSafe + Send + Sync> Eq for CtoPool<T>
 {
 }
 
-/*
-use ::std::heap::Alloc;
-use ::std::heap::AllocErr;
-use ::std::heap::Layout;
-
 unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
 {
 	#[inline(always)]
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>
 	{
-		let pointer = (self.0).0.aligned_allocate_from_layout(&layout).map_err(|_| AllocError::Unsupported
-		{
-			details: "Not easily supplied"
-		})?;
-		if pointer.is_null()
-		{
-			Err(AllocError::Exhausted
-			{
-				request: layout
-			})
-		}
-		else
-		{
-			Ok(pointer)
-		}
-		
-		TODO:
-		xxx; // adjust all other methods in PMEMctopoolEx to check for null from malloc, etc..
+		self.alloc_trait_allocate(&layout)
 	}
 	
 	#[inline(always)]
-	unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout)
+	unsafe fn dealloc(&mut self, ptr: *mut u8, _layout: Layout)
 	{
-		debug_assert!(!ptr.is_null(), "ptr is null");
-		
-		(self.0).0.free(ptr)
+		self.alloc_trait_free(ptr)
 	}
 	
-	xxxx - use realloc
-	unsafe fn realloc(&mut self,
-		ptr: *mut u8,
-		layout: Layout,
-		new_layout: Layout) -> Result<*mut u8, AllocErr> {
-		let new_size = new_layout.size();
-		let old_size = layout.size();
-		let aligns_match = layout.align == new_layout.align;
-		
-		if new_size >= old_size && aligns_match {
-			if let Ok(()) = self.grow_in_place(ptr, layout.clone(), new_layout.clone()) {
-				return Ok(ptr);
-			}
-		} else if new_size < old_size && aligns_match {
-			if let Ok(()) = self.shrink_in_place(ptr, layout.clone(), new_layout.clone()) {
-				return Ok(ptr);
-			}
-		}
-		
-		// otherwise, fall back on alloc + copy + dealloc.
-		let result = self.alloc(new_layout);
-		if let Ok(new_ptr) = result {
-			ptr::copy_nonoverlapping(ptr as *const u8, new_ptr, cmp::min(old_size, new_size));
-			self.dealloc(ptr, layout);
-		}
-		result
+	#[inline(always)]
+	unsafe fn realloc(&mut self, old_pointer: *mut u8, old_layout: Layout, new_layout: Layout) -> Result<*mut u8, AllocErr>
+	{
+		self.alloc_trait_reallocate(old_pointer, &old_layout, &new_layout)
 	}
-	
+}
+
+/*
 	unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
 		
 		(self.0).0.usable_size(xxxxx)
@@ -177,5 +133,75 @@ impl<T: CtoSafe + Send + Sync> CtoPool<T>
 	pub fn root(&self) -> &RwLock<CtoRootBox<T>>
 	{
 		&self.1
+	}
+	
+	#[inline(always)]
+	fn as_ptr(&self) -> *mut PMEMctopool
+	{
+		(self.0).0
+	}
+	
+	#[inline(always)]
+	fn alloc_trait_allocate(&self, layout: &Layout) -> Result<*mut u8, AllocErr>
+	{
+		Self::map_allocation_result(self.as_ptr().aligned_alloc(layout.align(), layout.size()), "PMDK libpmemcto.pmemcto_aligned_alloc failed", layout)
+	}
+	
+	#[inline(always)]
+	fn alloc_trait_reallocate(&self, old_pointer: *mut u8, old_layout: &Layout, new_layout: &Layout) -> Result<*mut u8, AllocErr>
+	{
+		debug_assert!(!old_pointer.is_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null for size == 0");
+		
+		let old_size = old_layout.size();
+		let new_size = new_layout.size();
+		let alignment_is_unchanged = old_layout.align() == new_layout.align();
+		
+		if alignment_is_unchanged
+		{
+			if unlikely(old_size == new_size)
+			{
+				Ok(old_pointer)
+			}
+			else
+			{
+				Self::map_allocation_result(self.as_ptr().realloc(old_pointer as *mut _, new_size), "PMDK libpmemcto.pmemcto_realloc failed", new_layout)
+			}
+		}
+		else
+		{
+			let new_pointer = self.alloc_trait_allocate(new_layout)?;
+			unsafe { copy_nonoverlapping(old_pointer as *const _, new_pointer, min(old_size, new_size)) };
+			self.alloc_trait_free(old_pointer);
+			Ok(new_pointer)
+		}
+	}
+	
+	#[inline(always)]
+	fn alloc_trait_free(&self, pointer_to_free: *mut u8)
+	{
+		debug_assert!(!pointer_to_free.is_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null");
+		
+		self.as_ptr().free(pointer_to_free)
+	}
+	
+	#[inline(always)]
+	fn map_allocation_result(allocation_result: Result<*mut c_void, PmdkError>, error_message: &'static str, request: &Layout) -> Result<*mut u8, AllocErr>
+	{
+		match allocation_result
+		{
+			Err(pmdk_error) => Err
+			(
+				if pmdk_error.is_ENOMEM()
+				{
+					AllocErr::Exhausted { request: request.clone() }
+				}
+				else
+				{
+					AllocErr::invalid_input(error_message)
+				}
+			),
+			
+			Ok(allocation_pointer) => Ok(allocation_pointer as *mut u8)
+		}
 	}
 }

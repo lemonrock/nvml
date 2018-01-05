@@ -74,6 +74,14 @@ impl<'ctopool> CtoPoolAllocator<'ctopool>
 	#[inline(always)]
 	fn aligned_allocate<T: CtoSafe>(&self) -> Result<*mut T, PmdkError>
 	{
-		self.0.deref().0.aligned_alloc::<T>()
+		let alignment = align_of::<T>();
+		let size = size_of::<T>() as size_t;
+		self.as_ptr().aligned_alloc(alignment, size).map(|pointer| pointer as *mut T)
+	}
+	
+	#[inline(always)]
+	fn as_ptr(&self) -> *mut PMEMctopool
+	{
+		self.0.deref().0
 	}
 }
