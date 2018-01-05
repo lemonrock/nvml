@@ -63,6 +63,27 @@ pub trait FileBackedMemory<'memory> : Sized + Send + Sync
 	#[inline(always)]
 	fn persist_on_drop(&'memory self) -> Self::PersistOnDropT;
 	
+	/// Similar to 'memmove' in C.
+	/// Insanely fast for non-persistent memory (no persistence, of course).
+	/// Very fast for directly-accessible persistent memory.
+	/// Slow for mmap persistent memory.
+	#[inline(always)]
+	fn copy_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void);
+	
+	/// Similar to 'memcpy' in C.
+	/// Insanely fast for non-persistent memory (no persistence, of course).
+	/// Very fast for directly-accessible persistent memory.
+	/// Slow for mmap persistent memory.
+	#[inline(always)]
+	fn copy_nonoverlapping_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void);
+	
+	/// Similar to 'memset' in C.
+	/// Insanely fast for non-persistent memory (no persistence, of course).
+	/// Very fast for directly-accessible persistent memory.
+	/// Slow for mmap persistent memory.
+	#[inline(always)]
+	fn write_bytes_then_persist_at_alignment_granularity(&self, offset: usize, count: usize, value: u8);
+	
 	/// offset into this memory (debug asserts it is within `mapped_length()`)
 	#[inline(always)]
 	fn offset(&self, offset: usize) -> *mut c_void

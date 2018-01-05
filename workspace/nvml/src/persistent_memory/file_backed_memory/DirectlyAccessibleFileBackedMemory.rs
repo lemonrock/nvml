@@ -53,6 +53,32 @@ impl<'memory> FileBackedMemory<'memory> for DirectlyAccessibleFileBackedMemory
 		DirectlyAccessiblePersistOnDrop(self.address(), PhantomData)
 	}
 	
+	#[inline(always)]
+	fn copy_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memmove_persist(self.offset(offset), from, length) };
+	}
+	
+	#[inline(always)]
+	fn copy_nonoverlapping_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memcpy_persist(self.offset(offset), from, length) };
+	}
+	
+	#[inline(always)]
+	fn write_bytes_then_persist_at_alignment_granularity(&self, offset: usize, count: usize, value: u8)
+	{
+		debug_assert!(offset + count <= self.mapped_length(), "offset '{}' + count '{}' is greater than mapped length '{}'", offset, count, self.mapped_length());
+		
+		unsafe { pmem_memset_persist(self.offset(offset), value as i32, count) };
+	}
+	
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _open_flags(_exclusive: bool) -> FileBackedMemoryOpenFlags
@@ -104,34 +130,5 @@ impl DirectlyAccessibleFileBackedMemory
 	pub fn drain_after_flush()
 	{
 		unsafe { pmem_drain() }
-	}
-	
-	/// aka 'memmove' in C.
-	#[inline(always)]
-	pub fn copy_then_persist_quickly_at_cache_line_granularity(&self, offset: usize, length: usize, from: *const c_void)
-	{
-		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
-		debug_assert!(!from.is_null(), "from must not be null");
-		
-		unsafe { pmem_memmove_persist(self.offset(offset), from, length) };
-	}
-	
-	/// aka 'memcpy' in C.
-	#[inline(always)]
-	pub fn copy_nonoverlapping_then_persist_quickly_at_cache_line_granularity(&self, offset: usize, length: usize, from: *const c_void)
-	{
-		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
-		debug_assert!(!from.is_null(), "from must not be null");
-		
-		unsafe { pmem_memcpy_persist(self.offset(offset), from, length) };
-	}
-	
-	/// aka 'memset' in C.
-	#[inline(always)]
-	pub fn write_bytes_then_persist_quickly_at_cache_line_granularity(&self, offset: usize, count: usize, value: u8)
-	{
-		debug_assert!(offset + count <= self.mapped_length(), "offset '{}' + count '{}' is greater than mapped length '{}'", offset, count, self.mapped_length());
-		
-		unsafe { pmem_memset_persist(self.offset(offset), value as i32, count) };
 	}
 }

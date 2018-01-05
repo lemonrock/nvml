@@ -52,6 +52,35 @@ impl<'memory> FileBackedMemory<'memory> for MappedFileBackedMemory
 		MappedPersistOnDrop(self.address(), PhantomData, Cell::new(0))
 	}
 	
+	#[inline(always)]
+	fn copy_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { pmem_memmove_persist(self.offset(offset), from, length) };
+		self.persist_slowly_at_page_size_granularity(offset, length)
+	}
+	
+	#[inline(always)]
+	fn copy_nonoverlapping_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
+	{
+		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
+		debug_assert!(!from.is_null(), "from must not be null");
+		
+		unsafe { copy_nonoverlapping(from, self.offset(offset), length) }
+		self.persist_slowly_at_page_size_granularity(offset, length)
+	}
+	
+	#[inline(always)]
+	fn write_bytes_then_persist_at_alignment_granularity(&self, offset: usize, count: usize, value: u8)
+	{
+		debug_assert!(offset + count <= self.mapped_length(), "offset '{}' + count '{}' is greater than mapped length '{}'", offset, count, self.mapped_length());
+		
+		unsafe { write_bytes(self.offset(offset), value, count) }
+		self.persist_slowly_at_page_size_granularity(offset, count)
+	}
+	
 	#[doc(hidden)]
 	#[inline(always)]
 	fn _open_flags(exclusive: bool) -> FileBackedMemoryOpenFlags
