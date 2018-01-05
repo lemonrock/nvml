@@ -25,23 +25,23 @@ trait PMEMblkpoolExt
 	/// to can not be null.
 	/// self can not be null.
 	#[inline(always)]
-	fn read_from(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool;
+	fn read_from(self, to: *mut c_void, zero_based_block_index: usize) -> bool;
 	
 	/// Write to a block.
 	/// from can not be null.
 	/// self can not be null.
 	#[inline(always)]
-	fn write_to(self, from: *const c_void, zeroBasedBlockIndex: usize);
+	fn write_to(self, from: *const c_void, zero_based_block_index: usize);
 	
 	/// Set a block to all zeros.
 	/// self can not be null.
 	#[inline(always)]
-	fn set_zero(self, zeroBasedBlockIndex: usize);
+	fn set_zero(self, zero_based_block_index: usize);
 	
 	/// Set a block to being in an error state (ie set its error condition).
 	/// self can not be null.
 	#[inline(always)]
-	fn set_error(self, zeroBasedBlockIndex: usize);
+	fn set_error(self, zero_based_block_index: usize);
 }
 
 macro_rules! debug_assert_self_is_not_null
@@ -79,13 +79,13 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn read_from(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
+	fn read_from(self, to: *mut c_void, zero_based_block_index: usize) -> bool
 	{
 		debug_assert_self_is_not_null!(self);
 		debug_assert!(!to.is_null(), "to can not be null");
-		debug_assert!(zeroBasedBlockIndex < self.number_of_blocks_available_in_block_pool(), "zeroBasedBlockIndex '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zeroBasedBlockIndex, self.number_of_blocks_available_in_block_pool());
+		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
-		let result = unsafe { pmemblk_read(self, to, zeroBasedBlockIndex as c_longlong)};
+		let result = unsafe { pmemblk_read(self, to, zero_based_block_index as c_longlong)};
 		if likely(result == 0)
 		{
 			return true;
@@ -96,8 +96,8 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 		}
 		else
 		{
-			let osErrorNumber = errno().0;
-			if likely(osErrorNumber == E::EIO)
+			let os_error_number = errno().0;
+			if likely(os_error_number == E::EIO)
 			{
 				false
 			}
@@ -109,13 +109,13 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn write_to(self, from: *const c_void, zeroBasedBlockIndex: usize)
+	fn write_to(self, from: *const c_void, zero_based_block_index: usize)
 	{
 		debug_assert_self_is_not_null!(self);
 		debug_assert!(!from.is_null(), "from can not be null");
-		debug_assert!(zeroBasedBlockIndex < self.number_of_blocks_available_in_block_pool(), "zeroBasedBlockIndex '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zeroBasedBlockIndex, self.number_of_blocks_available_in_block_pool());
+		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
-		let result = unsafe { pmemblk_write(self, from, zeroBasedBlockIndex as c_longlong)};
+		let result = unsafe { pmemblk_write(self, from, zero_based_block_index as c_longlong)};
 		if likely(result == 0)
 		{
 			return;
@@ -131,12 +131,12 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn set_zero(self, zeroBasedBlockIndex: usize)
+	fn set_zero(self, zero_based_block_index: usize)
 	{
 		debug_assert_self_is_not_null!(self);
-		debug_assert!(zeroBasedBlockIndex < self.number_of_blocks_available_in_block_pool(), "zeroBasedBlockIndex '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zeroBasedBlockIndex, self.number_of_blocks_available_in_block_pool());
+		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
-		let result = unsafe { pmemblk_set_zero(self, zeroBasedBlockIndex as c_longlong)};
+		let result = unsafe { pmemblk_set_zero(self, zero_based_block_index as c_longlong)};
 		if likely(result == 0)
 		{
 			return;
@@ -152,12 +152,12 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	}
 	
 	#[inline(always)]
-	fn set_error(self, zeroBasedBlockIndex: usize)
+	fn set_error(self, zero_based_block_index: usize)
 	{
 		debug_assert_self_is_not_null!(self);
-		debug_assert!(zeroBasedBlockIndex < self.number_of_blocks_available_in_block_pool(), "zeroBasedBlockIndex '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zeroBasedBlockIndex, self.number_of_blocks_available_in_block_pool());
+		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
-		let result = unsafe { pmemblk_set_error(self, zeroBasedBlockIndex as c_longlong)};
+		let result = unsafe { pmemblk_set_error(self, zero_based_block_index as c_longlong)};
 		if likely(result == 0)
 		{
 			return;

@@ -24,7 +24,7 @@ use ::syscall_alt::constants::E::ENOMEM;
 pub mod file_backed_memory;
 
 
-include!("c_voidConstExt.rs");
+include!("c_voidExt.rs");
 include!("c_voidMutExt.rs");
 include!("has_hardware_drain_instruction.rs");
 include!("PersistOnDrop.rs");

@@ -47,20 +47,20 @@ pub trait FileBackedMemory : Sized + Send + Sync
 			return Err(result.unwrap_err());
 		}
 		
-		let (address, mappedLength, is_persistent_memory) = result.unwrap();
+		let (address, mapped_length, is_persistent_memory) = result.unwrap();
 		
 		if unlikely(address.is_null())
 		{
 			panic!("Mapping returned a null address");
 		}
 		
-		if likely(Self::_finish_mapping_if_memory_is_of_correct_type(is_persistent_memory, address.is_persistent_memory_that_supports_flushing_with_persist(mappedLength)))
+		if likely(Self::_finish_mapping_if_memory_is_of_correct_type(is_persistent_memory, address.is_persistent_memory_that_supports_flushing_with_persist(mapped_length)))
 		{
-			Ok(Some(Self::_new(address, mappedLength)))
+			Ok(Some(Self::_new(address, mapped_length)))
 		}
 		else
 		{
-			address.unmap(mappedLength);
+			address.unmap(mapped_length);
 			Ok(None)
 		}
 	}

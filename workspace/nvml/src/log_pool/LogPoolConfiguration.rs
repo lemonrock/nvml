@@ -33,9 +33,9 @@ impl LogPoolConfiguration
 {
 	/// Open or create (if necessary) a log pool.
 	/// Do not use this method directly unless only using one log pool.
-	pub fn open_or_create(&self, object_pool_sets_folder_path: &Path, file_name: &str) -> LogPool
+	pub fn open_or_create(&self, log_pool_sets_folder_path: &Path, file_name: &str) -> LogPool
 	{
-		let pool_set_file_path = object_pool_sets_folder_path.join(file_name);
+		let pool_set_file_path = log_pool_sets_folder_path.join(file_name);
 		
 		if likely(pool_set_file_path.exists())
 		{
@@ -44,16 +44,16 @@ impl LogPoolConfiguration
 		}
 		else
 		{
-			let poolSize = match self.pool_size
+			let pool_size = match self.pool_size
 			{
 				None => 0,
-				Some(poolSize) =>
+				Some(pool_size) =>
 				{
-					assert!(poolSize >= PMEMLOG_MIN_POOL, "poolSize '{}' is smaller than PMEMLOG_MIN_POOL '{}'", poolSize, PMEMLOG_MIN_POOL);
-					poolSize
+					assert!(pool_size >= PMEMLOG_MIN_POOL, "pool_size '{}' is smaller than PMEMLOG_MIN_POOL '{}'", pool_size, PMEMLOG_MIN_POOL);
+					pool_size
 				},
 			};
-			LogPool::create(&pool_set_file_path, poolSize, self.permissions).expect("Could not create LogPool")
+			LogPool::create(&pool_set_file_path, pool_size, self.permissions).expect("Could not create LogPool")
 		}
 	}
 }

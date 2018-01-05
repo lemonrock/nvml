@@ -21,14 +21,14 @@ impl Display for PmdkError
 	#[inline(always)]
 	fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error>
 	{
-		let lastErrorMessageOnThisThread = self.last_error_message_on_this_thread.as_ref();
-		if likely(lastErrorMessageOnThisThread.is_ok())
+		let last_error_message_on_this_thread = self.last_error_message_on_this_thread.as_ref();
+		if likely(last_error_message_on_this_thread.is_ok())
 		{
-			write!(formatter, "Generic Error Number '{}': '{}'", self.os_error_number, lastErrorMessageOnThisThread.unwrap())
+			write!(formatter, "Generic Error Number '{}': '{}'", self.os_error_number, last_error_message_on_this_thread.unwrap())
 		}
 		else
 		{
-			write!(formatter, "Generic Error Number '{}': No message ({})", self.os_error_number, lastErrorMessageOnThisThread.unwrap_err())
+			write!(formatter, "Generic Error Number '{}': No message ({})", self.os_error_number, last_error_message_on_this_thread.unwrap_err())
 		}
 	}
 }
@@ -128,6 +128,7 @@ impl PmdkError
 	}
 	
 	/// is this error EINVAL?, eg due to invalid arguments?
+	#[allow(non_snake_case)]
 	#[inline(always)]
 	pub fn is_EINVAL(&self) -> bool
 	{
@@ -135,6 +136,7 @@ impl PmdkError
 	}
 	
 	/// is this error ENOMEM?, eg due to memory exhaustion?
+	#[allow(non_snake_case)]
 	#[inline(always)]
 	pub fn is_ENOMEM(&self) -> bool
 	{

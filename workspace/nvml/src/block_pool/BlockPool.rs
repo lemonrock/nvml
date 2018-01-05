@@ -28,25 +28,25 @@ impl BlockPool
 	#[inline(always)]
 	pub fn open(pool_set_file_path: &Path, validate_block_size_is: Option<usize>) -> Result<Self, PmdkError>
 	{
-		let blockSize = if let Some(blockSize) = validate_block_size_is
+		let block_size = if let Some(block_size) = validate_block_size_is
 		{
-			assert_ne!(blockSize, 0, "blockSize can not be zero");
-			blockSize
+			assert_ne!(block_size, 0, "block_size can not be zero");
+			block_size
 		}
 		else
 		{
 			0
 		};
 		
-		pool_set_file_path.open_block_pool(blockSize).map(Self::fromHandle)
+		pool_set_file_path.open_block_pool(block_size).map(Self::from_handle)
 	}
 	
 	/// Create a new pool.
 	/// Prefer the use of `BlockPoolConfiguration.open_or_create()`.
 	#[inline(always)]
-	pub fn create(pool_set_file_path: &Path, blockSize: usize, poolSize: usize, mode: mode_t) -> Result<Self, PmdkError>
+	pub fn create(pool_set_file_path: &Path, block_size: usize, pool_size: usize, mode: mode_t) -> Result<Self, PmdkError>
 	{
-		pool_set_file_path.create_block_pool(blockSize, poolSize, mode).map(Self::fromHandle)
+		pool_set_file_path.create_block_pool(block_size, pool_size, mode).map(Self::from_handle)
 	}
 	
 	/// Size of blocks in the block pool.
@@ -66,34 +66,34 @@ impl BlockPool
 	/// Read from a block.
 	/// Returns false if the block has previously had its error condition set (see `set_error()`).
 	#[inline(always)]
-	pub fn read(self, to: *mut c_void, zeroBasedBlockIndex: usize) -> bool
+	pub fn read(self, to: *mut c_void, zero_based_block_index: usize) -> bool
 	{
-		self.0.read_from(to, zeroBasedBlockIndex)
+		self.0.read_from(to, zero_based_block_index)
 	}
 	
 	/// Write to a block.
 	#[inline(always)]
-	pub fn write(self, from: *const c_void, zeroBasedBlockIndex: usize)
+	pub fn write(self, from: *const c_void, zero_based_block_index: usize)
 	{
-		self.0.write_to(from, zeroBasedBlockIndex)
+		self.0.write_to(from, zero_based_block_index)
 	}
 	
 	/// Set a block to all zeros.
 	#[inline(always)]
-	pub fn set_zero(self, zeroBasedBlockIndex: usize)
+	pub fn set_zero(self, zero_based_block_index: usize)
 	{
-		self.0.set_zero(zeroBasedBlockIndex)
+		self.0.set_zero(zero_based_block_index)
 	}
 	
 	/// Set a block to being in an error state (ie set its error condition).
 	#[inline(always)]
-	pub fn set_error(self, zeroBasedBlockIndex: usize)
+	pub fn set_error(self, zero_based_block_index: usize)
 	{
-		self.0.set_error(zeroBasedBlockIndex)
+		self.0.set_error(zero_based_block_index)
 	}
 	
 	#[inline(always)]
-	fn fromHandle(handle: *mut PMEMblkpool) -> Self
+	fn from_handle(handle: *mut PMEMblkpool) -> Self
 	{
 		debug_assert!(!handle.is_null(), "PMEMblkpool handle is null");
 		

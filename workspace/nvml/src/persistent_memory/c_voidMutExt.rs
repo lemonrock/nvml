@@ -3,6 +3,7 @@
 
 
 /// Extension trait to *mut c_void pointers to make it easier to work with persistent memory.
+#[allow(non_camel_case_types)]
 pub trait c_voidMutExt
 {
 	/// Unmap persistent memory.

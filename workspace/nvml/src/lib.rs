@@ -2,16 +2,14 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+#![allow(non_upper_case_globals)]
+#![deny(missing_docs)]
 #![feature(allocator_api)]
 #![feature(const_fn)]
 #![feature(optin_builtin_traits)]
 #![feature(specialization)]
 #![feature(thread_local)]
 #![feature(untagged_unions)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-#![allow(non_upper_case_globals)]
-#![deny(missing_docs)]
 
 
 //! # nvml

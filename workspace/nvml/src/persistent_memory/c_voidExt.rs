@@ -3,7 +3,8 @@
 
 
 /// Extension trait to *const c_void (and *mut c_void) pointers to make it easier to work with persistent memory.
-pub trait c_voidConstExt
+#[allow(non_camel_case_types)]
+pub trait c_voidExt
 {
 	/// On Linux, only returns true if memory is mapped directly from a device file of the kind `/dev/daxX.Y` (aka a Device DAX) without an intervening filesystem
 	/// Only returns true if ALL memory in the range is persistent.
@@ -58,7 +59,7 @@ macro_rules! debug_assert_self_is_not_null
 	}
 }
 
-impl c_voidConstExt for *const c_void
+impl c_voidExt for *const c_void
 {
 	#[inline(always)]
 	fn is_persistent_memory_that_supports_flushing_with_persist(self, length: usize) -> bool
@@ -130,7 +131,7 @@ impl c_voidConstExt for *const c_void
 	}
 }
 
-impl c_voidConstExt for *mut c_void
+impl c_voidExt for *mut c_void
 {
 	#[inline(always)]
 	fn is_persistent_memory_that_supports_flushing_with_persist(self, length: usize) -> bool

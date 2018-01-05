@@ -16,7 +16,7 @@ pub trait PersistentMemoryLogPoolPathExt
 	
 	/// Create (and implicitly open) a new log pool.
 	#[inline(always)]
-	fn create_log_pool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
+	fn create_log_pool(&self, pool_size: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>;
 }
 
 impl PersistentMemoryLogPoolPathExt for Path
@@ -50,9 +50,9 @@ impl PersistentMemoryLogPoolPathExt for Path
 	}
 	
 	#[inline(always)]
-	fn create_log_pool(&self, poolSize: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>
+	fn create_log_pool(&self, pool_size: usize, mode: mode_t) -> Result<*mut PMEMlogpool, PmdkError>
 	{
-		let result = use_path!(self, pmemlog_create, poolSize, mode);
+		let result = use_path!(self, pmemlog_create, pool_size, mode);
 		
 		if unlikely(result.is_null())
 		{

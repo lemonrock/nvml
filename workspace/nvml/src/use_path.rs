@@ -7,8 +7,8 @@ macro_rules! use_path
 	($self: ident, $function: path$(,$argument: expr)*) =>
 	{
 		{
-			let osPath = $self.as_os_str();
-			let bytes = osPath.as_bytes();
+			let os_path = $self.as_os_str();
+			let bytes = os_path.as_bytes();
 			let pointer = bytes.as_ptr() as *const c_char;
 
 			unsafe { $function(pointer$(,$argument)*) }

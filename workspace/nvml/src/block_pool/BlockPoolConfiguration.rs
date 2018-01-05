@@ -39,9 +39,9 @@ impl BlockPoolConfiguration
 {
 	/// Open or create (if necessary) a block pool.
 	/// Do not use this method directly unless only using one block pool.
-	pub fn open_or_create(&self, objectPoolSetsFolderPath: &Path, fileName: &str) -> BlockPool
+	pub fn open_or_create(&self, block_pool_sets_folder_path: &Path, file_name: &str) -> BlockPool
 	{
-		let pool_set_file_path = objectPoolSetsFolderPath.join(fileName);
+		let pool_set_file_path = block_pool_sets_folder_path.join(file_name);
 		
 		if likely(pool_set_file_path.exists())
 		{
@@ -51,22 +51,22 @@ impl BlockPoolConfiguration
 		else
 		{
 			
-			let blockSize = match self.block_size
+			let block_size = match self.block_size
 			{
 				None => PMEMBLK_MIN_BLK,
-				Some(blockSize) => min(blockSize, PMEMBLK_MIN_BLK)
+				Some(block_size) => min(block_size, PMEMBLK_MIN_BLK)
 			};
 			
-			let poolSize = match self.pool_size
+			let pool_size = match self.pool_size
 			{
 				None => 0,
-				Some(poolSize) =>
+				Some(pool_size) =>
 				{
-					assert!(poolSize >= PMEMBLK_MIN_POOL, "poolSize '{}' is smaller than PMEMBLK_MIN_POOL '{}'", poolSize, PMEMBLK_MIN_POOL);
-					poolSize
+					assert!(pool_size >= PMEMBLK_MIN_POOL, "pool_size '{}' is smaller than PMEMBLK_MIN_POOL '{}'", pool_size, PMEMBLK_MIN_POOL);
+					pool_size
 				},
 			};
-			BlockPool::create(&pool_set_file_path, blockSize, poolSize, self.permissions).expect("Could not create BlockPool")
+			BlockPool::create(&pool_set_file_path, block_size, pool_size, self.permissions).expect("Could not create BlockPool")
 		}
 	}
 }
