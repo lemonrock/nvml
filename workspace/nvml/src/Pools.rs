@@ -13,18 +13,21 @@ pub struct Pools
 
 impl Pools
 {
+	/// Get a block pool.
 	#[inline(always)]
 	pub fn get_block_pool(&self, pool_name: &str) -> Option<BlockPool>
 	{
 		self.block_pools.get(pool_name).map(|pool| pool.clone())
 	}
 	
+	/// Get a log pool.
 	#[inline(always)]
 	pub fn get_log_pool(&self, pool_name: &str) -> Option<LogPool>
 	{
 		self.log_pools.get(pool_name).map(|pool| pool.clone())
 	}
 	
+	/// Get an object pool.
 	#[inline(always)]
 	pub fn get_object_pool(&self, pool_name: &str) -> Option<ObjectPool>
 	{

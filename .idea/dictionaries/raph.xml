@@ -22,6 +22,9 @@
       <w>isize</w>
       <w>isystem</w>
       <w>libpmem</w>
+      <w>libpmemblk</w>
+      <w>libpmemcto</w>
+      <w>libpmemlog</w>
       <w>libpmemobj</w>
       <w>longjmp</w>
       <w>longlong</w>
