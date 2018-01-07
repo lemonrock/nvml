@@ -57,7 +57,7 @@ impl<T: CtoSafe> Drop for CtoMutexLock<T>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		unsafe { self.destroy_mutex() }
+		unsafe { self.destroy() }
 		CtoPoolInner::free(&self.cto_pool_inner, self.value.get())
 	}
 }
@@ -68,18 +68,13 @@ impl<T: CtoSafe> CtoSafe for CtoMutexLock<T>
 	#[inline(always)]
 	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
-		self.mutex = UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER);
+		#[cfg(unix)]
+		{
+			self.mutex = UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER);
+		}
 		self.cto_pool_inner = cto_pool_inner.clone();
 		
-		unsafe { self.initialize_mutex() }
-	}
-}
-
-macro_rules! debug_assert_pthread_result_ok
-{
-	($result: ident) =>
-	{
-		debug_assert_eq!($result, CtoMutexLock::<T>::ResultIsOk, "result from pthread function was not OK");
+		unsafe { self.initialize() }
 	}
 }
 
@@ -95,10 +90,7 @@ impl<T: CtoSafe> CtoMutexLock<T>
 			debug_assert_pthread_result_ok!(result);
 		}
 		
-		CtoMutexLockGuard
-		{
-			cto_mutex_lock: self
-		}
+		CtoMutexLockGuard(self)
 	}
 	
 	/// Returns Some(lock_guard) if could be locked.
@@ -109,15 +101,9 @@ impl<T: CtoSafe> CtoMutexLock<T>
 		#[cfg(unix)]
 		{
 			// Error codes are EBUSY (lock in use) and EINVAL (which should not occur).
-			if unsafe { pthread_mutex_trylock(self.mutex.get()) } == CtoMutexLock::<T>::ResultIsOk
+			if unsafe { pthread_mutex_trylock(self.mutex.get()) } == ResultIsOk
 			{
-				Some
-				(
-					CtoMutexLockGuard
-					{
-						cto_mutex_lock: self
-					}
-				)
+				Some(CtoMutexLockGuard(self))
 			}
 			else
 			{
@@ -125,8 +111,6 @@ impl<T: CtoSafe> CtoMutexLock<T>
 			}
 		}
 	}
-	
-	const ResultIsOk: i32 = 0;
 	
 	// This should be called once the mutex is at a stable memory address.
 	//
@@ -148,7 +132,7 @@ impl<T: CtoSafe> CtoMutexLock<T>
 	// re-lock it from the same thread, thus avoiding undefined behavior.
 	#[cfg(unix)]
 	#[inline(always)]
-	unsafe fn initialize_mutex(&mut self)
+	unsafe fn initialize(&mut self)
 	{
 		let mut mutex_options: pthread_mutexattr_t = uninitialized();
 		
@@ -168,7 +152,7 @@ impl<T: CtoSafe> CtoMutexLock<T>
 	// Behavior is undefined if there are current or will be future users of this mutex.
 	#[cfg(unix)]
 	#[inline(always)]
-	unsafe fn destroy_mutex(&self)
+	unsafe fn destroy(&self)
 	{
 		let result = pthread_mutex_destroy(self.mutex.get());
 		
@@ -181,7 +165,7 @@ impl<T: CtoSafe> CtoMutexLock<T>
 		{
 			// On DragonFly pthread_mutex_destroy() returns EINVAL if called on a mutex that was just initialized with libc::PTHREAD_MUTEX_INITIALIZER.
 			// Once it is used (locked/unlocked) or pthread_mutex_init() is called, this behaviour no longer occurs.
-			debug_assert!(result == CtoMutexLock::ResultIsOk || result == ::libc::EINVAL);
+			debug_assert_pthread_result_ok_dragonfly!(result);
 		}
 	}
 	

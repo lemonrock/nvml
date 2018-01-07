@@ -2,31 +2,28 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// A CTO mutex lock guard; the result of locking a CtoMutex.
+/// A CTO mutex lock guard; the result of locking a CtoMutexLock.
 /// When dropped (ie goes out of scope) the lock is released.
 #[must_use]
-pub struct CtoMutexLockGuard<'mutex, T: 'mutex + CtoSafe>
-{
-	cto_mutex_lock: &'mutex CtoMutexLock<T>,
-}
+pub struct CtoMutexLockGuard<'mutex_lock, T: 'mutex_lock + CtoSafe>(&'mutex_lock CtoMutexLock<T>);
 
-impl<'mutex, T: CtoSafe> !Send for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> !Send for CtoMutexLockGuard<'mutex_lock, T>
 {
 }
 
-unsafe impl<'mutex, T: CtoSafe + Sync> Sync for CtoMutexLockGuard<'mutex, T>
+unsafe impl<'mutex_lock, T: CtoSafe + Sync> Sync for CtoMutexLockGuard<'mutex_lock, T>
 {
 }
 
-impl<'mutex, T: CtoSafe + Debug> Debug for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe + Debug> Debug for CtoMutexLockGuard<'mutex_lock, T>
 {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
-		f.debug_struct("CtoMutexGuard").field("cto_mutex", &self.cto_mutex_lock).finish()
+		f.debug_struct("CtoMutexGuard").field("0", &self.0).finish()
 	}
 }
 
-impl<'mutex, T: CtoSafe + Display> Display for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe + Display> Display for CtoMutexLockGuard<'mutex_lock, T>
 {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
@@ -34,36 +31,36 @@ impl<'mutex, T: CtoSafe + Display> Display for CtoMutexLockGuard<'mutex, T>
 	}
 }
 
-impl<'mutex, T: CtoSafe> Drop for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> Drop for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		unsafe { self.cto_mutex_lock.unlock_mutex(); }
+		unsafe { self.0.unlock_mutex(); }
 	}
 }
 
-impl<'mutex, T: CtoSafe> Deref for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuard<'mutex_lock, T>
 {
 	type Target = T;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
 	{
-		unsafe { &*self.cto_mutex_lock.value.get() }
+		unsafe { &*self.0.value.get() }
 	}
 }
 
-impl<'mutex, T: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
 	{
-		unsafe { &mut *self.cto_mutex_lock.value.get() }
+		unsafe { &mut *self.0.value.get() }
 	}
 }
 
-impl<'mutex, T: CtoSafe> Borrow<T> for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> Borrow<T> for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn borrow(&self) -> &T
@@ -72,7 +69,7 @@ impl<'mutex, T: CtoSafe> Borrow<T> for CtoMutexLockGuard<'mutex, T>
 	}
 }
 
-impl<'mutex, T: CtoSafe> BorrowMut<T> for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> BorrowMut<T> for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn borrow_mut(&mut self) -> &mut T
@@ -81,7 +78,7 @@ impl<'mutex, T: CtoSafe> BorrowMut<T> for CtoMutexLockGuard<'mutex, T>
 	}
 }
 
-impl<'mutex, T: CtoSafe> AsRef<T> for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> AsRef<T> for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn as_ref(&self) -> &T
@@ -90,7 +87,7 @@ impl<'mutex, T: CtoSafe> AsRef<T> for CtoMutexLockGuard<'mutex, T>
 	}
 }
 
-impl<'mutex, T: CtoSafe> AsMut<T> for CtoMutexLockGuard<'mutex, T>
+impl<'mutex_lock, T: CtoSafe> AsMut<T> for CtoMutexLockGuard<'mutex_lock, T>
 {
 	#[inline(always)]
 	fn as_mut(&mut self) -> &mut T

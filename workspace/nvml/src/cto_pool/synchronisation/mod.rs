@@ -5,6 +5,8 @@
 use super::*;
 #[cfg(unix)] use ::libc::
 {
+	EAGAIN,
+	EDEADLK,
 	pthread_mutex_destroy,
 	pthread_mutex_init,
 	pthread_mutex_lock,
@@ -17,12 +19,31 @@ use super::*;
 	pthread_mutexattr_settype,
 	PTHREAD_MUTEX_NORMAL,
 	PTHREAD_MUTEX_INITIALIZER,
+	pthread_rwlock_destroy,
+	pthread_rwlock_rdlock,
+	pthread_rwlock_t,
+	pthread_rwlock_tryrdlock,
+	pthread_rwlock_trywrlock,
+	pthread_rwlock_unlock,
+	pthread_rwlock_wrlock,
+	PTHREAD_RWLOCK_INITIALIZER,
 };
+#[cfg(target_os = "dragonfly")] use ::libc::EINVAL;
 use ::std::cell::UnsafeCell;
 use ::std::mem::uninitialized;
 use ::std::panic::UnwindSafe;
 use ::std::panic::RefUnwindSafe;
+use ::std::sync::atomic::AtomicUsize;
+use ::std::sync::atomic::Ordering;
+
+
+include!("debug_assert_pthread_result_ok.rs");
+include!("debug_assert_pthread_result_ok_dragonfly.rs");
 
 
 include!("CtoMutexLock.rs");
 include!("CtoMutexLockGuard.rs");
+include!("CtoReadWriteLock.rs");
+include!("CtoReadWriteLockReadGuard.rs");
+include!("CtoReadWriteLockWriteGuard.rs");
+include!("ResultIsOk.rs");
