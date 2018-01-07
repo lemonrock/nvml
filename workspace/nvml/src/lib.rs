@@ -3,6 +3,7 @@
 
 
 #![allow(non_upper_case_globals)]
+#![allow(tyvar_behind_raw_pointer)]
 #![deny(missing_docs)]
 #![feature(allocator_api)]
 #![feature(const_fn)]

@@ -46,7 +46,7 @@ impl<T: CtoSafe> CtoRcInner<T>
 	#[inline(always)]
 	fn free(&mut self)
 	{
-		CtoPoolInner::free(&self.cto_pool_inner.clone(), self as *mut Self)
+		CtoPoolInner::free(&self.cto_pool_inner, &mut self.value)
 	}
 	
 	#[inline(always)]

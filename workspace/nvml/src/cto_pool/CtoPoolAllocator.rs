@@ -29,7 +29,7 @@ impl<'ctopool> CtoPoolAllocator<'ctopool>
 	
 	/// Allocate a CtoRootBox, which is similar to a Rust Box but uses the persistent memory pool instead of the system allocator.
 	#[inline(always)]
-	pub(crate) fn allocate_root_box<T: CtoSafe + Send + Sync, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRootBox<T>, CtoPoolAllocationError<InitializationError>>
+	pub(crate) fn allocate_root_box<T: CtoSafe + Sync, InitializationError, Initializer: FnOnce(&mut T, &Self) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRootBox<T>, CtoPoolAllocationError<InitializationError>>
 	{
 		let cto_box = self.allocate_box(initializer)?;
 		Ok(CtoRootBox(CtoBox::into_pointer(cto_box)))

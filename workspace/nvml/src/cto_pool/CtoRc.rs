@@ -146,6 +146,24 @@ impl<T: CtoSafe> Deref for CtoRc<T>
 	}
 }
 
+impl<T: CtoSafe> Borrow<T> for CtoRc<T>
+{
+	#[inline(always)]
+	fn borrow(&self) -> &T
+	{
+		self.deref()
+	}
+}
+
+impl<T: CtoSafe> AsRef<T> for CtoRc<T>
+{
+	#[inline(always)]
+	fn as_ref(&self) -> &T
+	{
+		self.deref()
+	}
+}
+
 impl<T: CtoSafe> CtoRc<T>
 {
 	/// Downgrades this strong reference to a weak reference.

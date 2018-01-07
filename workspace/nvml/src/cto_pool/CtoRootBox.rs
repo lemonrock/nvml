@@ -6,17 +6,13 @@
 /// * does not implement Drop.
 /// * can be sent between threads.
 // NOTE: CtoRootBox MUST NOT implement Drop or the code in `CtoPool.open()` could fail spectacularly.
-pub struct CtoRootBox<T: CtoSafe + Send + Sync>(*mut T);
+pub struct CtoRootBox<T: CtoSafe + Sync>(*mut T);
 
-unsafe impl<T: CtoSafe + Send + Sync> Send for CtoRootBox<T>
+unsafe impl<T: CtoSafe + Sync> Sync for CtoRootBox<T>
 {
 }
 
-unsafe impl<T: CtoSafe + Send + Sync> Sync for CtoRootBox<T>
-{
-}
-
-impl<T: CtoSafe + Send + Sync + PartialEq> PartialEq for CtoRootBox<T>
+impl<T: CtoSafe + Sync + PartialEq> PartialEq for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
@@ -31,11 +27,11 @@ impl<T: CtoSafe + Send + Sync + PartialEq> PartialEq for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Eq> Eq for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Eq> Eq for CtoRootBox<T>
 {
 }
 
-impl<T: CtoSafe + Send + Sync + PartialOrd> PartialOrd for CtoRootBox<T>
+impl<T: CtoSafe + Sync + PartialOrd> PartialOrd for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering>
@@ -68,7 +64,7 @@ impl<T: CtoSafe + Send + Sync + PartialOrd> PartialOrd for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Ord> Ord for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Ord> Ord for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn cmp(&self, other: &Self) -> Ordering
@@ -77,7 +73,7 @@ impl<T: CtoSafe + Send + Sync + Ord> Ord for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Hash> Hash for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Hash> Hash for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn hash<H: Hasher>(&self, state: &mut H)
@@ -86,7 +82,7 @@ impl<T: CtoSafe + Send + Sync + Hash> Hash for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Hasher> Hasher for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Hasher> Hasher for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn finish(&self) -> u64
@@ -173,7 +169,7 @@ impl<T: CtoSafe + Send + Sync + Hasher> Hasher for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Display> Display for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Display> Display for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -182,7 +178,7 @@ impl<T: CtoSafe + Send + Sync + Display> Display for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync + Debug> Debug for CtoRootBox<T>
+impl<T: CtoSafe + Sync + Debug> Debug for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -191,7 +187,7 @@ impl<T: CtoSafe + Send + Sync + Debug> Debug for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> Pointer for CtoRootBox<T>
+impl<T: CtoSafe + Sync> Pointer for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -200,7 +196,7 @@ impl<T: CtoSafe + Send + Sync> Pointer for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> Deref for CtoRootBox<T>
+impl<T: CtoSafe + Sync> Deref for CtoRootBox<T>
 {
 	type Target = T;
 	
@@ -211,7 +207,7 @@ impl<T: CtoSafe + Send + Sync> Deref for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> DerefMut for CtoRootBox<T>
+impl<T: CtoSafe + Sync> DerefMut for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -220,7 +216,7 @@ impl<T: CtoSafe + Send + Sync> DerefMut for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> Borrow<T> for CtoRootBox<T>
+impl<T: CtoSafe + Sync> Borrow<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn borrow(&self) -> &T
@@ -229,7 +225,7 @@ impl<T: CtoSafe + Send + Sync> Borrow<T> for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> BorrowMut<T> for CtoRootBox<T>
+impl<T: CtoSafe + Sync> BorrowMut<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn borrow_mut(&mut self) -> &mut T
@@ -238,7 +234,7 @@ impl<T: CtoSafe + Send + Sync> BorrowMut<T> for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> AsRef<T> for CtoRootBox<T>
+impl<T: CtoSafe + Sync> AsRef<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn as_ref(&self) -> &T
@@ -247,7 +243,7 @@ impl<T: CtoSafe + Send + Sync> AsRef<T> for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> AsMut<T> for CtoRootBox<T>
+impl<T: CtoSafe + Sync> AsMut<T> for CtoRootBox<T>
 {
 	#[inline(always)]
 	fn as_mut(&mut self) -> &mut T
@@ -256,7 +252,7 @@ impl<T: CtoSafe + Send + Sync> AsMut<T> for CtoRootBox<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> CtoRootBox<T>
+impl<T: CtoSafe + Sync> CtoRootBox<T>
 {
 	#[inline(always)]
 	fn as_ptr(this: &Self) -> *mut T

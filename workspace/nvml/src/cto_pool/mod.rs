@@ -48,6 +48,10 @@ use ::std::sync::Arc;
 use ::std::sync::RwLock;
 
 
+/// Synchronisation
+pub mod synchronisation;
+
+
 include!("CtoBox.rs");
 include!("CtoPool.rs");
 include!("CtoPoolAllocationError.rs");

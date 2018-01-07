@@ -5,17 +5,17 @@
 /// A CTO pool of persistent memory is a kind of `malloc`- or heap- like allocator.
 /// Unlike the system `malloc`, multiple instances of it can be created.
 #[derive(Debug)]
-pub struct CtoPool<T: CtoSafe + Send + Sync>(Arc<CtoPoolInner>, RwLock<CtoRootBox<T>>);
+pub struct CtoPool<T: CtoSafe + Sync>(Arc<CtoPoolInner>, RwLock<CtoRootBox<T>>);
 
-unsafe impl<T: CtoSafe + Send + Sync> Send for CtoPool<T>
+unsafe impl<T: CtoSafe + Sync> Send for CtoPool<T>
 {
 }
 
-unsafe impl<T: CtoSafe + Send + Sync> Sync for CtoPool<T>
+unsafe impl<T: CtoSafe + Sync> Sync for CtoPool<T>
 {
 }
 
-impl<T: CtoSafe + Send + Sync> PartialEq for CtoPool<T>
+impl<T: CtoSafe + Sync> PartialEq for CtoPool<T>
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
@@ -24,11 +24,11 @@ impl<T: CtoSafe + Send + Sync> PartialEq for CtoPool<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> Eq for CtoPool<T>
+impl<T: CtoSafe + Sync> Eq for CtoPool<T>
 {
 }
 
-unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
+unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
 {
 	#[inline(always)]
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>
@@ -140,7 +140,7 @@ unsafe impl<T: CtoSafe + Send + Sync> Alloc for CtoPool<T>
 	}
 }
 
-impl<T: CtoSafe + Send + Sync> CtoPool<T>
+impl<T: CtoSafe + Sync> CtoPool<T>
 {
 	/// Opens a pool, creating it if necessary, and instantiating a root object if one is missing.
 	/// This method is unsafe, because nothing stops T being of a different layout (struct type).
