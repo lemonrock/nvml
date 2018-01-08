@@ -33,6 +33,7 @@
       <w>libpmemobj</w>
       <w>longjmp</w>
       <w>longlong</w>
+      <w>macos</w>
       <w>mblkpool</w>
       <w>mcond</w>
       <w>mctopool</w>
@@ -70,6 +71,7 @@
       <w>strdup</w>
       <w>structs</w>
       <w>toid</w>
+      <w>wakeups</w>
       <w>wcsdup</w>
       <w>werror</w>
       <w>whitelist</w>

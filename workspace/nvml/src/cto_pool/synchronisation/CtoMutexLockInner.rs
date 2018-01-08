@@ -15,9 +15,21 @@ impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		unsafe
+		#[cfg(unix)]
 		{
-			self.destroy_mutex();
+			let result = unsafe { pthread_mutex_destroy(self.mutex.get()) };
+			
+			#[cfg(not(target_os = "dragonfly"))]
+			{
+				debug_assert_pthread_result_ok!(result);
+			}
+			
+			#[cfg(target_os = "dragonfly")]
+			{
+				// On DragonFly `pthread_mutex_destroy()` returns `EINVAL` if called on a mutex that was just initialized with `PTHREAD_MUTEX_INITIALIZER`.
+				// Once it is used (locked or unlocked) or `pthread_mutex_init()` is called, this behaviour no longer occurs.
+				debug_assert_pthread_result_ok_dragonfly!(result);
+			}
 		}
 	}
 }
@@ -139,29 +151,7 @@ impl<T: CtoSafe> CtoMutexLockInner<T>
 		}
 	}
 	
-	// Behavior is undefined if there are current or will be future users of this mutex.
-	#[cfg(unix)]
-	#[inline(always)]
-	unsafe fn destroy_mutex(&self)
-	{
-		let result = pthread_mutex_destroy(self.mutex.get());
-		
-		#[cfg(not(target_os = "dragonfly"))]
-		{
-			debug_assert_pthread_result_ok!(result);
-		}
-		
-		#[cfg(target_os = "dragonfly")]
-		{
-			// On DragonFly pthread_mutex_destroy() returns EINVAL if called on a mutex that was just initialized with libc::PTHREAD_MUTEX_INITIALIZER.
-			// Once it is used (locked/unlocked) or pthread_mutex_init() is called, this behaviour no longer occurs.
-			debug_assert_pthread_result_ok_dragonfly!(result);
-		}
-	}
-	
-	/// Unlocks the mutex.
-	///
-	/// Behavior is undefined if the current thread does not actually hold the mutex.
+	// Behavior is undefined if the current thread does not actually hold the mutex.
 	#[cfg(unix)]
 	#[inline(always)]
 	unsafe fn unlock_mutex(&self)

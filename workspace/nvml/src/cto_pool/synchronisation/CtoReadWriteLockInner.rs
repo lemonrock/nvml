@@ -36,9 +36,21 @@ impl<T: CtoSafe> Drop for CtoReadWriteLockInner<T>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		unsafe
+		#[cfg(unix)]
 		{
-			self.destroy_rwlock();
+			let result = unsafe { pthread_rwlock_destroy(self.rwlock()) };
+			
+			#[cfg(not(target_os = "dragonfly"))]
+			{
+				debug_assert_pthread_result_ok!(result);
+			}
+			
+			#[cfg(target_os = "dragonfly")]
+			{
+				// On DragonFly `pthread_rwlock_destroy()` returns `EINVAL` if called on a rwlock that was just initialized with `PTHREAD_RWLOCK_INITIALIZER`.
+				// Once it is used (locked or unlocked) or `pthread_rwlock_init()` is called, this behaviour no longer occurs.
+				debug_assert_pthread_result_ok_dragonfly!(result);
+			}
 		}
 	}
 }
@@ -218,25 +230,6 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 		
 		self.set_is_not_write_locked();
 		self.unlock_pthread_read_or_write_lock();
-	}
-	
-	#[cfg(unix)]
-	#[inline(always)]
-	unsafe fn destroy_rwlock(&self)
-	{
-		let result = pthread_rwlock_destroy(self.rwlock());
-		
-		#[cfg(not(target_os = "dragonfly"))]
-		{
-			debug_assert_pthread_result_ok!(result);
-		}
-		
-		#[cfg(target_os = "dragonfly")]
-		{
-			// On DragonFly `pthread_rwlock_destroy()` returns `EINVAL` if called on a rwlock that was just initialized with `PTHREAD_RWLOCK_INITIALIZER`.
-			// Once it is used (locked or unlocked) or `pthread_rwlock_init()` is called, this behaviour no longer occurs.
-			debug_assert_pthread_result_ok_dragonfly!(result);
-		}
 	}
 	
 	#[cfg(unix)]

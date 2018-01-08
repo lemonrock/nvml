@@ -7,6 +7,14 @@ use super::*;
 {
 	EAGAIN,
 	EDEADLK,
+	ETIMEDOUT,
+	pthread_cond_t,
+	pthread_cond_broadcast,
+	pthread_cond_destroy,
+	pthread_cond_signal,
+	pthread_cond_timedwait,
+	pthread_cond_wait,
+	PTHREAD_COND_INITIALIZER,
 	pthread_mutex_destroy,
 	pthread_mutex_init,
 	pthread_mutex_lock,
@@ -27,20 +35,26 @@ use super::*;
 	pthread_rwlock_unlock,
 	pthread_rwlock_wrlock,
 	PTHREAD_RWLOCK_INITIALIZER,
+	timespec,
+	time_t,
 };
 #[cfg(target_os = "dragonfly")] use ::libc::EINVAL;
 use ::std::cell::UnsafeCell;
+use ::std::cmp::min;
 use ::std::mem::uninitialized;
 use ::std::panic::UnwindSafe;
 use ::std::panic::RefUnwindSafe;
 use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::Ordering;
+use ::std::time::Duration;
 
 
 include!("debug_assert_pthread_result_ok.rs");
 include!("debug_assert_pthread_result_ok_dragonfly.rs");
 
 
+include!("CtoConditionVariable.rs");
+include!("CtoConditionVariableInner.rs");
 include!("CtoMutexLock.rs");
 include!("CtoMutexLockInner.rs");
 include!("CtoMutexLockGuard.rs");
@@ -49,3 +63,4 @@ include!("CtoReadWriteLockInner.rs");
 include!("CtoReadWriteLockReadGuard.rs");
 include!("CtoReadWriteLockWriteGuard.rs");
 include!("ResultIsOk.rs");
+include!("TimedOut.rs");
