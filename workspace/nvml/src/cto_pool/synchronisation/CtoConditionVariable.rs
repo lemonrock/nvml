@@ -5,46 +5,15 @@
 /// A Condition Variable, similar to Condvar in the Rust stdlib, but lacking the concepts of Poison and verification.
 pub struct CtoConditionVariable
 {
-	persistent_memory_pointer: *mut CtoConditionVariableInner,
+	inner: Box<CtoConditionVariableInner>,
 }
 
 impl CtoSafe for CtoConditionVariable
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn reinitialize(&mut self, _cto_pool_inner: &Arc<CtoPoolInner>)
 	{
-		self.persistent_memory_mut().reinitialize(cto_pool_inner)
-	}
-}
-
-impl PersistentMemoryWrapper for CtoConditionVariable
-{
-	type PersistentMemory = CtoConditionVariableInner;
-	
-	type Value = CtoConditionVariableInner;
-	
-	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, _initializer: Initializer) -> Result<Self, InitializationError>
-	{
-		let inner = unsafe { &mut * persistent_memory_pointer };
-		inner.reinitialize(cto_pool_inner);
-		Ok
-		(
-			Self
-			{
-				persistent_memory_pointer,
-			}
-		)
-	}
-}
-
-impl Drop for CtoConditionVariable
-{
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		let cto_pool_inner = self.persistent_memory().cto_pool_inner.clone();
-		CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
+		self.inner = CtoConditionVariableInner::new();
 	}
 }
 
@@ -58,6 +27,16 @@ impl Debug for CtoConditionVariable
 
 impl CtoConditionVariable
 {
+	/// Create a new instance.
+	#[inline(always)]
+	pub fn new() -> Self
+	{
+		Self
+		{
+			inner: CtoConditionVariableInner::new(),
+		}
+	}
+	
 	/// Blocks the current thread until this condition variable receives a notification.
 	///
 	/// This function will atomically unlock the mutex specified (represented by `guard`) and block the current thread.
@@ -78,7 +57,7 @@ impl CtoConditionVariable
 	#[inline(always)]
 	pub fn wait<'mutex, T: CtoSafe>(&'mutex self, guard: CtoMutexLockGuard<'mutex, T>) -> CtoMutexLockGuard<'mutex, T>
 	{
-		self.persistent_memory().wait(guard.0.mutex.get());
+		self.inner().wait(guard.0.mutex.get());
 		guard
 	}
 	
@@ -99,7 +78,7 @@ impl CtoConditionVariable
 	#[inline(always)]
 	pub fn wait_timeout<'mutex, T: CtoSafe>(&self, guard: CtoMutexLockGuard<'mutex, T>, duration: Duration) -> (CtoMutexLockGuard<'mutex, T>, TimedOut)
 	{
-		let timed_out = self.persistent_memory().wait_timeout(guard.0.mutex.get(), duration);
+		let timed_out = self.inner().wait_timeout(guard.0.mutex.get(), duration);
 		(guard, timed_out)
 	}
 	
@@ -114,7 +93,7 @@ impl CtoConditionVariable
 	#[inline(always)]
 	pub fn notify_one(&self)
 	{
-		self.persistent_memory().notify_one()
+		self.inner().notify_one()
 	}
 	
 	/// Wakes up all blocked threads on this condition variable.
@@ -130,18 +109,12 @@ impl CtoConditionVariable
 	#[inline(always)]
 	pub fn notify_all(&self)
 	{
-		self.persistent_memory().notify_all()
+		self.inner().notify_all()
 	}
 	
 	#[inline(always)]
-	fn persistent_memory(&self) -> &CtoConditionVariableInner
+	fn inner(&self) -> &CtoConditionVariableInner
 	{
-		unsafe { &*self.persistent_memory_pointer }
-	}
-	
-	#[inline(always)]
-	fn persistent_memory_mut(&self) -> &mut CtoConditionVariableInner
-	{
-		unsafe { &mut *self.persistent_memory_pointer }
+		&self.inner
 	}
 }

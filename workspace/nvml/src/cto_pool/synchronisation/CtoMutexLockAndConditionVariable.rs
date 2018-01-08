@@ -40,12 +40,12 @@ impl<T: CtoSafe> CtoMutexLockAndConditionVariable<T>
 {
 	/// Creates a new instance.
 	#[inline(always)]
-	pub fn new(cto_mutex_lock: CtoMutexLock<T>, cto_condition_variable: CtoConditionVariable) -> Self
+	pub fn new(cto_mutex_lock: CtoMutexLock<T>) -> Self
 	{
 		Self
 		{
 			cto_mutex_lock,
-			cto_condition_variable,
+			cto_condition_variable: CtoConditionVariable::new(),
 		}
 	}
 	

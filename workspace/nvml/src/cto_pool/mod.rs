@@ -2,7 +2,6 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-use self::synchronisation::CtoConditionVariable;
 use self::synchronisation::CtoMutexLock;
 use self::synchronisation::CtoReadWriteLock;
 use ::errors::PmdkError;

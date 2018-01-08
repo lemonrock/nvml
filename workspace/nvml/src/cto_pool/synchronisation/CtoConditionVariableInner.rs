@@ -6,7 +6,6 @@
 pub(crate) struct CtoConditionVariableInner
 {
 	#[cfg(unix)] cond: UnsafeCell<pthread_cond_t>,
-	cto_pool_inner: Arc<CtoPoolInner>,
 }
 
 impl Drop for CtoConditionVariableInner
@@ -35,15 +34,36 @@ impl Drop for CtoConditionVariableInner
 
 impl CtoSafe for CtoConditionVariableInner
 {
+}
+
+unsafe impl Send for CtoConditionVariableInner
+{
+}
+
+unsafe impl Sync for CtoConditionVariableInner
+{
+}
+
+impl CtoConditionVariableInner
+{
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn new() -> Box<Self>
 	{
-		self.cto_pool_inner = cto_pool_inner.clone();
+		#[cfg(unix)]
+		let this =
+		{
+			Box::new
+			(
+				Self
+				{
+					cond: UnsafeCell::new(PTHREAD_COND_INITIALIZER),
+				}
+			)
+		};
 		
+		// Must happen after we are at a consistent memory location.
 		#[cfg(unix)]
 		{
-			self.cond = UnsafeCell::new(PTHREAD_COND_INITIALIZER);
-			
 			// See notes for `timed_wait()`.
 			#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "l4re", target_os = "android")))]
 			unsafe
@@ -63,7 +83,7 @@ impl CtoSafe for CtoConditionVariableInner
 				let result = pthread_condattr_setclock(&mut attr, CLOCK_MONOTONIC);
 				debug_assert_pthread_result_ok!(result);
 				
-				let result = pthread_cond_init(self.cond.get(), &attr);
+				let result = pthread_cond_init(this.cond.get(), &attr);
 				debug_assert_pthread_result_ok!(result);
 				
 				let result = pthread_condattr_destroy(&mut attr);
@@ -75,19 +95,10 @@ impl CtoSafe for CtoConditionVariableInner
 			{
 			}
 		}
+		
+		this
 	}
-}
-
-unsafe impl Send for CtoConditionVariableInner
-{
-}
-
-unsafe impl Sync for CtoConditionVariableInner
-{
-}
-
-impl CtoConditionVariableInner
-{
+	
 	// The mutex must be locked before calling this function, otherwise the behavior is undefined.
 	#[cfg(unix)]
 	#[inline(always)]
