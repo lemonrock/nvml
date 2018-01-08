@@ -4,16 +4,25 @@
 
 use super::*;
 use ::alloc::raw_vec::RawVec;
+use ::std::marker::PhantomData;
+use ::std::mem::forget;
+use ::std::mem::size_of;
 use ::std::mem::swap;
+use ::std::intrinsics::arith_offset;
 use ::std::intrinsics::assume;
+use ::std::iter::FusedIterator;
+use ::std::iter::TrustedLen;
 use ::std::ops::*;
 use ::std::ptr::copy;
 use ::std::ptr::copy_nonoverlapping;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::read;
+use ::std::ptr::Shared;
 use ::std::ptr::write;
+use ::std::slice;
 use ::std::slice::from_raw_parts;
 use ::std::slice::from_raw_parts_mut;
 
 
 include!("CtoVec.rs");
+include!("CtoVecIntoIter.rs");

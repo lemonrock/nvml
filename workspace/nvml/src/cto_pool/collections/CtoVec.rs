@@ -12,6 +12,7 @@ pub struct CtoVec<T: CtoSafe>
 impl<T: CtoSafe> Drop for CtoVec<T>
 {
 	// TODO: Review Drop
+	#[inline(always)]
 	fn drop(&mut self)
 	{
 		unsafe
@@ -845,6 +846,85 @@ impl<T: CtoSafe> CtoVec<T>
 		}
 		
 		other
+	}
+}
+
+impl<T: CtoSafe> IntoIterator for CtoVec<T>
+{
+	type Item = T;
+
+	type IntoIter = CtoVecIntoIter<T>;
+
+	/// Creates a consuming iterator, that is, one that moves each value out of the vector (from start to end).
+	/// The vector cannot be used after calling this.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let v = vec!["a".to_string(), "b".to_string()];
+	/// for s in v.into_iter() {
+	///     // s has type String, not &String
+	///     println!("{}", s);
+	/// }
+	/// ```
+	#[inline(always)]
+	fn into_iter(mut self) -> CtoVecIntoIter<T>
+	{
+		let cto_pool = self.buf.alloc().clone();
+		
+		unsafe
+		{
+			let begin = self.as_mut_ptr();
+			assume(!begin.is_null());
+
+			let end = if size_of::<T>() == 0
+			{
+				arith_offset(begin as *const i8, self.len() as isize) as *const T
+			}
+			else
+			{
+				begin.offset(self.len() as isize) as *const T
+			};
+
+			let cap = self.buf.cap();
+			forget(self);
+
+			CtoVecIntoIter
+			{
+				buf: Shared::new_unchecked(begin),
+				phantom: PhantomData,
+				cap,
+				ptr: begin,
+				end,
+				alloc: cto_pool,
+			}
+		}
+	}
+}
+
+impl<'a, T: CtoSafe> IntoIterator for &'a CtoVec<T>
+{
+	type Item = &'a T;
+	
+	type IntoIter = slice::Iter<'a, T>;
+	
+	#[inline(always)]
+	fn into_iter(self) -> slice::Iter<'a, T>
+	{
+		self.iter()
+	}
+}
+
+impl<'a, T: CtoSafe> IntoIterator for &'a mut CtoVec<T>
+{
+	type Item = &'a mut T;
+	
+	type IntoIter = slice::IterMut<'a, T>;
+	
+	#[inline(always)]
+	fn into_iter(self) -> slice::IterMut<'a, T>
+	{
+		self.iter_mut()
 	}
 }
 
