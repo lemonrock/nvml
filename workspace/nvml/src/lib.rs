@@ -32,7 +32,6 @@ extern crate serde;
 extern crate syscall_alt;
 
 
-include!("offset_of.rs");
 include!("use_path.rs");
 
 

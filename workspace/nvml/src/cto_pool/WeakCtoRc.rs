@@ -66,7 +66,10 @@ impl<T: CtoSafe> WeakCtoRc<T>
 		self.dereference().map(|cto_rc_inner|
 		{
 			cto_rc_inner.strong_count_increment();
-			CtoRc(self.0)
+			CtoRc
+			{
+				persistent_memory_pointer: self.0,
+			}
 		})
 	}
 	

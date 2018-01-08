@@ -2,10 +2,12 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-macro_rules! offset_of
+trait PersistentMemoryWrapper: CtoSafe
 {
-	($structType:ty, $field:ident) =>
-	{
-		&(*(0 as *const $structType)).$field as *const _ as isize
-	}
+	type PersistentMemory;
+	
+	type Value: CtoSafe;
+	
+	#[inline(always)]
+	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>;
 }

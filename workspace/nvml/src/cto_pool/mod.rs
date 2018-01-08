@@ -2,6 +2,8 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+use self::synchronisation::CtoMutexLock;
+use self::synchronisation::CtoReadWriteLock;
 use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_void;
@@ -31,7 +33,6 @@ use ::std::heap::CannotReallocInPlace;
 use ::std::heap::Excess;
 use ::std::heap::Layout;
 use ::std::mem::align_of;
-use ::std::mem::forget;
 use ::std::mem::needs_drop;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
@@ -53,6 +54,7 @@ pub mod synchronisation;
 
 
 include!("CtoBox.rs");
+include!("CtoBoxInner.rs");
 include!("CtoPool.rs");
 include!("CtoPoolAllocationError.rs");
 include!("CtoPoolAllocator.rs");
@@ -65,5 +67,6 @@ include!("CtoRcInner.rs");
 include!("CtoRootBox.rs");
 include!("CtoSafe.rs");
 include!("initialise_memory_functions.rs");
+include!("PersistentMemoryWrapper.rs");
 include!("PMEMctopoolExt.rs");
 include!("WeakCtoRc.rs");

@@ -42,8 +42,10 @@ include!("debug_assert_pthread_result_ok_dragonfly.rs");
 
 
 include!("CtoMutexLock.rs");
+include!("CtoMutexLockInner.rs");
 include!("CtoMutexLockGuard.rs");
 include!("CtoReadWriteLock.rs");
+include!("CtoReadWriteLockInner.rs");
 include!("CtoReadWriteLockReadGuard.rs");
 include!("CtoReadWriteLockWriteGuard.rs");
 include!("ResultIsOk.rs");

@@ -32,15 +32,15 @@ impl CtoPoolInner
 {
 	/// Free a previously allocated and initialized object. Calls `drop_in_place()` if T needs to be dropped.
 	#[inline(always)]
-	pub fn free<T: CtoSafe>(this: &Arc<CtoPoolInner>, value_to_free: *mut T)
+	pub fn free_persistent_memory<PersistentMemory>(this: &Arc<CtoPoolInner>, persistent_memory_pointer: *mut PersistentMemory)
 	{
-		if needs_drop::<T>()
+		if needs_drop::<PersistentMemory>()
 		{
-			unsafe { drop_in_place(value_to_free) }
+			unsafe { drop_in_place(persistent_memory_pointer) }
 		}
 		
 		let cto_pool_inner = this.deref();
-		cto_pool_inner.0.free(value_to_free)
+		cto_pool_inner.0.free(persistent_memory_pointer)
 	}
 	
 	#[inline(always)]

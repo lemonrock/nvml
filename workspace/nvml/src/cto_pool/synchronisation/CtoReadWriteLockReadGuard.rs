@@ -5,7 +5,7 @@
 /// A CTO Read-Write lock read guard; the result of read-locking a CtoReadWriteLock.
 /// When dropped (ie goes out of scope) the read lock is released.
 #[must_use]
-pub struct CtoReadWriteLockReadGuard<'read_write_lock, T: 'read_write_lock + CtoSafe>(&'read_write_lock CtoReadWriteLock<T>);
+pub struct CtoReadWriteLockReadGuard<'read_write_lock, T: 'read_write_lock + CtoSafe>(&'read_write_lock CtoReadWriteLockInner<T>);
 
 impl<'read_write_lock, T: CtoSafe> !Send for CtoReadWriteLockReadGuard<'read_write_lock, T>
 {
@@ -13,22 +13,6 @@ impl<'read_write_lock, T: CtoSafe> !Send for CtoReadWriteLockReadGuard<'read_wri
 
 unsafe impl<'read_write_lock, T: CtoSafe + Sync> Sync for CtoReadWriteLockReadGuard<'read_write_lock, T>
 {
-}
-
-impl<'read_write_lock, T: CtoSafe + Debug> Debug for CtoReadWriteLockReadGuard<'read_write_lock, T>
-{
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result
-	{
-		f.debug_struct("CtoReadWriteLockReadGuard").field("0", &self.0).finish()
-	}
-}
-
-impl<'read_write_lock, T: CtoSafe + Display> Display for CtoReadWriteLockReadGuard<'read_write_lock, T>
-{
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result
-	{
-		(**self).fmt(f)
-	}
 }
 
 impl<'read_write_lock, T: CtoSafe> Drop for CtoReadWriteLockReadGuard<'read_write_lock, T>
@@ -47,7 +31,7 @@ impl<'read_write_lock, T: CtoSafe> Deref for CtoReadWriteLockReadGuard<'read_wri
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
 	{
-		unsafe { &*self.0.value.get() }
+		self.0.deref()
 	}
 }
 

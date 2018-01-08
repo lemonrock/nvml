@@ -18,6 +18,8 @@ impl<T: CtoSafe> CtoSafe for CtoRcInner<T>
 	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
 		self.cto_pool_inner = cto_pool_inner.clone();
+		
+		self.value.reinitialize(cto_pool_inner)
 	}
 }
 
@@ -44,50 +46,54 @@ impl<T: CtoSafe> DerefMut for CtoRcInner<T>
 impl<T: CtoSafe> CtoRcInner<T>
 {
 	#[inline(always)]
-	fn free(&mut self)
-	{
-		CtoPoolInner::free(&self.cto_pool_inner, &mut self.value)
-	}
-	
-	#[inline(always)]
-	fn strong_count(&self) -> usize
+	pub(crate) fn strong_count(&self) -> usize
 	{
 		self.strong_counter.count()
 	}
 	
 	#[inline(always)]
-	fn strong_count_increment(&self)
+	pub(crate) fn strong_count_increment(&self)
 	{
 		self.strong_counter.increment();
 	}
 	
 	#[inline]
-	fn strong_count_decrement(&self)
+	pub(crate) fn strong_count_decrement(&self)
 	{
 		self.strong_counter.decrement();
 	}
 	
 	#[inline(always)]
-	fn weak_count(&self) -> usize
+	pub(crate) fn weak_count(&self) -> usize
 	{
 		self.weak_counter.count()
 	}
 	
 	#[inline(always)]
-	fn weak_count_increment(&self)
+	pub(crate) fn weak_count_increment(&self)
 	{
 		self.weak_counter.increment();
 	}
 	
 	#[inline(always)]
-	fn weak_count_decrement(&self)
+	pub(crate) fn weak_count_decrement(&self)
 	{
 		self.weak_counter.decrement()
 	}
 	
 	#[inline(always)]
-	fn is_unique(&self) -> bool
+	pub(crate) fn is_unique(&self) -> bool
 	{
 		self.strong_count() == 1 && self.weak_count() == 0
+	}
+	
+	#[inline(always)]
+	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut T) -> Result<(), InitializationError>>(&mut self, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		self.strong_counter = CtoRcCounter::default();
+		self.weak_counter = CtoRcCounter::default();
+		
+		self.cto_pool_inner = cto_pool_inner.clone();
+		initializer(&mut self.value)
 	}
 }

@@ -4,7 +4,7 @@
 
 /// A marker trait.
 /// Exists to prevent regular Rust types such as Vec<T> and other stack-allocated code from being passed to a CTO pool.
-pub trait CtoSafe
+pub trait CtoSafe: Sized
 {
 	/// Used internally when opening persistent memory pools for the first time.
 	/// Exists for the convenience of objects with fields that should not be persistent, eg Mutexes, RwLocks and CondVars.

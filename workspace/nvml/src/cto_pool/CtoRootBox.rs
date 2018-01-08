@@ -6,7 +6,34 @@
 /// * does not implement Drop.
 /// * can be sent between threads.
 // NOTE: CtoRootBox MUST NOT implement Drop or the code in `CtoPool.open()` could fail spectacularly.
-pub struct CtoRootBox<T: CtoSafe + Sync>(*mut T);
+pub struct CtoRootBox<T: CtoSafe + Sync>
+{
+	persistent_memory_pointer: *mut T,
+}
+
+impl<T: CtoSafe + Sync> CtoSafe for CtoRootBox<T>
+{
+}
+
+impl<T: CtoSafe + Sync> PersistentMemoryWrapper for CtoRootBox<T>
+{
+	type PersistentMemory = T;
+	
+	type Value = T;
+	
+	#[inline(always)]
+	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, _cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	{
+		initializer(unsafe { &mut * persistent_memory_pointer })?;
+		Ok
+		(
+			Self
+			{
+				persistent_memory_pointer,
+			}
+		)
+	}
+}
 
 unsafe impl<T: CtoSafe + Sync> Sync for CtoRootBox<T>
 {
@@ -203,7 +230,7 @@ impl<T: CtoSafe + Sync> Deref for CtoRootBox<T>
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
 	{
-		unsafe { &*(self.0 as *const _)}
+		unsafe { &* self.persistent_memory_pointer }
 	}
 }
 
@@ -212,7 +239,7 @@ impl<T: CtoSafe + Sync> DerefMut for CtoRootBox<T>
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
 	{
-		unsafe { &mut *self.0 }
+		unsafe { &mut * self.persistent_memory_pointer }
 	}
 }
 
@@ -255,8 +282,8 @@ impl<T: CtoSafe + Sync> AsMut<T> for CtoRootBox<T>
 impl<T: CtoSafe + Sync> CtoRootBox<T>
 {
 	#[inline(always)]
-	fn as_ptr(this: &Self) -> *mut T
+	fn as_ptr(this: &mut Self) -> *mut T
 	{
-		this.0
+		this.deref_mut() as *mut _
 	}
 }

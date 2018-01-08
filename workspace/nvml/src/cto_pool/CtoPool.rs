@@ -140,13 +140,13 @@ unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
 	}
 }
 
-impl<T: CtoSafe + Sync> CtoPool<T>
+impl<Value: CtoSafe + Sync> CtoPool<Value>
 {
 	/// Opens a pool, creating it if necessary, and instantiating a root object if one is missing.
 	/// This method is unsafe, because nothing stops T being of a different layout (struct type).
 	/// Additionally, nothing stops the layout of T changing from compile to compile.
 	#[inline(always)]
-	pub fn open<InitializationError: error::Error, Initializer: FnOnce(&mut T, &CtoPoolAllocator) -> Result<(), InitializationError>>(pool_set_file_path: &Path, layout_name: &str, pool_size: usize, mode: mode_t, root_initializer: Initializer) -> Result<Self, CtoPoolOpenError<InitializationError>>
+	pub fn open<InitializationError: error::Error, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(pool_set_file_path: &Path, layout_name: &str, pool_size: usize, mode: mode_t, root_initializer: Initializer) -> Result<Self, CtoPoolOpenError<InitializationError>>
 	{
 		let layout_name = CString::new(layout_name).expect("Embedded NULs are not allowed in a layout name");
 		let length = layout_name.as_bytes().len();
@@ -189,15 +189,18 @@ impl<T: CtoSafe + Sync> CtoPool<T>
 		let existing_root = cto_pool_inner.get_root();
 		let cto_root_box = if unlikely(existing_root.is_null())
 		{
-			let new_cto_root_box = CtoPoolAllocator(&cto_pool_inner).allocate_root_box(root_initializer).map_err(|cto_pool_allocation_error| CtoPoolOpenError::RootCreation(cto_pool_allocation_error))?;
-			cto_pool_inner.set_root(CtoRootBox::as_ptr(&new_cto_root_box));
+			let mut new_cto_root_box = CtoPoolAllocator(&cto_pool_inner).allocate_root_box(root_initializer).map_err(|cto_pool_allocation_error| CtoPoolOpenError::RootCreation(cto_pool_allocation_error))?;
+			cto_pool_inner.set_root(CtoRootBox::as_ptr(&mut new_cto_root_box));
 			new_cto_root_box
 		}
 		else
 		{
-			let mutable_root_reference = unsafe { &mut * (existing_root as *mut T) };
+			let mutable_root_reference = unsafe { &mut * (existing_root as *mut Value) };
 			mutable_root_reference.reinitialize(&cto_pool_inner);
-			CtoRootBox(existing_root)
+			CtoRootBox
+			{
+				persistent_memory_pointer: existing_root,
+			}
 		};
 		
 		Ok(CtoPool(cto_pool_inner, RwLock::new(cto_root_box)))
@@ -205,7 +208,7 @@ impl<T: CtoSafe + Sync> CtoPool<T>
 	
 	/// Returns a Read-Write lock to access the root of the CTO object graph.
 	#[inline(always)]
-	pub fn root(&self) -> &RwLock<CtoRootBox<T>>
+	pub fn root(&self) -> &RwLock<CtoRootBox<Value>>
 	{
 		&self.1
 	}

@@ -3,11 +3,31 @@
 
 
 /// Identical concept to a regular Rust Box but exists in a persistent object pool.
-#[repr(C)]
 pub struct CtoBox<T: CtoSafe>
 {
-	value: *mut T,
-	cto_pool_inner: Arc<CtoPoolInner>,
+	persistent_memory_pointer: *mut CtoBoxInner<T>,
+}
+
+impl<T: CtoSafe> PersistentMemoryWrapper for CtoBox<T>
+{
+	type PersistentMemory = CtoBoxInner<T>;
+	
+	type Value = T;
+	
+	#[inline(always)]
+	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	{
+		let inner = unsafe { &mut * persistent_memory_pointer };
+		inner.cto_pool_inner = cto_pool_inner.clone();
+		initializer(inner.deref_mut())?;
+		Ok
+		(
+			Self
+			{
+				persistent_memory_pointer,
+			}
+		)
+	}
 }
 
 impl<T: CtoSafe> CtoSafe for CtoBox<T>
@@ -15,8 +35,7 @@ impl<T: CtoSafe> CtoSafe for CtoBox<T>
 	#[inline(always)]
 	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
-		self.deref_mut().reinitialize(cto_pool_inner);
-		self.cto_pool_inner = cto_pool_inner.clone();
+		self.persistent_memory_mut().reinitialize(cto_pool_inner)
 	}
 }
 
@@ -25,7 +44,8 @@ impl<T: CtoSafe> Drop for CtoBox<T>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		CtoPoolInner::free(&self.cto_pool_inner, self.value)
+		let cto_pool_inner = self.persistent_memory().cto_pool_inner.clone();
+		CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
 	}
 }
 
@@ -34,15 +54,12 @@ impl<T: CtoSafe + Clone> Clone for CtoBox<T>
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		let value = CtoPoolAllocator(&self.cto_pool_inner).aligned_allocate::<T>().unwrap();
-		
-		unsafe { copy_nonoverlapping(self.value, value, 1) };
-		
-		Self
+		let clone: Result<CtoBox<T>, CtoPoolAllocationError<()>> = CtoPoolAllocator(&self.persistent_memory().cto_pool_inner).allocate_box(|clone_of_t|
 		{
-			value,
-			cto_pool_inner: self.cto_pool_inner.clone(),
-		}
+			unsafe { copy_nonoverlapping(self.deref(), clone_of_t, size_of::<T>()) };
+			Ok(())
+		});
+		clone.unwrap()
 	}
 }
 
@@ -236,7 +253,7 @@ impl<T: CtoSafe> Deref for CtoBox<T>
 	
 	fn deref(&self) -> &T
 	{
-		unsafe { &*(self.value as *const T) }
+		self.persistent_memory().deref()
 	}
 }
 
@@ -244,7 +261,7 @@ impl<T: CtoSafe> DerefMut for CtoBox<T>
 {
 	fn deref_mut(&mut self) -> &mut T
 	{
-		unsafe { &mut *self.value }
+		self.persistent_memory_mut().deref_mut()
 	}
 }
 
@@ -287,21 +304,14 @@ impl<T: CtoSafe> AsMut<T> for CtoBox<T>
 impl<T: CtoSafe> CtoBox<T>
 {
 	#[inline(always)]
-	fn into_pointer(mut this: Self) -> *mut T
+	fn persistent_memory(&self) -> &CtoBoxInner<T>
 	{
-		let value = this.value;
-		unsafe { drop_in_place(&mut this.cto_pool_inner) };
-		forget(this);
-		value
+		unsafe { &*self.persistent_memory_pointer }
 	}
 	
 	#[inline(always)]
-	fn constructor(value: *mut T, cto_pool_inner: Arc<CtoPoolInner>) -> Self
+	fn persistent_memory_mut(&self) -> &mut CtoBoxInner<T>
 	{
-		Self
-		{
-			value,
-			cto_pool_inner
-		}
+		unsafe { &mut *self.persistent_memory_pointer }
 	}
 }

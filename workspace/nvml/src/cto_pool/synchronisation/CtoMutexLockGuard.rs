@@ -5,7 +5,7 @@
 /// A CTO mutex lock guard; the result of locking a CtoMutexLock.
 /// When dropped (ie goes out of scope) the lock is released.
 #[must_use]
-pub struct CtoMutexLockGuard<'mutex_lock, T: 'mutex_lock + CtoSafe>(&'mutex_lock CtoMutexLock<T>);
+pub struct CtoMutexLockGuard<'mutex_lock, T: 'mutex_lock + CtoSafe>(&'mutex_lock CtoMutexLockInner<T>);
 
 impl<'mutex_lock, T: CtoSafe> !Send for CtoMutexLockGuard<'mutex_lock, T>
 {
@@ -13,22 +13,6 @@ impl<'mutex_lock, T: CtoSafe> !Send for CtoMutexLockGuard<'mutex_lock, T>
 
 unsafe impl<'mutex_lock, T: CtoSafe + Sync> Sync for CtoMutexLockGuard<'mutex_lock, T>
 {
-}
-
-impl<'mutex_lock, T: CtoSafe + Debug> Debug for CtoMutexLockGuard<'mutex_lock, T>
-{
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result
-	{
-		f.debug_struct("CtoMutexGuard").field("0", &self.0).finish()
-	}
-}
-
-impl<'mutex_lock, T: CtoSafe + Display> Display for CtoMutexLockGuard<'mutex_lock, T>
-{
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result
-	{
-		(**self).fmt(f)
-	}
 }
 
 impl<'mutex_lock, T: CtoSafe> Drop for CtoMutexLockGuard<'mutex_lock, T>
@@ -47,7 +31,7 @@ impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuard<'mutex_lock, T>
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
 	{
-		unsafe { &*self.0.value.get() }
+		self.0.deref()
 	}
 }
 
@@ -56,7 +40,7 @@ impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex_lock, T>
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
 	{
-		unsafe { &mut *self.0.value.get() }
+		unsafe { &mut * self.0.value.get() }
 	}
 }
 
