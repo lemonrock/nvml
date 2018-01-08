@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// A Condition Variabel, similar to Condvar Rust, but lacking the concepts of Poison and verification.
+/// A Condition Variable, similar to Condvar in the Rust stdlib, but lacking the concepts of Poison and verification.
 pub struct CtoConditionVariable
 {
 	persistent_memory_pointer: *mut CtoConditionVariableInner,

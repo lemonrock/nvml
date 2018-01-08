@@ -8,9 +8,9 @@ pub struct CtoPoolAllocator<'ctopool>(&'ctopool Arc<CtoPoolInner>);
 
 impl<'ctopool> CtoPoolAllocator<'ctopool>
 {
-	/// Allocate a CtoMutexLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
+	/// Allocate a CtoReadWriteLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
 	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
-	/// Returns on success a CtoMutexLock.
+	/// Returns on success a CtoReadWriteLock.
 	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
 	#[inline(always)]
 	pub fn allocate_cto_read_write_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoReadWriteLock<Value>, CtoPoolAllocationError<InitializationError>>
