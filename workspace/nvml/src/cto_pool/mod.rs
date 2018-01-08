@@ -49,6 +49,9 @@ use ::std::sync::Arc;
 use ::std::sync::RwLock;
 
 
+/// Collections
+pub mod collections;
+
 /// Synchronisation
 pub mod synchronisation;
 

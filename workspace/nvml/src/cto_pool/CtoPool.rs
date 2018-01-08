@@ -4,31 +4,18 @@
 
 /// A CTO pool of persistent memory is a kind of `malloc`- or heap- like allocator.
 /// Unlike the system `malloc`, multiple instances of it can be created.
-#[derive(Debug)]
-pub struct CtoPool<T: CtoSafe + Sync>(Arc<CtoPoolInner>, RwLock<CtoRootBox<T>>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CtoPool(Arc<CtoPoolInner>);
 
-unsafe impl<T: CtoSafe + Sync> Send for CtoPool<T>
+unsafe impl Send for CtoPool
 {
 }
 
-unsafe impl<T: CtoSafe + Sync> Sync for CtoPool<T>
+unsafe impl Sync for CtoPool
 {
 }
 
-impl<T: CtoSafe + Sync> PartialEq for CtoPool<T>
-{
-	#[inline(always)]
-	fn eq(&self, other: &Self) -> bool
-	{
-		self.0 == other.0
-	}
-}
-
-impl<T: CtoSafe + Sync> Eq for CtoPool<T>
-{
-}
-
-unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
+unsafe impl Alloc for CtoPool
 {
 	#[inline(always)]
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>
@@ -90,14 +77,14 @@ unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
 	}
 	
 	#[inline(always)]
-	fn alloc_one<UniqueT>(&mut self) -> Result<Unique<UniqueT>, AllocErr>
+	fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr>
 	where Self: Sized
 	{
-		unsafe { self.alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut UniqueT)) }
+		unsafe { self.alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut T)) }
 	}
 	
 	#[inline(always)]
-	unsafe fn dealloc_one<UniqueT>(&mut self, ptr: Unique<UniqueT>)
+	unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>)
 	where Self: Sized
 	{
 		self.alloc_trait_free(ptr.as_ptr() as *mut u8);
@@ -116,22 +103,22 @@ unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
 	}
 	
 	#[inline(always)]
-	unsafe fn realloc_array<UniqueT>(&mut self, old_pointer: Unique<UniqueT>, old_number_of_items: usize, new_number_of_items: usize) -> Result<Unique<UniqueT>, AllocErr>
+	unsafe fn realloc_array<T>(&mut self, old_pointer: Unique<T>, old_number_of_items: usize, new_number_of_items: usize) -> Result<Unique<T>, AllocErr>
 	where Self: Sized
 	{
-		match (Layout::array::<UniqueT>(old_number_of_items), Layout::array::<T>(new_number_of_items))
+		match (Layout::array::<T>(old_number_of_items), Layout::array::<T>(new_number_of_items))
 		{
-			(Some(ref old_layout), Some(ref new_layout)) => self.alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut UniqueT)),
+			(Some(ref old_layout), Some(ref new_layout)) => self.alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut T)),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for realloc_array")),
 		}
 	}
 	
 	#[inline(always)]
-	unsafe fn dealloc_array<UniqueT>(&mut self, pointer_to_free: Unique<UniqueT>, number_of_items: usize) -> Result<(), AllocErr>
+	unsafe fn dealloc_array<T>(&mut self, pointer_to_free: Unique<T>, number_of_items: usize) -> Result<(), AllocErr>
 	where Self: Sized
 	{
-		match Layout::array::<UniqueT>(number_of_items)
+		match Layout::array::<T>(number_of_items)
 		{
 			Some(_) => Ok(self.alloc_trait_free(pointer_to_free.as_ptr() as *mut _)),
 			
@@ -140,13 +127,14 @@ unsafe impl<T: CtoSafe + Sync> Alloc for CtoPool<T>
 	}
 }
 
-impl<Value: CtoSafe + Sync> CtoPool<Value>
+impl CtoPool
 {
 	/// Opens a pool, creating it if necessary, and instantiating a root object if one is missing.
 	/// This method is unsafe, because nothing stops T being of a different layout (struct type).
 	/// Additionally, nothing stops the layout of T changing from compile to compile.
+	/// Returns a CtoPool, which can be used as an `Alloc` instead of `Heap`, and a Read-Write lock to access the root of the CTO object graph.
 	#[inline(always)]
-	pub fn open<InitializationError: error::Error, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(pool_set_file_path: &Path, layout_name: &str, pool_size: usize, mode: mode_t, root_initializer: Initializer) -> Result<Self, CtoPoolOpenError<InitializationError>>
+	pub fn open<Value: CtoSafe + Sync, InitializationError: error::Error, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(pool_set_file_path: &Path, layout_name: &str, pool_size: usize, mode: mode_t, root_initializer: Initializer) -> Result<(Self, RwLock<CtoRootBox<Value>>), CtoPoolOpenError<InitializationError>>
 	{
 		let layout_name = CString::new(layout_name).expect("Embedded NULs are not allowed in a layout name");
 		let length = layout_name.as_bytes().len();
@@ -203,14 +191,7 @@ impl<Value: CtoSafe + Sync> CtoPool<Value>
 			}
 		};
 		
-		Ok(CtoPool(cto_pool_inner, RwLock::new(cto_root_box)))
-	}
-	
-	/// Returns a Read-Write lock to access the root of the CTO object graph.
-	#[inline(always)]
-	pub fn root(&self) -> &RwLock<CtoRootBox<Value>>
-	{
-		&self.1
+		Ok((CtoPool(cto_pool_inner), RwLock::new(cto_root_box)))
 	}
 	
 	#[inline(always)]

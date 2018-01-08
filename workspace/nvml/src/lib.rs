@@ -5,6 +5,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(tyvar_behind_raw_pointer)]
 #![deny(missing_docs)]
+#![feature(alloc)]
 #![feature(allocator_api)]
 #![feature(const_fn)]
 #![feature(optin_builtin_traits)]
@@ -21,6 +22,7 @@
 //!
 
 
+extern crate alloc;
 #[macro_use] extern crate bitflags;
 extern crate errno;
 extern crate libc;
