@@ -5,6 +5,7 @@
       <w>bindgen</w>
       <w>calloc</w>
       <w>chunksize</w>
+      <w>dedup</w>
       <w>eagain</w>
       <w>ebusy</w>
       <w>ecanceled</w>

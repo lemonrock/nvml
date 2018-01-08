@@ -8,6 +8,8 @@
 #![feature(alloc)]
 #![feature(allocator_api)]
 #![feature(const_fn)]
+#![feature(core_intrinsics)]
+#![feature(inclusive_range)]
 #![feature(optin_builtin_traits)]
 #![feature(specialization)]
 #![feature(thread_local)]
