@@ -24,13 +24,29 @@ impl<T: CtoSafe> Drop for CtoVec<T>
 	}
 }
 
-impl<T: CtoSafe + Clone> Clone for CtoVec<T>
+impl<T: CtoSafe> CtoSafe for CtoVec<T>
 {
-	// TODO: Review clone to work with our allocator
 	#[inline(always)]
-	fn clone(&self) -> Self
+	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
 	{
-		unimplemented!();
+		use ::std::heap::Heap;
+		
+		#[allow(dead_code)]
+		struct RawVecAlike<T2, A: Alloc = Heap>
+		{
+			ptr: Unique<T2>,
+			cap: usize,
+			a: A,
+		}
+		
+		// This truly horrible hack is to try access the 'a' field, the allocator, because it will be invalid once deserialized.
+		unsafe
+		{
+			let raw_vec_mut_ptr = &mut self.buf as *mut _;
+			let horrible = raw_vec_mut_ptr as *mut RawVecAlike<T, CtoPool>;
+			
+			(*horrible).a = CtoPool(cto_pool_inner.clone())
+		}
 	}
 }
 
@@ -321,24 +337,24 @@ impl<T: CtoSafe> IndexMut<RangeToInclusive<usize>> for CtoVec<T>
 
 impl<T: CtoSafe> CtoVec<T>
 {
-	/// Constructs a new, empty `CtoVec<T, Root>`.
+	/// Constructs a new, empty `CtoVec<T>`.
 	#[inline(always)]
-	pub fn new(cto_pool: &CtoPool) -> Self
+	pub fn new(cto_pool: CtoPool) -> Self
 	{
 		Self
 		{
-			buf: RawVec::new_in(cto_pool.clone()),
+			buf: RawVec::new_in(cto_pool),
 			len: 0,
 		}
 	}
 	
 	/// Constructs a new, empty `CtoVec<T>` with the specified capacity.
 	#[inline(always)]
-	pub fn with_capacity(capacity: usize, cto_pool: &CtoPool) -> Self
+	pub fn with_capacity(capacity: usize, cto_pool: CtoPool) -> Self
 	{
 		Self
 		{
-			buf: RawVec::with_capacity_in(capacity, cto_pool.clone()),
+			buf: RawVec::with_capacity_in(capacity, cto_pool),
 			len: 0,
 		}
 	}
@@ -835,7 +851,7 @@ impl<T: CtoSafe> CtoVec<T>
 		assert!(at <= self.len(), "`at` out of bounds");
 		
 		let other_len = self.len - at;
-		let mut other = CtoVec::with_capacity(other_len, self.buf.alloc());
+		let mut other = CtoVec::with_capacity(other_len, self.buf.alloc().clone());
 		
 		unsafe
 		{

@@ -8,6 +8,22 @@ pub struct CtoPoolAllocator<'ctopool>(&'ctopool Arc<CtoPoolInner>);
 
 impl<'ctopool> CtoPoolAllocator<'ctopool>
 {
+	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoVec.
+	#[inline(always)]
+	pub fn allocate_cto_vec<Value: CtoSafe>(&self) -> CtoVec<Value>
+	{
+		CtoVec::new(CtoPool(self.0.clone()))
+	}
+	
+	/// Allocate a CtoVec with capacity, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoVec.
+	#[inline(always)]
+	pub fn allocate_cto_vec_with_capacity<Value: CtoSafe>(&self, capacity: usize) -> CtoVec<Value>
+	{
+		CtoVec::with_capacity(capacity, CtoPool(self.0.clone()))
+	}
+	
 	/// Allocate a CtoReadWriteLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
 	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
 	/// Returns on success a CtoReadWriteLock.
