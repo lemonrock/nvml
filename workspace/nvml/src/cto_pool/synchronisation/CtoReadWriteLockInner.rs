@@ -7,14 +7,14 @@ pub(crate) struct CtoReadWriteLockInner<T: CtoSafe>
 	#[cfg(unix)] rwlock: UnsafeCell<pthread_rwlock_t>,
 	write_lock: UnsafeCell<bool>,
 	number_of_read_locks: AtomicUsize,
-	cto_pool_inner: Arc<CtoPoolInner>,
+	cto_pool_inner: *mut PMEMctopool,
 	value: UnsafeCell<T>,
 }
 
 impl<T: CtoSafe> CtoSafe for CtoReadWriteLockInner<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
 		#[cfg(unix)]
 		{
@@ -25,9 +25,9 @@ impl<T: CtoSafe> CtoSafe for CtoReadWriteLockInner<T>
 		
 		self.number_of_read_locks = AtomicUsize::new(0);
 		
-		self.cto_pool_inner = cto_pool_inner.clone();
+		self.cto_pool_inner = cto_pool_inner;
 		
-		self.deref_mut().reinitialize(cto_pool_inner);
+		self.deref_mut().cto_pool_opened(cto_pool_inner);
 	}
 }
 

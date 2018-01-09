@@ -2,12 +2,8 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-trait PersistentMemoryWrapper: CtoSafe
-{
-	type PersistentMemory;
-	
-	type Value: CtoSafe;
-	
-	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference, initializer: Initializer) -> Result<Self, InitializationError>;
-}
+use super::*;
+
+
+include!("CtoBox.rs");
+include!("CtoBoxInner.rs");

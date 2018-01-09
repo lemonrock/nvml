@@ -11,7 +11,7 @@ pub struct CtoConditionVariable
 impl CtoSafe for CtoConditionVariable
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, _cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, _cto_pool_inner: *mut PMEMctopool)
 	{
 		self.inner = CtoConditionVariableInner::new();
 	}

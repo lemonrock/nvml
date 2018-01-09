@@ -29,10 +29,10 @@ impl<T: CtoSafe> RefUnwindSafe for CtoMutexLockAndConditionVariable<T>
 impl<T: CtoSafe> CtoSafe for CtoMutexLockAndConditionVariable<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.cto_mutex_lock.reinitialize(cto_pool_inner);
-		self.cto_condition_variable.reinitialize(cto_pool_inner)
+		self.cto_mutex_lock.cto_pool_opened(cto_pool_inner);
+		self.cto_condition_variable.cto_pool_opened(cto_pool_inner)
 	}
 }
 

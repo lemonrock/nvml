@@ -2,36 +2,33 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-struct CtoBoxInner<T: CtoSafe>
+#[derive(Debug)]
+struct CtoPoolAllocGuard
 {
-	cto_pool_inner: Arc<CtoPoolInner>,
-	value: T,
+	pool_pointer: *mut PMEMctopool,
+	counter: AtomicUsize,
 }
 
-impl<T: CtoSafe> CtoSafe for CtoBoxInner<T>
+impl CtoPoolAllocGuard
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn acquire(&mut self)
 	{
-		self.cto_pool_inner = cto_pool_inner.clone();
-		self.value.reinitialize(cto_pool_inner);
+		self.counter.fetch_add(1, SeqCst);
 	}
-}
-
-impl<T: CtoSafe> Deref for CtoBoxInner<T>
-{
-	type Target = T;
 	
-	fn deref(&self) -> &T
+	/// Returns 'true' if the caller was the last reference.
+	#[inline(always)]
+	fn release(&mut self) -> bool
 	{
-		&self.value
-	}
-}
-
-impl<T: CtoSafe> DerefMut for CtoBoxInner<T>
-{
-	fn deref_mut(&mut self) -> &mut T
-	{
-		&mut self.value
+		if self.counter.fetch_sub(1, SeqCst) == 1
+		{
+			self.pool_pointer.close();
+			true
+		}
+		else
+		{
+			false
+		}
 	}
 }

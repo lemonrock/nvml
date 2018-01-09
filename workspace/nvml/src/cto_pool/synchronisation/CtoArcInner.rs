@@ -8,18 +8,27 @@ struct CtoArcInner<T: CtoSafe>
 {
 	strong_counter: AtomicUsize,
 	weak_counter: AtomicUsize,
-	cto_pool_inner: Arc<CtoPoolInner>,
+	cto_pool_inner: *mut PMEMctopool,
 	value: T,
 }
 
 impl<T: CtoSafe> CtoSafe for CtoArcInner<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.cto_pool_inner = cto_pool_inner.clone();
+		self.cto_pool_inner = cto_pool_inner;
 		
-		self.value.reinitialize(cto_pool_inner)
+		self.value.cto_pool_opened(cto_pool_inner)
+	}
+}
+
+impl<T: CtoSafe> Drop for CtoArcInner<T>
+{
+	#[inline(always)]
+	fn drop(&mut self)
+	{
+		self.cto_pool_inner = None;
 	}
 }
 

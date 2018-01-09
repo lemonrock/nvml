@@ -2,24 +2,23 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[repr(C)]
 #[derive(Debug)]
 struct CtoRcInner<T: CtoSafe>
 {
 	strong_counter: CtoRcCounter,
 	weak_counter: CtoRcCounter,
-	cto_pool_inner: Arc<CtoPoolInner>,
+	cto_pool_inner: *mut PMEMctopool,
 	value: T,
 }
 
 impl<T: CtoSafe> CtoSafe for CtoRcInner<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.cto_pool_inner = cto_pool_inner.clone();
+		self.cto_pool_inner = cto_pool_inner;
 		
-		self.value.reinitialize(cto_pool_inner)
+		self.value.cto_pool_opened(cto_pool_inner)
 	}
 }
 

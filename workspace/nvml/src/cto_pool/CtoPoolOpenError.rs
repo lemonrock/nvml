@@ -4,7 +4,7 @@
 
 /// Represents a failure to open a CTO pool.
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub enum CtoPoolOpenError<InitializationError>
+pub enum CtoPoolOpenError<InitializationError: error::Error>
 {
 	/// Could not create a new CTO pool (can not occur if an existing CTO pool exists).
 	CreateFailed(PmdkError),
@@ -18,11 +18,11 @@ pub enum CtoPoolOpenError<InitializationError>
 	/// An existing CTO pool is invalid or inconsistent.
 	Invalid,
 	
-	/// After creating or opening a CTO pool, a root object (CtoRootBox) was missing. Creation of the root object failed.
+	/// After creating or opening a CTO pool, a root object was missing and creation of it was tried. Creation then failed.
 	RootCreation(CtoPoolAllocationError<InitializationError>),
 }
 
-impl<InitializationError: Display> Display for CtoPoolOpenError<InitializationError>
+impl<InitializationError: error::Error> Display for CtoPoolOpenError<InitializationError>
 {
 	#[inline(always)]
 	fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error>
@@ -31,11 +31,11 @@ impl<InitializationError: Display> Display for CtoPoolOpenError<InitializationEr
 		
 		match *self
 		{
-			CreateFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			CreateFailed(ref pmdk_error) => Display::fmt(pmdk_error, formatter),
 			
-			ValidationFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			ValidationFailed(ref pmdk_error) => Display::fmt(pmdk_error, formatter),
 			
-			OpenFailed(ref generic_error) => Display::fmt(generic_error, formatter),
+			OpenFailed(ref pmdk_error) => Display::fmt(pmdk_error, formatter),
 			
 			Invalid => write!(formatter, "Invalid"),
 			
@@ -59,11 +59,11 @@ impl<InitializationError: error::Error> error::Error for CtoPoolOpenError<Initia
 		
 		match *self
 		{
-			CreateFailed(ref generic_error) => Some(generic_error),
+			CreateFailed(ref pmdk_error) => Some(pmdk_error),
 			
-			ValidationFailed(ref generic_error) => Some(generic_error),
+			ValidationFailed(ref pmdk_error) => Some(pmdk_error),
 			
-			OpenFailed(ref generic_error) => Some(generic_error),
+			OpenFailed(ref pmdk_error) => Some(pmdk_error),
 			
 			Invalid => None,
 			

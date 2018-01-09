@@ -2,24 +2,27 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Identical concept to a regular Rust Box but exists in a persistent object pool.
-pub struct CtoBox<T: CtoSafe>
+/// Identical in concept to a regular Rust Box but exists in a persistent object pool.
+pub struct CtoBox<Value: CtoSafe>
 {
-	persistent_memory_pointer: *mut CtoBoxInner<T>,
+	persistent_memory_pointer: Unique<CtoBoxInner<Value>>,
 }
 
-impl<T: CtoSafe> PersistentMemoryWrapper for CtoBox<T>
+impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 {
-	type PersistentMemory = CtoBoxInner<T>;
+	type PersistentMemory = CtoBoxInner<Value>;
 	
-	type Value = T;
+	type Value = Value;
 	
 	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let inner = unsafe { &mut * persistent_memory_pointer };
-		inner.cto_pool_inner = cto_pool_inner.clone();
-		initializer(inner.deref_mut())?;
+		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
+		{
+			let as_mut = persistent_memory_pointer.as_mut();
+			as_mut.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
+			initializer(as_mut)?;
+		}
 		Ok
 		(
 			Self
@@ -30,40 +33,48 @@ impl<T: CtoSafe> PersistentMemoryWrapper for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> CtoSafe for CtoBox<T>
+impl<Value: CtoSafe> CtoSafe for CtoBox<Value>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference)
 	{
-		self.persistent_memory_mut().reinitialize(cto_pool_inner)
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_alloc_guard_reference)
 	}
 }
 
-impl<T: CtoSafe> Drop for CtoBox<T>
+impl<Value: CtoSafe> Drop for CtoBox<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let cto_pool_inner = self.persistent_memory().cto_pool_inner.clone();
-		CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
-	}
-}
-
-impl<T: CtoSafe + Clone> Clone for CtoBox<T>
-{
-	#[inline(always)]
-	fn clone(&self) -> Self
-	{
-		let clone: Result<CtoBox<T>, CtoPoolAllocationError<()>> = CtoPoolAllocator(&self.persistent_memory().cto_pool_inner).allocate_box(|clone_of_t|
+		let pool_pointer = self.persistent_memory().cto_pool_alloc_guard_reference.pool_pointer();
+		
+		let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
+		
+		if needs_drop::<CtoBoxInner<Value>>()
 		{
-			unsafe { copy_nonoverlapping(self.deref(), clone_of_t, size_of::<T>()) };
-			Ok(())
-		});
-		clone.unwrap()
+			unsafe { drop_in_place(persistent_memory_pointer) }
+		}
+		
+		pool_pointer.free(persistent_memory_pointer);
 	}
 }
 
-impl<T: CtoSafe + PartialEq> PartialEq for CtoBox<T>
+//impl<Value: CtoSafe + Clone> Clone for CtoBox<Value>
+//{
+//	#[inline(always)]
+//	fn clone(&self) -> Self
+//	{
+//		let clone: Result<CtoBox<T>, CtoPoolAllocationError<()>> = CtoPoolAllocator(&self.persistent_memory().cto_pool_inner).allocate_box(|clone_of_t|
+//		{
+//			unsafe { copy_nonoverlapping(self.deref(), clone_of_t, size_of::<T>()) };
+//			Ok(())
+//		});
+//		clone.unwrap()
+//	}
+//}
+
+impl<Value: CtoSafe + PartialEq> PartialEq for CtoBox<Value>
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
@@ -78,11 +89,11 @@ impl<T: CtoSafe + PartialEq> PartialEq for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Eq> Eq for CtoBox<T>
+impl<Value: CtoSafe + Eq> Eq for CtoBox<Value>
 {
 }
 
-impl<T: CtoSafe + PartialOrd> PartialOrd for CtoBox<T>
+impl<Value: CtoSafe + PartialOrd> PartialOrd for CtoBox<Value>
 {
 	#[inline(always)]
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering>
@@ -115,7 +126,7 @@ impl<T: CtoSafe + PartialOrd> PartialOrd for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Ord> Ord for CtoBox<T>
+impl<Value: CtoSafe + Ord> Ord for CtoBox<Value>
 {
 	#[inline(always)]
 	fn cmp(&self, other: &Self) -> Ordering
@@ -124,7 +135,7 @@ impl<T: CtoSafe + Ord> Ord for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Hash> Hash for CtoBox<T>
+impl<Value: CtoSafe + Hash> Hash for CtoBox<Value>
 {
 	#[inline(always)]
 	fn hash<H: Hasher>(&self, state: &mut H)
@@ -133,7 +144,7 @@ impl<T: CtoSafe + Hash> Hash for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
+impl<Value: CtoSafe + Hasher> Hasher for CtoBox<Value>
 {
 	#[inline(always)]
 	fn finish(&self) -> u64
@@ -220,7 +231,7 @@ impl<T: CtoSafe + Hasher> Hasher for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Display> Display for CtoBox<T>
+impl<Value: CtoSafe + Display> Display for CtoBox<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -229,7 +240,7 @@ impl<T: CtoSafe + Display> Display for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe + Debug> Debug for CtoBox<T>
+impl<Value: CtoSafe + Debug> Debug for CtoBox<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -238,7 +249,7 @@ impl<T: CtoSafe + Debug> Debug for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> Pointer for CtoBox<T>
+impl<Value: CtoSafe> Pointer for CtoBox<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -247,71 +258,73 @@ impl<T: CtoSafe> Pointer for CtoBox<T>
 	}
 }
 
-impl<T: CtoSafe> Deref for CtoBox<T>
+impl<Value: CtoSafe> Deref for CtoBox<Value>
 {
-	type Target = T;
+	type Target = Value;
 	
-	fn deref(&self) -> &T
+	#[inline(always)]
+	fn deref(&self) -> &Self::Target
 	{
 		self.persistent_memory().deref()
 	}
 }
 
-impl<T: CtoSafe> DerefMut for CtoBox<T>
+impl<Value: CtoSafe> DerefMut for CtoBox<Value>
 {
-	fn deref_mut(&mut self) -> &mut T
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut Self::Target
 	{
 		self.persistent_memory_mut().deref_mut()
 	}
 }
 
-impl<T: CtoSafe> Borrow<T> for CtoBox<T>
+impl<Value: CtoSafe> Borrow<Value> for CtoBox<Value>
 {
 	#[inline(always)]
-	fn borrow(&self) -> &T
+	fn borrow(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<T: CtoSafe> BorrowMut<T> for CtoBox<T>
+impl<Value: CtoSafe> BorrowMut<Value> for CtoBox<Value>
 {
 	#[inline(always)]
-	fn borrow_mut(&mut self) -> &mut T
+	fn borrow_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}
 }
 
-impl<T: CtoSafe> AsRef<T> for CtoBox<T>
+impl<Value: CtoSafe> AsRef<Value> for CtoBox<Value>
 {
 	#[inline(always)]
-	fn as_ref(&self) -> &T
+	fn as_ref(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<T: CtoSafe> AsMut<T> for CtoBox<T>
+impl<Value: CtoSafe> AsMut<Value> for CtoBox<Value>
 {
 	#[inline(always)]
-	fn as_mut(&mut self) -> &mut T
+	fn as_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}
 }
 
-impl<T: CtoSafe> CtoBox<T>
+impl<Value: CtoSafe> CtoBox<Value>
 {
 	#[inline(always)]
-	fn persistent_memory(&self) -> &CtoBoxInner<T>
+	fn persistent_memory(&self) -> &CtoBoxInner<Value>
 	{
-		unsafe { &*self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_ref() }
 	}
 	
 	#[inline(always)]
-	fn persistent_memory_mut(&self) -> &mut CtoBoxInner<T>
+	fn persistent_memory_mut(&mut self) -> &mut CtoBoxInner<Value>
 	{
-		unsafe { &mut *self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_mut() }
 	}
 }

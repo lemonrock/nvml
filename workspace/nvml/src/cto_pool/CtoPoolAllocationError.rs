@@ -22,7 +22,7 @@ impl<InitializationError: Display> Display for CtoPoolAllocationError<Initializa
 		
 		match *self
 		{
-			Allocation(ref generic_error) => Display::fmt(generic_error, formatter),
+			Allocation(ref pmdk_error) => Display::fmt(pmdk_error, formatter),
 			
 			Initialization(ref initialization_error) => Display::fmt(initialization_error, formatter),
 		}
@@ -44,7 +44,7 @@ impl<InitializationError: error::Error> error::Error for CtoPoolAllocationError<
 		
 		match *self
 		{
-			Allocation(ref generic_error) => Some(generic_error),
+			Allocation(ref pmdk_error) => Some(pmdk_error),
 			
 			Initialization(ref initialization_error) => Some(initialization_error),
 		}

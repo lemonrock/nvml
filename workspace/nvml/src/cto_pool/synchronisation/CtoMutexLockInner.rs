@@ -2,46 +2,21 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[repr(C)]
 pub(crate) struct CtoMutexLockInner<T: CtoSafe>
 {
 	#[cfg(unix)] mutex: UnsafeCell<pthread_mutex_t>,
-	cto_pool_inner: Arc<CtoPoolInner>,
+	cto_pool_inner: *mut PMEMctopool,
 	value: UnsafeCell<T>,
-}
-
-impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
-{
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		#[cfg(unix)]
-		{
-			let result = unsafe { pthread_mutex_destroy(self.mutex.get()) };
-			
-			#[cfg(not(target_os = "dragonfly"))]
-			{
-				debug_assert_pthread_result_ok!(result);
-			}
-			
-			#[cfg(target_os = "dragonfly")]
-			{
-				// On DragonFly `pthread_mutex_destroy()` returns `EINVAL` if called on a mutex that was just initialized with `PTHREAD_MUTEX_INITIALIZER`.
-				// Once it is used (locked or unlocked) or `pthread_mutex_init()` is called, this behaviour no longer occurs.
-				debug_assert_pthread_result_ok_dragonfly!(result);
-			}
-		}
-	}
 }
 
 impl<T: CtoSafe> CtoSafe for CtoMutexLockInner<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.cto_pool_inner = cto_pool_inner.clone();
+		self.cto_pool_inner = cto_pool_inner;
 		
-		self.deref_mut().reinitialize(cto_pool_inner);
+		self.deref_mut().cto_pool_opened(cto_pool_inner);
 		
 		#[cfg(unix)]
 		unsafe
@@ -80,6 +55,30 @@ impl<T: CtoSafe> CtoSafe for CtoMutexLockInner<T>
 			
 			let result = pthread_mutexattr_destroy(&mut mutex_options);
 			debug_assert_pthread_result_ok!(result);
+		}
+	}
+}
+
+impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
+{
+	#[inline(always)]
+	fn drop(&mut self)
+	{
+		#[cfg(unix)]
+		{
+			let result = unsafe { pthread_mutex_destroy(self.mutex.get()) };
+			
+			#[cfg(not(target_os = "dragonfly"))]
+			{
+				debug_assert_pthread_result_ok!(result);
+			}
+			
+			#[cfg(target_os = "dragonfly")]
+			{
+				// On DragonFly `pthread_mutex_destroy()` returns `EINVAL` if called on a mutex that was just initialized with `PTHREAD_MUTEX_INITIALIZER`.
+				// Once it is used (locked or unlocked) or `pthread_mutex_init()` is called, this behaviour no longer occurs.
+				debug_assert_pthread_result_ok_dragonfly!(result);
+			}
 		}
 	}
 }

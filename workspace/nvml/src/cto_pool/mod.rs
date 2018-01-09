@@ -2,9 +2,10 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-use self::collections::CtoVec;
-use self::synchronisation::CtoMutexLock;
-use self::synchronisation::CtoReadWriteLock;
+//use self::collections::CtoVec;
+//use self::synchronisation::CtoMutexLock;
+//use self::synchronisation::CtoReadWriteLock;
+use self::boxed::CtoBox;
 use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_void;
@@ -15,7 +16,6 @@ use ::nvml_sys::*;
 use ::rust_extra::unlikely;
 use ::std::borrow::Borrow;
 use ::std::borrow::BorrowMut;
-use ::std::cell::Cell;
 use ::std::cmp::min;
 use ::std::cmp::Ordering;
 use ::std::error;
@@ -33,44 +33,44 @@ use ::std::heap::AllocErr;
 use ::std::heap::CannotReallocInPlace;
 use ::std::heap::Excess;
 use ::std::heap::Layout;
+use ::std::marker::PhantomData;
 use ::std::mem::align_of;
 use ::std::mem::needs_drop;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
 use ::std::ops::DerefMut;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
-use ::std::process::abort;
 use ::std::ptr::copy_nonoverlapping;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::null;
-use ::std::ptr::null_mut;
+use ::std::ptr::Shared;
 use ::std::ptr::Unique;
 use ::std::path::Path;
-use ::std::sync::Arc;
-use ::std::sync::RwLock;
+use ::std::sync::atomic::AtomicUsize;
+use ::std::sync::atomic::Ordering::SeqCst;
 
+/// Boxes like those in regular Rust's stdlib.
+pub mod boxed;
 
 /// Collections
-pub mod collections;
+//pub mod collections;
 
 /// Synchronisation
-pub mod synchronisation;
+//pub mod synchronisation;
 
 
-include!("CtoBox.rs");
-include!("CtoBoxInner.rs");
-include!("CtoPool.rs");
+include!("Allocator.rs");
+include!("CtoPoolAlloc.rs");
 include!("CtoPoolAllocationError.rs");
-include!("CtoPoolAllocator.rs");
-include!("CtoPoolInner.rs");
+include!("CtoPoolAllocGuard.rs");
+include!("CtoPoolAllocGuardReference.rs");
 include!("CtoPoolOpenError.rs");
 include!("CtoPoolPathExt.rs");
-include!("CtoRc.rs");
-include!("CtoRcCounter.rs");
-include!("CtoRcInner.rs");
-include!("CtoRootBox.rs");
+//include!("CtoRc.rs");
+//include!("CtoRcCounter.rs");
+//include!("CtoRcInner.rs");
 include!("CtoSafe.rs");
 include!("initialise_memory_functions.rs");
 include!("PersistentMemoryWrapper.rs");
 include!("PMEMctopoolExt.rs");
-include!("WeakCtoRc.rs");
+//include!("WeakCtoRc.rs");

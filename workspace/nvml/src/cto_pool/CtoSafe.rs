@@ -2,14 +2,12 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// A marker trait.
-/// Exists to prevent regular Rust types such as Vec<T> and other stack-allocated code from being passed to a CTO pool.
+/// Structs that are safe to store in persistent memory.
 pub trait CtoSafe: Sized
 {
-	/// Used internally when opening persistent memory pools for the first time.
-	/// Exists for the convenience of objects with fields that should not be persistent, eg Mutexes, RwLocks and CondVars.
+	#[doc(hidden)]
 	#[inline(always)]
-	fn reinitialize(&mut self, _cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, _cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference)
 	{
 	}
 }
@@ -66,6 +64,6 @@ impl CtoSafe for bool
 {
 }
 
-impl<T: CtoSafe> CtoSafe for Option<T>
+impl<Value: CtoSafe> CtoSafe for Option<Value>
 {
 }

@@ -11,9 +11,9 @@ pub struct CtoReadWriteLock<T: CtoSafe>
 impl<T: CtoSafe> CtoSafe for CtoReadWriteLock<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.persistent_memory_mut().reinitialize(cto_pool_inner)
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_inner)
 	}
 }
 
@@ -28,7 +28,7 @@ impl<T: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<T>
 	{
 		let inner = unsafe { &mut * persistent_memory_pointer };
 		initializer(inner.deref_mut())?;
-		inner.reinitialize(cto_pool_inner);
+		inner.cto_pool_opened(cto_pool_inner);
 		Ok
 		(
 			Self

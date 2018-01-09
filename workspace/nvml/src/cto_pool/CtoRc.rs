@@ -11,9 +11,9 @@ pub struct CtoRc<T: CtoSafe>
 impl<T: CtoSafe> CtoSafe for CtoRc<T>
 {
 	#[inline(always)]
-	fn reinitialize(&mut self, cto_pool_inner: &Arc<CtoPoolInner>)
+	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
 	{
-		self.persistent_memory_mut().reinitialize(cto_pool_inner)
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_inner)
 	}
 }
 
