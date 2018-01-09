@@ -7,6 +7,7 @@
 #![deny(missing_docs)]
 #![feature(alloc)]
 #![feature(allocator_api)]
+#![feature(collections_range)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]
 #![feature(exact_size_is_empty)]
@@ -14,10 +15,14 @@
 #![feature(inclusive_range)]
 #![feature(offset_to)]
 #![feature(optin_builtin_traits)]
+#![feature(pattern)]
+#![feature(placement_new_protocol)]
 #![feature(shared)]
 #![feature(specialization)]
+#![feature(str_internals)]
 #![feature(thread_local)]
 #![feature(trusted_len)]
+#![feature(unicode)]
 #![feature(unique)]
 #![feature(untagged_unions)]
 
@@ -38,6 +43,7 @@ extern crate nvml_sys;
 extern crate rust_extra;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+extern crate std_unicode;
 extern crate syscall_alt;
 
 

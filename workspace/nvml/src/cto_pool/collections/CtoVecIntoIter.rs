@@ -3,40 +3,66 @@
 
 
 /// An iterator that moves out of a vector.
-///
-/// This `struct` is created by the `into_iter` method on [`CtoVec`][`CtoVec`] (provided by the `IntoIterator` trait).
-///
-/// [`CtoVec`]: struct.CtoVec.html
 pub struct CtoVecIntoIter<T: CtoSafe>
 {
 	buf: Shared<T>,
-	phantom: PhantomData<T>,
 	cap: usize,
 	ptr: *const T,
 	end: *const T,
 	alloc: CtoPoolAlloc,
 }
 
-impl<T: CtoSafe> Drop for CtoVecIntoIter<T>
-{
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		// destroy the remaining elements
-		for _x in self.by_ref()
-		{
-		}
-		
-		// RawVec handles deallocation
-		let _ = unsafe { RawVec::from_raw_parts_in(self.buf.as_ptr(), self.cap, self.alloc.clone()) };
-	}
-}
-
 impl<T: CtoSafe + Debug> Debug for CtoVecIntoIter<T>
 {
+	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
 		f.debug_tuple("CtoVecIntoIter").field(&self.as_slice()).finish()
+	}
+}
+
+impl<T: CtoSafe> CtoVecIntoIter<T>
+{
+	/// Returns the remaining items of this iterator as a slice.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let vec = vec!['a', 'b', 'c'];
+	/// let mut into_iter = vec.into_iter();
+	/// assert_eq!(into_iter.as_slice(), &['a', 'b', 'c']);
+	/// let _ = into_iter.next().unwrap();
+	/// assert_eq!(into_iter.as_slice(), &['b', 'c']);
+	/// ```
+	#[inline(always)]
+	pub fn as_slice(&self) -> &[T]
+	{
+		unsafe
+		{
+			from_raw_parts(self.ptr, self.len())
+		}
+	}
+	
+	/// Returns the remaining items of this iterator as a mutable slice.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let vec = vec!['a', 'b', 'c'];
+	/// let mut into_iter = vec.into_iter();
+	/// assert_eq!(into_iter.as_slice(), &['a', 'b', 'c']);
+	/// into_iter.as_mut_slice()[2] = 'z';
+	/// assert_eq!(into_iter.next().unwrap(), 'a');
+	/// assert_eq!(into_iter.next().unwrap(), 'b');
+	/// assert_eq!(into_iter.next().unwrap(), 'z');
+	/// ```
+	#[inline(always)]
+	pub fn as_mut_slice(&mut self) -> &mut [T]
+	{
+		unsafe
+		{
+			from_raw_parts_mut(self.ptr as *mut T, self.len())
+		}
 	}
 }
 
@@ -65,11 +91,10 @@ impl<T: CtoSafe> Iterator for CtoVecIntoIter<T>
 			{
 				if size_of::<T>() == 0
 				{
-					// purposefully don't use 'ptr.offset' because for vectors with 0-size elements this would return the same pointer.
+					// Purposefully don't use 'ptr.offset' because for vectors with 0-size elements this would return the same pointer.
 					self.ptr = arith_offset(self.ptr as *const i8, 1) as *mut T;
 					
-					// Use a non-null pointer value
-					// (self.ptr might be null because of wrapping)
+					// Use a non-null pointer value (self.ptr might be null because of wrapping).
 					Some(read(1 as *mut T))
 				}
 				else
@@ -116,11 +141,10 @@ impl<T: CtoSafe> DoubleEndedIterator for CtoVecIntoIter<T>
 			{
 				if size_of::<T>() == 0
 				{
-					// See above for why 'ptr.offset' isn't used
+					// Purposefully don't use 'ptr.offset' because for vectors with 0-size elements this would return the same pointer.
 					self.end = arith_offset(self.end as *const i8, -1) as *mut T;
 					
-					// Use a non-null pointer value
-					// (self.end might be null because of wrapping)
+					// Use a non-null pointer value (self.end might be null because of wrapping).
 					Some(read(1 as *mut T))
 				}
 				else
@@ -151,47 +175,17 @@ unsafe impl<T: CtoSafe> TrustedLen for CtoVecIntoIter<T>
 {
 }
 
-impl<T: CtoSafe> CtoVecIntoIter<T>
+impl<T: CtoSafe> Drop for CtoVecIntoIter<T>
 {
-	/// Returns the remaining items of this iterator as a slice.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// let vec = vec!['a', 'b', 'c'];
-	/// let mut into_iter = vec.into_iter();
-	/// assert_eq!(into_iter.as_slice(), &['a', 'b', 'c']);
-	/// let _ = into_iter.next().unwrap();
-	/// assert_eq!(into_iter.as_slice(), &['b', 'c']);
-	/// ```
 	#[inline(always)]
-	pub fn as_slice(&self) -> &[T]
+	fn drop(&mut self)
 	{
-		unsafe
+		// destroy the remaining elements
+		for _x in self.by_ref()
 		{
-			from_raw_parts(self.ptr, self.len())
 		}
-	}
-	
-	/// Returns the remaining items of this iterator as a mutable slice.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// let vec = vec!['a', 'b', 'c'];
-	/// let mut into_iter = vec.into_iter();
-	/// assert_eq!(into_iter.as_slice(), &['a', 'b', 'c']);
-	/// into_iter.as_mut_slice()[2] = 'z';
-	/// assert_eq!(into_iter.next().unwrap(), 'a');
-	/// assert_eq!(into_iter.next().unwrap(), 'b');
-	/// assert_eq!(into_iter.next().unwrap(), 'z');
-	/// ```
-	#[inline(always)]
-	pub fn as_mut_slice(&mut self) -> &mut [T]
-	{
-		unsafe
-		{
-			from_raw_parts_mut(self.ptr as *mut T, self.len())
-		}
+		
+		// RawVec handles deallocation
+		let _ = unsafe { RawVec::from_raw_parts_in(self.buf.as_ptr(), self.cap, self.alloc.clone()) };
 	}
 }

@@ -3,6 +3,7 @@
 
 
 use self::collections::CtoVec;
+use self::string::CtoString;
 use self::synchronisation::CtoMutexLock;
 use self::synchronisation::CtoReadWriteLock;
 use self::boxed::CtoBox;
@@ -62,6 +63,9 @@ pub mod rc;
 
 /// Synchronisation
 pub mod synchronisation;
+
+// /// A String like that in regular Rust's stdlib.
+pub mod string;
 
 
 include!("Allocator.rs");

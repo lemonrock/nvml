@@ -40,6 +40,34 @@ impl<T: CtoSafe> CtoSafe for CtoVec<T>
 	}
 }
 
+impl<T: CtoSafe + Clone> CtoVec<T>
+{
+	/// Extend from slice.
+	#[inline(always)]
+	pub fn extend_from_slice(&mut self, other: &[T])
+	{
+		self.spec_extend(other.iter())
+	}
+}
+
+impl<T: CtoSafe> Extend<T> for CtoVec<T>
+{
+	#[inline(always)]
+	fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I)
+	{
+		<Self as SpecExtend<T, I::IntoIter>>::spec_extend(self, iter.into_iter())
+	}
+}
+
+impl<'a, T: 'a + CtoSafe + Copy> Extend<&'a T> for CtoVec<T>
+{
+	#[inline(always)]
+	fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I)
+	{
+		self.spec_extend(iter.into_iter())
+	}
+}
+
 impl<T: CtoSafe + Hash> Hash for CtoVec<T>
 {
 	#[inline(always)]
@@ -700,6 +728,30 @@ impl<T: CtoSafe> CtoVec<T>
 		}
 	}
 	
+	/// Returns a place for insertion at the back of the `Vec`.
+	///
+	/// Using this method with placement syntax is equivalent to [`push`](#method.push), but may be more efficient.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// #![feature(collection_placement)]
+	/// #![feature(placement_in_syntax)]
+	///
+	/// let mut vec = vec![1, 2];
+	/// vec.place_back() <- 3;
+	/// vec.place_back() <- 4;
+	/// assert_eq!(&vec, &[1, 2, 3, 4]);
+	/// ```
+	#[inline(always)]
+	pub fn place_back(&mut self) -> CtoVecPlaceBack<T>
+	{
+		CtoVecPlaceBack
+		{
+			vec: self
+		}
+	}
+	
 	/// Removes the last element from a vector and returns it, or [`None`] if it is empty.
 	///
 	/// [`None`]: ../../std/option/enum.Option.html#variant.None
@@ -764,7 +816,79 @@ impl<T: CtoSafe> CtoVec<T>
 		self.len += count;
 	}
 	
-	// TODO: pub fn drain<R>(&mut self, range: R) -> Drain<T> where R: RangeArgument<usize>
+	/// Creates a draining iterator that removes the specified range in the vector
+	/// and yields the removed items.
+	///
+	/// Note 1: The element range is removed even if the iterator is only
+	/// partially consumed or not consumed at all.
+	///
+	/// Note 2: It is unspecified how many elements are removed from the vector
+	/// if the `Drain` value is leaked.
+	///
+	/// # Panics
+	///
+	/// Panics if the starting point is greater than the end point or if
+	/// the end point is greater than the length of the vector.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let mut v = vec![1, 2, 3];
+	/// let u: Vec<_> = v.drain(1..).collect();
+	/// assert_eq!(v, &[1]);
+	/// assert_eq!(u, &[2, 3]);
+	///
+	/// // A full range clears the vector
+	/// v.drain(..);
+	/// assert_eq!(v, &[]);
+	/// ```
+	pub fn drain<R>(&mut self, range: R) -> CtoVecDrain<T>
+		where R: RangeArgument<usize>
+	{
+		// Memory safety
+		//
+		// When the Drain is first created, it shortens the length of
+		// the source vector to make sure no uninitalized or moved-from elements
+		// are accessible at all if the Drain's destructor never gets to run.
+		//
+		// Drain will ptr::read out the values to remove.
+		// When finished, remaining tail of the vec is copied back to cover
+		// the hole, and the vector length is restored to the new length.
+		//
+		let len = self.len();
+		let start = match range.start()
+		{
+			Included(&n) => n,
+			Excluded(&n) => n + 1,
+			Unbounded    => 0,
+		};
+		let end = match range.end()
+		{
+			Included(&n) => n + 1,
+			Excluded(&n) => n,
+			Unbounded    => len,
+		};
+		assert!(start <= end);
+		assert!(end <= len);
+		
+		unsafe
+		{
+			// set self.vec length's to start, to be safe in case Drain is leaked
+			self.set_len(start);
+			
+			// Use the borrow in the IterMut to indicate borrowing behavior of the
+			// whole Drain iterator (like &mut T).
+			let range_slice = from_raw_parts_mut(self.as_mut_ptr().offset(start as isize), end - start);
+			
+			CtoVecDrain
+			{
+				tail_start: end,
+				tail_len: len - end,
+				iter: range_slice.iter(),
+				vec: Shared::from(self),
+			}
+		}
+	}
 	
 	/// Clears the vector, removing all values.
 	///
@@ -897,7 +1021,6 @@ impl<T: CtoSafe> IntoIterator for CtoVec<T>
 			CtoVecIntoIter
 			{
 				buf: Shared::new_unchecked(begin),
-				phantom: PhantomData,
 				cap,
 				ptr: begin,
 				end,
@@ -970,5 +1093,64 @@ impl<T: CtoSafe + PartialEq> CtoVec<T>
 	{
 		let pos = self.iter().position(|x| *x == *item)?;
 		Some(self.remove(pos))
+	}
+}
+
+impl<T: CtoSafe> CtoVec<T>
+{
+	#[inline(always)]
+	fn extend_desugared<I: Iterator<Item = T>>(&mut self, mut iterator: I)
+	{
+		while let Some(element) = iterator.next()
+		{
+			let len = self.len();
+			
+			if len == self.capacity()
+			{
+				let (lower, _) = iterator.size_hint();
+				self.reserve(lower.saturating_add(1));
+			}
+			
+			unsafe
+			{
+				write(self.get_unchecked_mut(len), element);
+				
+				// NB can't overflow since we would have had to alloc the address space.
+				self.set_len(len + 1);
+			}
+		}
+	}
+	
+	/// Creates a splicing iterator that replaces the specified range in the vector with the given `replace_with` iterator and yields the removed items.
+	/// `replace_with` does not need to be the same length as `range`.
+	#[inline(always)]
+	pub fn splice<R, I>(&mut self, range: R, replace_with: I) -> CtoVecSplice<I::IntoIter>
+		where R: RangeArgument<usize>, I: IntoIterator<Item=T>
+	{
+		CtoVecSplice
+		{
+			drain: self.drain(range),
+			replace_with: replace_with.into_iter(),
+		}
+	}
+	
+	/// Creates an iterator which uses a closure to determine if an element should be removed.
+	#[inline(always)]
+	pub fn drain_filter<F>(&mut self, filter: F) -> CtoVecDrainFilter<T, F>
+		where F: FnMut(&mut T) -> bool,
+	{
+		let old_len = self.len();
+		
+		// Guard against us getting leaked (leak amplification)
+		unsafe { self.set_len(0); }
+		
+		CtoVecDrainFilter
+		{
+			vec: self,
+			idx: 0,
+			del: 0,
+			old_len,
+			pred: filter,
+		}
 	}
 }

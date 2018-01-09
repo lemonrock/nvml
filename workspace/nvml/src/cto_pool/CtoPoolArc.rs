@@ -79,6 +79,22 @@ impl CtoPoolArc
 		CtoPoolAlloc(self.clone())
 	}
 	
+	/// Allocate a CtoString, which is similar to a Rust String but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoString.
+	#[inline(always)]
+	pub fn allocate_cto_string(&self) -> CtoString
+	{
+		CtoString::new(self.alloc())
+	}
+
+	/// Allocate a CtoString with capacity, which is similar to a Rust String but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoString.
+	#[inline(always)]
+	pub fn allocate_cto_string_with_capacity(&self, capacity: usize) -> CtoString
+	{
+		CtoString::with_capacity(capacity, self.alloc())
+	}
+	
 	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
 	/// Returns on success a CtoVec.
 	#[inline(always)]

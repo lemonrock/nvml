@@ -4,7 +4,10 @@
 
 use super::*;
 use ::alloc::raw_vec::RawVec;
-use ::std::marker::PhantomData;
+use ::std::collections::Bound::Included;
+use ::std::collections::Bound::Excluded;
+use ::std::collections::Bound::Unbounded;
+use ::std::collections::range::RangeArgument;
 use ::std::mem::size_of;
 use ::std::mem::swap;
 use ::std::intrinsics::arith_offset;
@@ -24,4 +27,10 @@ use ::std::slice::from_raw_parts_mut;
 
 
 include!("CtoVec.rs");
+include!("CtoVecDrain.rs");
+include!("CtoVecDrainFilter.rs");
 include!("CtoVecIntoIter.rs");
+include!("CtoVecPlaceBack.rs");
+include!("CtoVecSplice.rs");
+include!("SetLenOnDrop.rs");
+include!("SpecExtend.rs");

@@ -20,7 +20,9 @@
       <w>errnum</w>
       <w>errormsg</w>
       <w>etimedout</w>
+      <w>fffd</w>
       <w>funcs</w>
+      <w>growable</w>
       <w>initializable</w>
       <w>iovcnt</w>
       <w>iovec</w>
@@ -72,6 +74,7 @@
       <w>strdup</w>
       <w>structs</w>
       <w>toid</w>
+      <w>unsafety</w>
       <w>wakeups</w>
       <w>wcsdup</w>
       <w>werror</w>

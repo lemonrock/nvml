@@ -12,6 +12,10 @@ pub trait CtoSafe: Sized
 	}
 }
 
+impl<'a, Value: CtoSafe> CtoSafe for &'a Value
+{
+}
+
 impl CtoSafe for u8
 {
 }
