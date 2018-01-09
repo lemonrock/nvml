@@ -3,8 +3,8 @@
 
 
 use self::collections::CtoVec;
-//use self::synchronisation::CtoMutexLock;
-//use self::synchronisation::CtoReadWriteLock;
+use self::synchronisation::CtoMutexLock;
+use self::synchronisation::CtoReadWriteLock;
 use self::boxed::CtoBox;
 use self::rc::CtoRc;
 use ::errors::PmdkError;

@@ -95,25 +95,25 @@ impl CtoPoolArc
 		CtoVec::with_capacity(capacity, self.alloc())
 	}
 
-//	/// Allocate a CtoReadWriteLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
-//	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
-//	/// Returns on success a CtoReadWriteLock.
-//	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
-//	#[inline(always)]
-//	pub fn allocate_cto_read_write_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoReadWriteLock<Value>, CtoPoolAllocationError<InitializationError>>
-//	{
-//		self.allocate::<CtoReadWriteLock<Value>, InitializationError, Initializer>(initializer)
-//	}
-//
-//	/// Allocate a CtoMutexLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
-//	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
-//	/// Returns on success a CtoMutexLock.
-//	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
-//	#[inline(always)]
-//	pub fn allocate_cto_mutex_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoMutexLock<Value>, CtoPoolAllocationError<InitializationError>>
-//	{
-//		self.allocate::<CtoMutexLock<Value>, InitializationError, Initializer>(initializer)
-//	}
+	/// Allocate a CtoReadWriteLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
+	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
+	/// Returns on success a CtoReadWriteLock.
+	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
+	#[inline(always)]
+	pub fn allocate_cto_read_write_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoReadWriteLock<Value>, CtoPoolAllocationError<InitializationError>>
+	{
+		self.allocate::<CtoReadWriteLock<Value>, InitializationError, Initializer>(initializer)
+	}
+
+	/// Allocate a CtoMutexLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
+	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
+	/// Returns on success a CtoMutexLock.
+	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
+	#[inline(always)]
+	pub fn allocate_cto_mutex_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoMutexLock<Value>, CtoPoolAllocationError<InitializationError>>
+	{
+		self.allocate::<CtoMutexLock<Value>, InitializationError, Initializer>(initializer)
+	}
 
 	/// Allocate a CtoRc, which is similar to a Rust Rc but uses the persistent memory pool instead of the system allocator.
 	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
