@@ -6,18 +6,17 @@ pub(crate) struct CtoRcInner<Value: CtoSafe>
 {
 	strong_counter: CtoRcCounter,
 	weak_counter: CtoRcCounter,
-	cto_pool_alloc_guard_reference: CtoPoolArc,
+	cto_pool_arc: CtoPoolArc,
 	value: Value,
 }
 
 impl<Value: CtoSafe> CtoSafe for CtoRcInner<Value>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		self.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
-		
-		self.value.cto_pool_opened(cto_pool_alloc_guard_reference)
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		self.value.cto_pool_opened(cto_pool_arc)
 	}
 }
 

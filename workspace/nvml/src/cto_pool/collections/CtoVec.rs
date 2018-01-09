@@ -5,7 +5,7 @@
 /// CTO pool equivalent to a Rust Vec.
 pub struct CtoVec<T: CtoSafe>
 {
-	buf: RawVec<T, CtoPool>,
+	buf: RawVec<T, CtoPoolAlloc>,
 	len: usize,
 }
 
@@ -27,25 +27,15 @@ impl<T: CtoSafe> Drop for CtoVec<T>
 impl<T: CtoSafe> CtoSafe for CtoVec<T>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		use ::std::heap::Heap;
+		self.buf.alloc_mut().cto_pool_opened(cto_pool_arc);
 		
-		#[allow(dead_code)]
-		struct RawVecAlike<T2, A: Alloc = Heap>
+		let mut index = 0;
+		while index < self.len
 		{
-			ptr: Unique<T2>,
-			cap: usize,
-			a: A,
-		}
-		
-		// This truly horrible hack is to try access the 'a' field, the allocator, because it will be invalid once deserialized.
-		unsafe
-		{
-			let raw_vec_mut_ptr = &mut self.buf as *mut _;
-			let horrible = raw_vec_mut_ptr as *mut RawVecAlike<T, CtoPool>;
-			
-			(*horrible).a = CtoPool(cto_pool_inner.clone())
+			(unsafe { self.get_unchecked_mut(index) }).cto_pool_opened(cto_pool_arc);
+			index += 1;
 		}
 	}
 }
@@ -125,7 +115,6 @@ __impl_slice_eq1! { CtoVec<A>, &'b mut [B] }
 impl<T: CtoSafe + Eq> Eq for CtoVec<T>
 {
 }
-
 
 impl<T: CtoSafe> Deref for CtoVec<T>
 {
@@ -339,33 +328,33 @@ impl<T: CtoSafe> CtoVec<T>
 {
 	/// Constructs a new, empty `CtoVec<T>`.
 	#[inline(always)]
-	pub fn new(cto_pool: CtoPool) -> Self
+	pub fn new(cto_pool_alloc: CtoPoolAlloc) -> Self
 	{
 		Self
 		{
-			buf: RawVec::new_in(cto_pool),
+			buf: RawVec::new_in(cto_pool_alloc),
 			len: 0,
 		}
 	}
 	
 	/// Constructs a new, empty `CtoVec<T>` with the specified capacity.
 	#[inline(always)]
-	pub fn with_capacity(capacity: usize, cto_pool: CtoPool) -> Self
+	pub fn with_capacity(capacity: usize, cto_pool_alloc: CtoPoolAlloc) -> Self
 	{
 		Self
 		{
-			buf: RawVec::with_capacity_in(capacity, cto_pool),
+			buf: RawVec::with_capacity_in(capacity, cto_pool_alloc),
 			len: 0,
 		}
 	}
 	
 	/// Creates a `CtoVec<T>` directly from the raw components of another vector.
 	#[inline(always)]
-	pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize, cto_pool: &CtoPool) -> Self
+	pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize, cto_pool_alloc: CtoPoolAlloc) -> Self
 	{
 		Self
 		{
-			buf: RawVec::from_raw_parts_in(ptr, capacity, cto_pool.clone()),
+			buf: RawVec::from_raw_parts_in(ptr, capacity, cto_pool_alloc),
 			len: length,
 		}
 	}
@@ -886,7 +875,7 @@ impl<T: CtoSafe> IntoIterator for CtoVec<T>
 	#[inline(always)]
 	fn into_iter(mut self) -> CtoVecIntoIter<T>
 	{
-		let cto_pool = self.buf.alloc().clone();
+		let cto_pool_alloc = self.buf.alloc().clone();
 		
 		unsafe
 		{
@@ -912,7 +901,7 @@ impl<T: CtoSafe> IntoIterator for CtoVec<T>
 				cap,
 				ptr: begin,
 				end,
-				alloc: cto_pool,
+				alloc: cto_pool_alloc,
 			}
 		}
 	}

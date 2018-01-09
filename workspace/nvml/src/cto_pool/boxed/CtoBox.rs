@@ -15,12 +15,12 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 	type Value = Value;
 	
 	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_alloc_guard_reference: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
 		{
 			let cto_box_inner = persistent_memory_pointer.as_mut();
-			cto_box_inner.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
+			cto_box_inner.cto_pool_arc = cto_pool_arc.clone();
 			initializer(cto_box_inner)?;
 		}
 		Ok
@@ -36,9 +36,9 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 impl<Value: CtoSafe> CtoSafe for CtoBox<Value>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		self.persistent_memory_mut().cto_pool_opened(cto_pool_alloc_guard_reference)
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_arc)
 	}
 }
 
@@ -47,7 +47,7 @@ impl<Value: CtoSafe> Drop for CtoBox<Value>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let pool_pointer = self.persistent_memory().cto_pool_alloc_guard_reference.pool_pointer();
+		let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
 		
 		let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
 		
@@ -65,7 +65,7 @@ impl<Value: CtoSafe + Clone> Clone for CtoBox<Value>
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		self.persistent_memory().cto_pool_alloc_guard_reference.allocate_box::<Value, (), _>(|clone|
+		self.persistent_memory().cto_pool_arc.allocate_box::<Value, (), _>(|clone|
 		{
 			unsafe { copy_nonoverlapping(self.deref(), clone, size_of::<Value>()) };
 			Ok(())

@@ -5,7 +5,6 @@
 use super::*;
 use ::alloc::raw_vec::RawVec;
 use ::std::marker::PhantomData;
-use ::std::mem::forget;
 use ::std::mem::size_of;
 use ::std::mem::swap;
 use ::std::intrinsics::arith_offset;

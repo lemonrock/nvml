@@ -6,6 +6,15 @@
 #[derive(Clone)]
 pub struct CtoPoolAlloc(CtoPoolArc);
 
+impl CtoSafe for CtoPoolAlloc
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		cto_pool_arc.replace(&mut self.0);
+	}
+}
+
 impl PartialEq for CtoPoolAlloc
 {
 	#[inline(always)]

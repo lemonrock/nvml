@@ -2,7 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-//use self::collections::CtoVec;
+use self::collections::CtoVec;
 //use self::synchronisation::CtoMutexLock;
 //use self::synchronisation::CtoReadWriteLock;
 use self::boxed::CtoBox;
@@ -36,7 +36,9 @@ use ::std::heap::Excess;
 use ::std::heap::Layout;
 use ::std::marker::PhantomData;
 use ::std::mem::align_of;
+use ::std::mem::forget;
 use ::std::mem::needs_drop;
+use ::std::mem::replace;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
 use ::std::ops::DerefMut;
@@ -54,9 +56,9 @@ use ::std::sync::atomic::Ordering::SeqCst;
 pub mod boxed;
 
 /// Collections
-//pub mod collections;
+pub mod collections;
 
-// A Rc like that in regular Rust's stdlib.
+/// A Rc like that in regular Rust's stdlib.
 pub mod rc;
 
 /// Synchronisation

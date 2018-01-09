@@ -155,9 +155,9 @@ impl<RootValue: CtoSafe> CtoPool<RootValue>
 			},
 		};
 		
-		let cto_pool_alloc_guard_reference = CtoPoolArc::new(pool_pointer);
+		let cto_pool_arc = CtoPoolArc::new(pool_pointer);
 		
-		let cto_pool_alloc: CtoPool<RootValue> = CtoPool(CtoPoolAlloc(cto_pool_alloc_guard_reference), PhantomData);
+		let cto_pool_alloc: CtoPool<RootValue> = CtoPool(CtoPoolAlloc(cto_pool_arc), PhantomData);
 		
 		let existing_root = pool_pointer.get_root();
 		if unlikely(existing_root.is_null())

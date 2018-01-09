@@ -15,12 +15,12 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 	type Value = Value;
 	
 	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_alloc_guard_reference: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
 		{
 			let cto_rc_inner = persistent_memory_pointer.as_mut();
-			cto_rc_inner.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
+			cto_rc_inner.cto_pool_arc = cto_pool_arc.clone();
 			cto_rc_inner.strong_counter = CtoRcCounter::default();
 			cto_rc_inner.weak_counter = CtoRcCounter::default();
 			initializer(cto_rc_inner)?;
@@ -38,9 +38,9 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 impl<Value: CtoSafe> CtoSafe for CtoRc<Value>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		self.persistent_memory_mut().cto_pool_opened(cto_pool_alloc_guard_reference)
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_arc)
 	}
 }
 
@@ -58,7 +58,7 @@ impl<Value: CtoSafe> Drop for CtoRc<Value>
 		
 		if should_be_dropped_because_there_are_no_strong_references
 		{
-			let pool_pointer = self.persistent_memory().cto_pool_alloc_guard_reference.pool_pointer();
+			let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
 			
 			let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
 			

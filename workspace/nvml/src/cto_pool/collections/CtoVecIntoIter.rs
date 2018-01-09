@@ -14,7 +14,7 @@ pub struct CtoVecIntoIter<T: CtoSafe>
 	cap: usize,
 	ptr: *const T,
 	end: *const T,
-	alloc: CtoPool,
+	alloc: CtoPoolAlloc,
 }
 
 impl<T: CtoSafe> Drop for CtoVecIntoIter<T>

@@ -58,6 +58,14 @@ impl CtoPoolArc
 		}
 	}
 	
+	/// Used in conjunction with `CtoSafe.cto_pool_opened()` to make sure that old references to persistent objects are discarded.
+	#[inline(always)]
+	pub fn replace(&self, location: &mut Self)
+	{
+		let old = replace(location, self.clone());
+		forget(old);
+	}
+	
 	/// Pointer to CTO pool from FFI `libpmemcto`.
 	#[inline(always)]
 	pub fn pool_pointer(&self) -> *mut PMEMctopool
@@ -65,22 +73,28 @@ impl CtoPoolArc
 		unsafe { self.cto_pool_arc_inner.as_ref() }.pool_pointer
 	}
 	
-//	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
-//	/// Returns on success a CtoVec.
-//	#[inline(always)]
-//	pub fn allocate_cto_vec<Value: CtoSafe>(&self) -> CtoVec<Value>
-//	{
-//		CtoVec::new(CtoPool(self.0.clone()))
-//	}
-//
-//	/// Allocate a CtoVec with capacity, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
-//	/// Returns on success a CtoVec.
-//	#[inline(always)]
-//	pub fn allocate_cto_vec_with_capacity<Value: CtoSafe>(&self, capacity: usize) -> CtoVec<Value>
-//	{
-//		CtoVec::with_capacity(capacity, CtoPool(self.0.clone()))
-//	}
-//
+	#[inline(always)]
+	fn alloc(&self) -> CtoPoolAlloc
+	{
+		CtoPoolAlloc(self.clone())
+	}
+	
+	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoVec.
+	#[inline(always)]
+	pub fn allocate_cto_vec<Value: CtoSafe>(&self) -> CtoVec<Value>
+	{
+		CtoVec::new(self.alloc())
+	}
+
+	/// Allocate a CtoVec with capacity, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
+	/// Returns on success a CtoVec.
+	#[inline(always)]
+	pub fn allocate_cto_vec_with_capacity<Value: CtoSafe>(&self, capacity: usize) -> CtoVec<Value>
+	{
+		CtoVec::with_capacity(capacity, self.alloc())
+	}
+
 //	/// Allocate a CtoReadWriteLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
 //	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
 //	/// Returns on success a CtoReadWriteLock.

@@ -7,7 +7,7 @@ pub trait CtoSafe: Sized
 {
 	#[doc(hidden)]
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, _cto_pool_alloc_guard_reference: &CtoPoolArc)
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
 	{
 	}
 }
