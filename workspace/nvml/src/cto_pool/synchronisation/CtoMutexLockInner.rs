@@ -5,58 +5,8 @@
 pub(crate) struct CtoMutexLockInner<T: CtoSafe>
 {
 	#[cfg(unix)] mutex: UnsafeCell<pthread_mutex_t>,
-	cto_pool_inner: *mut PMEMctopool,
+	cto_pool_arc: CtoPoolArc,
 	value: UnsafeCell<T>,
-}
-
-impl<T: CtoSafe> CtoSafe for CtoMutexLockInner<T>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
-	{
-		self.cto_pool_inner = cto_pool_inner;
-		
-		self.deref_mut().cto_pool_opened(cto_pool_inner);
-		
-		#[cfg(unix)]
-		unsafe
-		{
-			self.mutex = UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER);
-			
-			// self.mutex must be at a stable memory address.
-			//
-			// A pthread mutex initialized with PTHREAD_MUTEX_INITIALIZER will have
-			// a type of PTHREAD_MUTEX_DEFAULT, which has undefined behavior if you
-			// try to re-lock it from the same thread when you already hold a lock.
-			//
-			// In practice, glibc takes advantage of this undefined behavior to
-			// implement hardware lock elision, which uses hardware transactional
-			// memory to avoid acquiring the lock. While a transaction is in
-			// progress, the lock appears to be unlocked. This isn't a problem for
-			// other threads since the transactional memory will abort if a conflict
-			// is detected, however no abort is generated if re-locking from the
-			// same thread.
-			//
-			// Since locking the same mutex twice will result in two aliasing &mut
-			// references, we instead create the mutex with type
-			// PTHREAD_MUTEX_NORMAL which is guaranteed to deadlock if we try to
-			// re-lock it from the same thread, thus avoiding undefined behavior.
-			
-			let mut mutex_options: pthread_mutexattr_t = uninitialized();
-			
-			let result = pthread_mutexattr_init(&mut mutex_options);
-			debug_assert_pthread_result_ok!(result);
-			
-			let result = pthread_mutexattr_settype(&mut mutex_options, PTHREAD_MUTEX_NORMAL);
-			debug_assert_pthread_result_ok!(result);
-			
-			let result = pthread_mutex_init(self.mutex.get(), &mutex_options);
-			debug_assert_pthread_result_ok!(result);
-			
-			let result = pthread_mutexattr_destroy(&mut mutex_options);
-			debug_assert_pthread_result_ok!(result);
-		}
-	}
 }
 
 impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
@@ -157,5 +107,59 @@ impl<T: CtoSafe> CtoMutexLockInner<T>
 	{
 		let result = pthread_mutex_unlock(self.mutex.get());
 		debug_assert_pthread_result_ok!(result);
+	}
+	
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		#[cfg(unix)]
+		unsafe
+		{
+			let old = replace(&mut self.mutex, UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER));
+			forget(old);
+			
+			// self.mutex must be at a stable memory address.
+			//
+			// A pthread mutex initialized with PTHREAD_MUTEX_INITIALIZER will have
+			// a type of PTHREAD_MUTEX_DEFAULT, which has undefined behavior if you
+			// try to re-lock it from the same thread when you already hold a lock.
+			//
+			// In practice, glibc takes advantage of this undefined behavior to
+			// implement hardware lock elision, which uses hardware transactional
+			// memory to avoid acquiring the lock. While a transaction is in
+			// progress, the lock appears to be unlocked. This isn't a problem for
+			// other threads since the transactional memory will abort if a conflict
+			// is detected, however no abort is generated if re-locking from the
+			// same thread.
+			//
+			// Since locking the same mutex twice will result in two aliasing &mut
+			// references, we instead create the mutex with type
+			// PTHREAD_MUTEX_NORMAL which is guaranteed to deadlock if we try to
+			// re-lock it from the same thread, thus avoiding undefined behavior.
+			
+			let mut mutex_options: pthread_mutexattr_t = uninitialized();
+			
+			let result = pthread_mutexattr_init(&mut mutex_options);
+			debug_assert_pthread_result_ok!(result);
+			
+			let result = pthread_mutexattr_settype(&mut mutex_options, PTHREAD_MUTEX_NORMAL);
+			debug_assert_pthread_result_ok!(result);
+			
+			let result = pthread_mutex_init(self.mutex.get(), &mutex_options);
+			debug_assert_pthread_result_ok!(result);
+			
+			let result = pthread_mutexattr_destroy(&mut mutex_options);
+			debug_assert_pthread_result_ok!(result);
+		}
+		
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.deref_mut().cto_pool_opened(cto_pool_arc);
 	}
 }

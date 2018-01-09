@@ -3,15 +3,15 @@
 
 
 /// A variant of a mutex lock guard that also encapsulates use of a condition variable.
-pub struct CtoMutexLockGuardWithConditionVariable<'mutex_lock, T: 'mutex_lock + CtoSafe>
+pub struct CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value: 'mutex_lock + CtoSafe>
 {
-	cto_mutex_lock_guard: CtoMutexLockGuard<'mutex_lock, T>,
+	cto_mutex_lock_guard: CtoMutexLockGuard<'mutex_lock, Value>,
 	cto_condition_variable: &'mutex_lock CtoConditionVariable,
 }
 
-impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> Deref for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -20,7 +20,7 @@ impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuardWithConditionVariable<'
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> DerefMut for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -29,43 +29,43 @@ impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuardWithConditionVariabl
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> Borrow<T> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> Borrow<Value> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn borrow(&self) -> &T
+	fn borrow(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> BorrowMut<T> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> BorrowMut<Value> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn borrow_mut(&mut self) -> &mut T
+	fn borrow_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> AsRef<T> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> AsRef<Value> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn as_ref(&self) -> &T
+	fn as_ref(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> AsMut<T> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> AsMut<Value> for CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn as_mut(&mut self) -> &mut T
+	fn as_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> CtoMutexLockGuardWithConditionVariable<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> CtoMutexLockGuardWithConditionVariable<'mutex_lock, Value>
 {
 	/// Blocks the current thread until this condition variable receives a notification.
 	#[inline(always)]

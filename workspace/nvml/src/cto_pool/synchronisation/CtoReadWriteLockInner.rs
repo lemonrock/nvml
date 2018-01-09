@@ -7,28 +7,8 @@ pub(crate) struct CtoReadWriteLockInner<T: CtoSafe>
 	#[cfg(unix)] rwlock: UnsafeCell<pthread_rwlock_t>,
 	write_lock: UnsafeCell<bool>,
 	number_of_read_locks: AtomicUsize,
-	cto_pool_inner: *mut PMEMctopool,
+	cto_pool_arc: CtoPoolArc,
 	value: UnsafeCell<T>,
-}
-
-impl<T: CtoSafe> CtoSafe for CtoReadWriteLockInner<T>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
-	{
-		#[cfg(unix)]
-		{
-			self.rwlock = UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER);
-		}
-		
-		self.write_lock = UnsafeCell::new(false);
-		
-		self.number_of_read_locks = AtomicUsize::new(0);
-		
-		self.cto_pool_inner = cto_pool_inner;
-		
-		self.deref_mut().cto_pool_opened(cto_pool_inner);
-	}
 }
 
 impl<T: CtoSafe> Drop for CtoReadWriteLockInner<T>
@@ -294,6 +274,32 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	fn decrement_number_of_read_locks(&self)
 	{
 		self.number_of_read_locks.fetch_sub(1, NumberOfReadersOrdering);
+	}
+	
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		#[cfg(unix)]
+		{
+			let old = replace(&mut self.rwlock, UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER));
+			forget(old);
+		}
+		
+		let old = replace(&mut self.write_lock, UnsafeCell::new(false));
+		forget(old);
+		
+		let old = replace(&mut self.number_of_read_locks, AtomicUsize::new(0));
+		forget(old);
+		
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.deref_mut().cto_pool_opened(cto_pool_arc);
 	}
 }
 

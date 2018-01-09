@@ -37,7 +37,6 @@ use ::std::heap::Layout;
 use ::std::marker::PhantomData;
 use ::std::mem::align_of;
 use ::std::mem::forget;
-use ::std::mem::needs_drop;
 use ::std::mem::replace;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
@@ -62,7 +61,7 @@ pub mod collections;
 pub mod rc;
 
 /// Synchronisation
-//pub mod synchronisation;
+pub mod synchronisation;
 
 
 include!("Allocator.rs");

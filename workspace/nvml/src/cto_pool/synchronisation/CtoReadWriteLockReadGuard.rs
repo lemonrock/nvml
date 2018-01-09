@@ -5,17 +5,17 @@
 /// A CTO Read-Write lock read guard; the result of read-locking a CtoReadWriteLock.
 /// When dropped (ie goes out of scope) the read lock is released.
 #[must_use]
-pub struct CtoReadWriteLockReadGuard<'read_write_lock, T: 'read_write_lock + CtoSafe>(&'read_write_lock CtoReadWriteLockInner<T>);
+pub struct CtoReadWriteLockReadGuard<'read_write_lock, Value: 'read_write_lock + CtoSafe>(&'read_write_lock CtoReadWriteLockInner<Value>);
 
-impl<'read_write_lock, T: CtoSafe> !Send for CtoReadWriteLockReadGuard<'read_write_lock, T>
+impl<'read_write_lock, Value: CtoSafe> !Send for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
 }
 
-unsafe impl<'read_write_lock, T: CtoSafe + Sync> Sync for CtoReadWriteLockReadGuard<'read_write_lock, T>
+unsafe impl<'read_write_lock, Value: CtoSafe + Sync> Sync for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
 }
 
-impl<'read_write_lock, T: CtoSafe> Drop for CtoReadWriteLockReadGuard<'read_write_lock, T>
+impl<'read_write_lock, Value: CtoSafe> Drop for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -24,9 +24,9 @@ impl<'read_write_lock, T: CtoSafe> Drop for CtoReadWriteLockReadGuard<'read_writ
 	}
 }
 
-impl<'read_write_lock, T: CtoSafe> Deref for CtoReadWriteLockReadGuard<'read_write_lock, T>
+impl<'read_write_lock, Value: CtoSafe> Deref for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -35,19 +35,19 @@ impl<'read_write_lock, T: CtoSafe> Deref for CtoReadWriteLockReadGuard<'read_wri
 	}
 }
 
-impl<'read_write_lock, T: CtoSafe> Borrow<T> for CtoReadWriteLockReadGuard<'read_write_lock, T>
+impl<'read_write_lock, Value: CtoSafe> Borrow<Value> for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
 	#[inline(always)]
-	fn borrow(&self) -> &T
+	fn borrow(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<'read_write_lock, T: CtoSafe> AsRef<T> for CtoReadWriteLockReadGuard<'read_write_lock, T>
+impl<'read_write_lock, Value: CtoSafe> AsRef<Value> for CtoReadWriteLockReadGuard<'read_write_lock, Value>
 {
 	#[inline(always)]
-	fn as_ref(&self) -> &T
+	fn as_ref(&self) -> &Value
 	{
 		self.deref()
 	}

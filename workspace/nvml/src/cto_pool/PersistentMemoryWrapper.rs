@@ -9,5 +9,5 @@ trait PersistentMemoryWrapper: CtoSafe
 	type Value: CtoSafe;
 	
 	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>;
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>;
 }

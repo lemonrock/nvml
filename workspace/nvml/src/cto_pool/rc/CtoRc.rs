@@ -15,15 +15,21 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 	type Value = Value;
 	
 	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
 		{
 			let cto_rc_inner = persistent_memory_pointer.as_mut();
-			cto_rc_inner.cto_pool_arc = cto_pool_arc.clone();
-			cto_rc_inner.strong_counter = CtoRcCounter::default();
-			cto_rc_inner.weak_counter = CtoRcCounter::default();
-			initializer(cto_rc_inner)?;
+			
+			cto_pool_arc.replace(&mut cto_rc_inner.cto_pool_arc);
+			
+			let old = replace(&mut cto_rc_inner.strong_counter, CtoRcCounter::default());
+			forget(old);
+			
+			let old = replace(&mut cto_rc_inner.weak_counter, CtoRcCounter::default());
+			forget(old);
+			
+			initializer(&mut cto_rc_inner.value)?;
 		}
 		Ok
 		(
@@ -62,10 +68,7 @@ impl<Value: CtoSafe> Drop for CtoRc<Value>
 			
 			let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
 			
-			if needs_drop::<CtoRcInner<Value>>()
-			{
-				unsafe { drop_in_place(persistent_memory_pointer) }
-			}
+			unsafe { drop_in_place(persistent_memory_pointer) }
 			
 			pool_pointer.free(persistent_memory_pointer);
 		}

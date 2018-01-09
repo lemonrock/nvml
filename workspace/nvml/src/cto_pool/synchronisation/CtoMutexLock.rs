@@ -3,32 +3,28 @@
 
 
 /// A Mutex, similar to that in Rust, but lacking the concept of Poison.
-pub struct CtoMutexLock<T: CtoSafe>
+pub struct CtoMutexLock<Value: CtoSafe>
 {
-	persistent_memory_pointer: *mut CtoMutexLockInner<T>,
+	persistent_memory_pointer: Unique<CtoMutexLockInner<Value>>,
 }
 
-impl<T: CtoSafe> CtoSafe for CtoMutexLock<T>
+impl<Value: CtoSafe> PersistentMemoryWrapper for CtoMutexLock<Value>
 {
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
-	{
-		self.persistent_memory_mut().cto_pool_opened(cto_pool_inner)
-	}
-}
-
-impl<T: CtoSafe> PersistentMemoryWrapper for CtoMutexLock<T>
-{
-	type PersistentMemory = CtoMutexLockInner<T>;
+	type PersistentMemory = CtoMutexLockInner<Value>;
 	
-	type Value = T;
+	type Value = Value;
 	
 	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let inner = unsafe { &mut * persistent_memory_pointer };
-		initializer(inner.deref_mut())?;
-		inner.cto_pool_opened(cto_pool_inner);
+		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
+		{
+			let cto_mutex_lock_inner = persistent_memory_pointer.as_mut();
+			
+			cto_mutex_lock_inner.common_initialization(cto_pool_arc);
+			
+			initializer(cto_mutex_lock_inner.value.get())?;
+		}
 		Ok
 		(
 			Self
@@ -39,33 +35,47 @@ impl<T: CtoSafe> PersistentMemoryWrapper for CtoMutexLock<T>
 	}
 }
 
-impl<T: CtoSafe> Drop for CtoMutexLock<T>
+impl<Value: CtoSafe> CtoSafe for CtoMutexLock<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_arc)
+	}
+}
+
+impl<Value: CtoSafe> Drop for CtoMutexLock<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let cto_pool_inner = self.persistent_memory().cto_pool_inner.clone();
-		CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
+		let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
+		
+		let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
+		
+		unsafe { drop_in_place(persistent_memory_pointer) }
+		
+		pool_pointer.free(persistent_memory_pointer);
 	}
 }
 
-unsafe impl<T: CtoSafe> Send for CtoMutexLock<T>
+unsafe impl<Value: CtoSafe> Send for CtoMutexLock<Value>
 {
 }
 
-unsafe impl<T: CtoSafe> Sync for CtoMutexLock<T>
+unsafe impl<Value: CtoSafe> Sync for CtoMutexLock<Value>
 {
 }
 
-impl<T: CtoSafe> UnwindSafe for CtoMutexLock<T>
+impl<Value: CtoSafe> UnwindSafe for CtoMutexLock<Value>
 {
 }
 
-impl<T: CtoSafe> RefUnwindSafe for CtoMutexLock<T>
+impl<Value: CtoSafe> RefUnwindSafe for CtoMutexLock<Value>
 {
 }
 
-impl<T: CtoSafe + Debug> Debug for CtoMutexLock<T>
+impl<Value: CtoSafe + Debug> Debug for CtoMutexLock<Value>
 {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
@@ -77,25 +87,25 @@ impl<T: CtoSafe + Debug> Debug for CtoMutexLock<T>
 			Some(cto_mutex_lock_guard) => f.debug_struct(Name).field(Field, &&*cto_mutex_lock_guard).finish(),
 			
 			None =>
+			{
+				struct LockedPlaceholder;
+				
+				impl Debug for LockedPlaceholder
 				{
-					struct LockedPlaceholder;
-					
-					impl Debug for LockedPlaceholder
-					{
-						fn fmt(&self, f: &mut Formatter) -> fmt::Result { f.write_str("<locked>") }
-					}
-					
-					f.debug_struct(Name).field(Field, &LockedPlaceholder).finish()
+					fn fmt(&self, f: &mut Formatter) -> fmt::Result { f.write_str("<locked>") }
 				}
+				
+				f.debug_struct(Name).field(Field, &LockedPlaceholder).finish()
+			}
 		}
 	}
 }
 
-impl<T: CtoSafe> CtoMutexLock<T>
+impl<Value: CtoSafe> CtoMutexLock<Value>
 {
 	/// Locks a mutex.
 	#[inline(always)]
-	pub fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuard<'mutex, T>
+	pub fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuard<'mutex, Value>
 	{
 		self.persistent_memory().lock()
 	}
@@ -103,20 +113,20 @@ impl<T: CtoSafe> CtoMutexLock<T>
 	/// Returns Some(lock_guard) if could be locked.
 	/// Returns None if the lock is held by another.
 	#[inline(always)]
-	pub fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuard<'mutex, T>>
+	pub fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuard<'mutex, Value>>
 	{
 		self.persistent_memory().try_lock()
 	}
 	
 	#[inline(always)]
-	fn persistent_memory(&self) -> &CtoMutexLockInner<T>
+	fn persistent_memory(&self) -> &CtoMutexLockInner<Value>
 	{
-		unsafe { &*self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_ref() }
 	}
 	
 	#[inline(always)]
-	fn persistent_memory_mut(&self) -> &mut CtoMutexLockInner<T>
+	fn persistent_memory_mut(&mut self) -> &mut CtoMutexLockInner<Value>
 	{
-		unsafe { &mut *self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_mut() }
 	}
 }

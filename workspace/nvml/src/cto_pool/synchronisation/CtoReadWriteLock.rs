@@ -3,32 +3,28 @@
 
 
 /// A Mutex, similar to that in Rust, but lacking the concept of Poison.
-pub struct CtoReadWriteLock<T: CtoSafe>
+pub struct CtoReadWriteLock<Value: CtoSafe>
 {
-	persistent_memory_pointer: *mut CtoReadWriteLockInner<T>,
+	persistent_memory_pointer: Shared<CtoReadWriteLockInner<Value>>,
 }
 
-impl<T: CtoSafe> CtoSafe for CtoReadWriteLock<T>
+impl<Value: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<Value>
 {
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
-	{
-		self.persistent_memory_mut().cto_pool_opened(cto_pool_inner)
-	}
-}
-
-impl<T: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<T>
-{
-	type PersistentMemory = CtoReadWriteLockInner<T>;
+	type PersistentMemory = CtoReadWriteLockInner<Value>;
 	
-	type Value = T;
+	type Value = Value;
 	
 	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let inner = unsafe { &mut * persistent_memory_pointer };
-		initializer(inner.deref_mut())?;
-		inner.cto_pool_opened(cto_pool_inner);
+		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		{
+			let cto_read_write_lock_inner = persistent_memory_pointer.as_mut();
+			
+			cto_read_write_lock_inner.common_initialization(cto_pool_arc);
+			
+			initializer(cto_read_write_lock_inner.value.get())?;
+		}
 		Ok
 		(
 			Self
@@ -39,33 +35,47 @@ impl<T: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<T>
 	}
 }
 
-impl<T: CtoSafe> Drop for CtoReadWriteLock<T>
+impl<Value: CtoSafe> CtoSafe for CtoReadWriteLock<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_arc)
+	}
+}
+
+impl<Value: CtoSafe> Drop for CtoReadWriteLock<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let cto_pool_inner = self.persistent_memory().cto_pool_inner.clone();
-		CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
+		let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
+		
+		let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
+		
+		unsafe { drop_in_place(persistent_memory_pointer) }
+		
+		pool_pointer.free(persistent_memory_pointer);
 	}
 }
 
-unsafe impl<T: CtoSafe> Send for CtoReadWriteLock<T>
+unsafe impl<Value: CtoSafe> Send for CtoReadWriteLock<Value>
 {
 }
 
-unsafe impl<T: CtoSafe> Sync for CtoReadWriteLock<T>
+unsafe impl<Value: CtoSafe> Sync for CtoReadWriteLock<Value>
 {
 }
 
-impl<T: CtoSafe> UnwindSafe for CtoReadWriteLock<T>
+impl<Value: CtoSafe> UnwindSafe for CtoReadWriteLock<Value>
 {
 }
 
-impl<T: CtoSafe> RefUnwindSafe for CtoReadWriteLock<T>
+impl<Value: CtoSafe> RefUnwindSafe for CtoReadWriteLock<Value>
 {
 }
 
-impl<T: CtoSafe + Debug> Debug for CtoReadWriteLock<T>
+impl<Value: CtoSafe + Debug> Debug for CtoReadWriteLock<Value>
 {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
@@ -91,12 +101,12 @@ impl<T: CtoSafe + Debug> Debug for CtoReadWriteLock<T>
 	}
 }
 
-impl<T: CtoSafe> CtoReadWriteLock<T>
+impl<Value: CtoSafe> CtoReadWriteLock<Value>
 {
 	/// Obtain a read lock.
 	/// Panics if write-locked.
 	#[inline(always)]
-	pub fn read<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockReadGuard<'read_write_lock, T>
+	pub fn read<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockReadGuard<'read_write_lock, Value>
 	{
 		self.persistent_memory().read()
 	}
@@ -104,7 +114,7 @@ impl<T: CtoSafe> CtoReadWriteLock<T>
 	/// Try to obtain a read lock.
 	/// Does not panic.
 	#[inline(always)]
-	pub fn try_read<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockReadGuard<'read_write_lock, T>>
+	pub fn try_read<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockReadGuard<'read_write_lock, Value>>
 	{
 		self.persistent_memory().try_read()
 	}
@@ -112,7 +122,7 @@ impl<T: CtoSafe> CtoReadWriteLock<T>
 	/// Obtains a write lock.
 	/// Panics if already write-locked or there are extant read-locks.
 	#[inline(always)]
-	pub fn write<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockWriteGuard<'read_write_lock, T>
+	pub fn write<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockWriteGuard<'read_write_lock, Value>
 	{
 		self.persistent_memory().write()
 	}
@@ -120,20 +130,20 @@ impl<T: CtoSafe> CtoReadWriteLock<T>
 	/// Tries to obtain a write lock.
 	/// Does not panic.
 	#[inline(always)]
-	pub fn try_write<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockWriteGuard<'read_write_lock, T>>
+	pub fn try_write<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockWriteGuard<'read_write_lock, Value>>
 	{
 		self.persistent_memory().try_write()
 	}
 	
 	#[inline(always)]
-	fn persistent_memory(&self) -> &CtoReadWriteLockInner<T>
+	fn persistent_memory(&self) -> &CtoReadWriteLockInner<Value>
 	{
-		unsafe { &*self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_ref() }
 	}
 	
 	#[inline(always)]
-	fn persistent_memory_mut(&self) -> &mut CtoReadWriteLockInner<T>
+	fn persistent_memory_mut(&mut self) -> &mut CtoReadWriteLockInner<Value>
 	{
-		unsafe { &mut *self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_mut() }
 	}
 }

@@ -11,9 +11,10 @@ pub struct CtoConditionVariable
 impl CtoSafe for CtoConditionVariable
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, _cto_pool_inner: *mut PMEMctopool)
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
 	{
-		self.inner = CtoConditionVariableInner::new();
+		let invalid = replace(&mut self.inner, CtoConditionVariableInner::new());
+		forget(invalid);
 	}
 }
 

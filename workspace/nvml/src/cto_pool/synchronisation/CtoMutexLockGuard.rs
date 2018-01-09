@@ -5,17 +5,17 @@
 /// A CTO mutex lock guard; the result of locking a CtoMutexLock.
 /// When dropped (ie goes out of scope) the lock is released.
 #[must_use]
-pub struct CtoMutexLockGuard<'mutex_lock, T: 'mutex_lock + CtoSafe>(&'mutex_lock CtoMutexLockInner<T>);
+pub struct CtoMutexLockGuard<'mutex_lock, Value: 'mutex_lock + CtoSafe>(&'mutex_lock CtoMutexLockInner<Value>);
 
-impl<'mutex_lock, T: CtoSafe> !Send for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> !Send for CtoMutexLockGuard<'mutex_lock, Value>
 {
 }
 
-unsafe impl<'mutex_lock, T: CtoSafe + Sync> Sync for CtoMutexLockGuard<'mutex_lock, T>
+unsafe impl<'mutex_lock, Value: CtoSafe + Sync> Sync for CtoMutexLockGuard<'mutex_lock, Value>
 {
 }
 
-impl<'mutex_lock, T: CtoSafe> Drop for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> Drop for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -24,9 +24,9 @@ impl<'mutex_lock, T: CtoSafe> Drop for CtoMutexLockGuard<'mutex_lock, T>
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> Deref for CtoMutexLockGuard<'mutex_lock, Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -35,7 +35,7 @@ impl<'mutex_lock, T: CtoSafe> Deref for CtoMutexLockGuard<'mutex_lock, T>
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -44,37 +44,37 @@ impl<'mutex_lock, T: CtoSafe> DerefMut for CtoMutexLockGuard<'mutex_lock, T>
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> Borrow<T> for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> Borrow<Value> for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn borrow(&self) -> &T
+	fn borrow(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> BorrowMut<T> for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> BorrowMut<Value> for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn borrow_mut(&mut self) -> &mut T
+	fn borrow_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> AsRef<T> for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> AsRef<Value> for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn as_ref(&self) -> &T
+	fn as_ref(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<'mutex_lock, T: CtoSafe> AsMut<T> for CtoMutexLockGuard<'mutex_lock, T>
+impl<'mutex_lock, Value: CtoSafe> AsMut<Value> for CtoMutexLockGuard<'mutex_lock, Value>
 {
 	#[inline(always)]
-	fn as_mut(&mut self) -> &mut T
+	fn as_mut(&mut self) -> &mut Value
 	{
 		self.deref_mut()
 	}

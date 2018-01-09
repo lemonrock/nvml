@@ -4,43 +4,43 @@
 
 /// Simple wrapper type to make it easier to work correctly with condition variables and mutexes in CtoSafe structures.
 #[derive(Debug)]
-pub struct CtoMutexLockAndConditionVariable<T: CtoSafe>
+pub struct CtoMutexLockAndConditionVariable<Value: CtoSafe>
 {
-	cto_mutex_lock: CtoMutexLock<T>,
+	cto_mutex_lock: CtoMutexLock<Value>,
 	cto_condition_variable: CtoConditionVariable,
 }
 
-unsafe impl<T: CtoSafe> Send for CtoMutexLockAndConditionVariable<T>
+unsafe impl<Value: CtoSafe> Send for CtoMutexLockAndConditionVariable<Value>
 {
 }
 
-unsafe impl<T: CtoSafe> Sync for CtoMutexLockAndConditionVariable<T>
+unsafe impl<Value: CtoSafe> Sync for CtoMutexLockAndConditionVariable<Value>
 {
 }
 
-impl<T: CtoSafe> UnwindSafe for CtoMutexLockAndConditionVariable<T>
+impl<Value: CtoSafe> UnwindSafe for CtoMutexLockAndConditionVariable<Value>
 {
 }
 
-impl<T: CtoSafe> RefUnwindSafe for CtoMutexLockAndConditionVariable<T>
+impl<Value: CtoSafe> RefUnwindSafe for CtoMutexLockAndConditionVariable<Value>
 {
 }
 
-impl<T: CtoSafe> CtoSafe for CtoMutexLockAndConditionVariable<T>
+impl<Value: CtoSafe> CtoSafe for CtoMutexLockAndConditionVariable<Value>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		self.cto_mutex_lock.cto_pool_opened(cto_pool_inner);
-		self.cto_condition_variable.cto_pool_opened(cto_pool_inner)
+		self.cto_mutex_lock.cto_pool_opened(cto_pool_arc);
+		self.cto_condition_variable.cto_pool_opened(cto_pool_arc)
 	}
 }
 
-impl<T: CtoSafe> CtoMutexLockAndConditionVariable<T>
+impl<Value: CtoSafe> CtoMutexLockAndConditionVariable<Value>
 {
 	/// Creates a new instance.
 	#[inline(always)]
-	pub fn new(cto_mutex_lock: CtoMutexLock<T>) -> Self
+	pub fn new(cto_mutex_lock: CtoMutexLock<Value>) -> Self
 	{
 		Self
 		{
@@ -52,7 +52,7 @@ impl<T: CtoSafe> CtoMutexLockAndConditionVariable<T>
 	/// Locks the mutex.
 	/// Use the resultant object to access wait / notify behaviour of the condition variable.
 	#[inline(always)]
-	pub fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuardWithConditionVariable<'mutex, T>
+	pub fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuardWithConditionVariable<'mutex, Value>
 	{
 		CtoMutexLockGuardWithConditionVariable
 		{
@@ -65,7 +65,7 @@ impl<T: CtoSafe> CtoMutexLockAndConditionVariable<T>
 	/// Returns None if the lock is held by another.
 	/// Use the resultant object to access wait / notify behaviour of the condition variable.
 	#[inline(always)]
-	pub fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuardWithConditionVariable<'mutex, T>>
+	pub fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuardWithConditionVariable<'mutex, Value>>
 	{
 		self.cto_mutex_lock.try_lock().map(|cto_mutex_lock_guard| CtoMutexLockGuardWithConditionVariable
 		{
