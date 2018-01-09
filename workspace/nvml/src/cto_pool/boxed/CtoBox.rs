@@ -19,9 +19,9 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 	{
 		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
 		{
-			let as_mut = persistent_memory_pointer.as_mut();
-			as_mut.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
-			initializer(as_mut)?;
+			let cto_box_inner = persistent_memory_pointer.as_mut();
+			cto_box_inner.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
+			initializer(cto_box_inner)?;
 		}
 		Ok
 		(
@@ -60,19 +60,18 @@ impl<Value: CtoSafe> Drop for CtoBox<Value>
 	}
 }
 
-//impl<Value: CtoSafe + Clone> Clone for CtoBox<Value>
-//{
-//	#[inline(always)]
-//	fn clone(&self) -> Self
-//	{
-//		let clone: Result<CtoBox<T>, CtoPoolAllocationError<()>> = CtoPoolAllocator(&self.persistent_memory().cto_pool_inner).allocate_box(|clone_of_t|
-//		{
-//			unsafe { copy_nonoverlapping(self.deref(), clone_of_t, size_of::<T>()) };
-//			Ok(())
-//		});
-//		clone.unwrap()
-//	}
-//}
+impl<Value: CtoSafe + Clone> Clone for CtoBox<Value>
+{
+	#[inline(always)]
+	fn clone(&self) -> Self
+	{
+		self.persistent_memory().cto_pool_alloc_guard_reference.allocate_box::<Value, (), _>(|clone|
+		{
+			unsafe { copy_nonoverlapping(self.deref(), clone, size_of::<Value>()) };
+			Ok(())
+		}).unwrap()
+	}
+}
 
 impl<Value: CtoSafe + PartialEq> PartialEq for CtoBox<Value>
 {

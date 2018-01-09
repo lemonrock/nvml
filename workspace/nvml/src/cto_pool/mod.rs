@@ -6,6 +6,7 @@
 //use self::synchronisation::CtoMutexLock;
 //use self::synchronisation::CtoReadWriteLock;
 use self::boxed::CtoBox;
+use self::rc::CtoRc;
 use ::errors::PmdkError;
 use ::libc::c_char;
 use ::libc::c_void;
@@ -49,11 +50,14 @@ use ::std::path::Path;
 use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::Ordering::SeqCst;
 
-/// Boxes like those in regular Rust's stdlib.
+/// A Box like that in regular Rust's stdlib.
 pub mod boxed;
 
 /// Collections
 //pub mod collections;
+
+// A Rc like that in regular Rust's stdlib.
+pub mod rc;
 
 /// Synchronisation
 //pub mod synchronisation;
@@ -66,11 +70,7 @@ include!("CtoPoolAllocGuard.rs");
 include!("CtoPoolAllocGuardReference.rs");
 include!("CtoPoolOpenError.rs");
 include!("CtoPoolPathExt.rs");
-//include!("CtoRc.rs");
-//include!("CtoRcCounter.rs");
-//include!("CtoRcInner.rs");
 include!("CtoSafe.rs");
 include!("initialise_memory_functions.rs");
 include!("PersistentMemoryWrapper.rs");
 include!("PMEMctopoolExt.rs");
-//include!("WeakCtoRc.rs");

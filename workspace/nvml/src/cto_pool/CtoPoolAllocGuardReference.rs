@@ -74,16 +74,16 @@ impl CtoPoolAllocGuardReference
 //	{
 //		self.allocate::<CtoMutexLock<Value>, InitializationError, Initializer>(initializer)
 //	}
-//
-//	/// Allocate a CtoRc, which is similar to a Rust Rc but uses the persistent memory pool instead of the system allocator.
-//	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
-//	/// Returns on success a CtoRc.
-//	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
-//	#[inline(always)]
-//	pub fn allocate_rc<Value: CtoSafe, InitializationError, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRc<Value>, CtoPoolAllocationError<InitializationError>>
-//	{
-//		self.allocate::<CtoRc<Value>, InitializationError, Initializer>(initializer)
-//	}
+
+	/// Allocate a CtoRc, which is similar to a Rust Rc but uses the persistent memory pool instead of the system allocator.
+	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
+	/// Returns on success a CtoRc.
+	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
+	#[inline(always)]
+	pub fn allocate_rc<Value: CtoSafe, InitializationError, Initializer: FnOnce(&mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRc<Value>, CtoPoolAllocationError<InitializationError>>
+	{
+		self.allocate::<CtoRc<Value>, InitializationError, Initializer>(initializer)
+	}
 	
 	/// Allocate a CtoBox, which is similar to a Rust Box but uses the persistent memory pool instead of the system allocator.
 	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.

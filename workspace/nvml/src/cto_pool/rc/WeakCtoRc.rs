@@ -3,35 +3,35 @@
 
 
 /// Very similar to Rust's Rc Weak.
-pub struct WeakCtoRc<T: CtoSafe>(*mut CtoRcInner<T>);
+pub struct WeakCtoRc<Value: CtoSafe>(Option<Shared<CtoRcInner<Value>>>);
 
-impl<T: CtoSafe> Drop for WeakCtoRc<T>
+impl<Value: CtoSafe> Drop for WeakCtoRc<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		if let Some(extant) = self.dereference()
+		if let Some(shared_cto_rc_inner) = self.0
 		{
-			extant.weak_count_decrement();
+			(unsafe { shared_cto_rc_inner.as_ref() }).weak_count_decrement();
 		}
 	}
 }
 
-impl<T: CtoSafe> Clone for WeakCtoRc<T>
+impl<Value: CtoSafe> Clone for WeakCtoRc<Value>
 {
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		if let Some(extant) = self.dereference()
+		if let Some(shared_cto_rc_inner) = self.0
 		{
-			extant.weak_count_increment();
+			(unsafe { shared_cto_rc_inner.as_ref() }).weak_count_increment();
 		}
 		
 		WeakCtoRc(self.0)
 	}
 }
 
-impl<T: CtoSafe + Debug> Debug for WeakCtoRc<T>
+impl<Value: CtoSafe + Debug> Debug for WeakCtoRc<Value>
 {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
@@ -39,9 +39,9 @@ impl<T: CtoSafe + Debug> Debug for WeakCtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> Default for WeakCtoRc<T>
+impl<Value: CtoSafe> Default for WeakCtoRc<Value>
 {
-	/// Constructs a new `WeakCtoRc<T>`, allocating memory for `T` without initializing it. Calling `upgrade()` on the return value always gives `None`.
+	/// Constructs a new `WeakCtoRc<Value>`, allocating memory for `Value` without initializing it. Calling `upgrade()` on the return value always gives `None`.
 	#[inline(always)]
 	fn default() -> Self
 	{
@@ -49,26 +49,27 @@ impl<T: CtoSafe> Default for WeakCtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> WeakCtoRc<T>
+impl<Value: CtoSafe> WeakCtoRc<Value>
 {
-	/// Constructs a new `WeakCtoRc<T>`, allocating memory for `T` without initializing it. Calling `upgrade()` on the return value always gives `None`.
+	/// Constructs a new `WeakCtoRc<Value>`, allocating memory for `Value` without initializing it. Calling `upgrade()` on the return value always gives `None`.
 	#[inline(always)]
 	pub fn new() -> Self
 	{
-		WeakCtoRc(null_mut())
+		WeakCtoRc(None)
 	}
 	
 	/// Upgrades a weak reference to a strong one.
 	/// Returns None if only weak references remain, or this instance was created with `new()` or `default()`.
 	#[inline(always)]
-	pub fn upgrade(&self) -> Option<CtoRc<T>>
+	pub fn upgrade(&self) -> Option<CtoRc<Value>>
 	{
-		self.dereference().map(|cto_rc_inner|
+		self.0.map(|shared_cto_rc_inner|
 		{
+			let cto_rc_inner = unsafe { shared_cto_rc_inner.as_ref() };
 			cto_rc_inner.strong_count_increment();
 			CtoRc
 			{
-				persistent_memory_pointer: self.0,
+				persistent_memory_pointer: shared_cto_rc_inner,
 			}
 		})
 	}
@@ -78,7 +79,7 @@ impl<T: CtoSafe> WeakCtoRc<T>
 	#[inline(always)]
 	pub fn strong_count(&self) -> Option<usize>
 	{
-		self.dereference().map(|cto_rc_inner| cto_rc_inner.strong_count())
+		self.0.map(|shared_cto_rc_inner| unsafe { shared_cto_rc_inner.as_ref() }.strong_count())
 	}
 	
 	/// How many weak references are there?
@@ -87,19 +88,6 @@ impl<T: CtoSafe> WeakCtoRc<T>
 	#[inline(always)]
 	pub fn weak_count(&self) -> Option<usize>
 	{
-		self.dereference().map(|cto_rc_inner| cto_rc_inner.weak_count())
-	}
-	
-	#[inline(always)]
-	fn dereference(&self) -> Option<&CtoRcInner<T>>
-	{
-		if self.0.is_null()
-		{
-			None
-		}
-		else
-		{
-			Some(unsafe { &*self.0 })
-		}
+		self.0.map(|shared_cto_rc_inner| unsafe { shared_cto_rc_inner.as_ref() }.weak_count())
 	}
 }

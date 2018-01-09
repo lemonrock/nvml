@@ -3,31 +3,28 @@
 
 
 /// Similar to a Rust Rc but allocated in a persistent memory CTO Pool.
-pub struct CtoRc<T: CtoSafe>
+pub struct CtoRc<Value: CtoSafe>
 {
-	persistent_memory_pointer: *mut CtoRcInner<T>
+	persistent_memory_pointer: Shared<CtoRcInner<Value>>
 }
 
-impl<T: CtoSafe> CtoSafe for CtoRc<T>
+impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 {
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
-	{
-		self.persistent_memory_mut().cto_pool_opened(cto_pool_inner)
-	}
-}
-
-impl<T: CtoSafe> PersistentMemoryWrapper for CtoRc<T>
-{
-	type PersistentMemory = CtoRcInner<T>;
+	type PersistentMemory = CtoRcInner<Value>;
 	
-	type Value = T;
+	type Value = Value;
 	
 	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let inner = unsafe { &mut * persistent_memory_pointer };
-		inner.initialize_persistent_memory(cto_pool_inner, initializer)?;
+		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		{
+			let cto_rc_inner = persistent_memory_pointer.as_mut();
+			cto_rc_inner.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
+			cto_rc_inner.strong_counter = CtoRcCounter::default();
+			cto_rc_inner.weak_counter = CtoRcCounter::default();
+			initializer(cto_rc_inner)?;
+		}
 		Ok
 		(
 			Self
@@ -38,22 +35,44 @@ impl<T: CtoSafe> PersistentMemoryWrapper for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> Drop for CtoRc<T>
+impl<Value: CtoSafe> CtoSafe for CtoRc<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference)
+	{
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_alloc_guard_reference)
+	}
+}
+
+impl<Value: CtoSafe> Drop for CtoRc<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let cto_rc_inner = self.persistent_memory_mut();
-		cto_rc_inner.strong_count_decrement();
-		if cto_rc_inner.strong_count() == 0
+		let should_be_dropped_because_there_are_no_strong_references =
 		{
-			let cto_pool_inner = cto_rc_inner.cto_pool_inner.clone();
-			CtoPoolInner::free_persistent_memory(&cto_pool_inner, self.persistent_memory_pointer)
+			let cto_rc_inner = self.persistent_memory_mut();
+			cto_rc_inner.strong_count_decrement();
+			cto_rc_inner.strong_count() == 0
+		};
+		
+		if should_be_dropped_because_there_are_no_strong_references
+		{
+			let pool_pointer = self.persistent_memory().cto_pool_alloc_guard_reference.pool_pointer();
+			
+			let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
+			
+			if needs_drop::<CtoRcInner<Value>>()
+			{
+				unsafe { drop_in_place(persistent_memory_pointer) }
+			}
+			
+			pool_pointer.free(persistent_memory_pointer);
 		}
 	}
 }
 
-impl<T: CtoSafe> Clone for CtoRc<T>
+impl<Value: CtoSafe> Clone for CtoRc<Value>
 {
 	#[inline(always)]
 	fn clone(&self) -> Self
@@ -67,15 +86,15 @@ impl<T: CtoSafe> Clone for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> !Send for CtoRc<T>
+impl<Value: CtoSafe> !Send for CtoRc<Value>
 {
 }
 
-impl<T: CtoSafe> !Sync for CtoRc<T>
+impl<Value: CtoSafe> !Sync for CtoRc<Value>
 {
 }
 
-impl<T: CtoSafe + PartialEq> PartialEq for CtoRc<T>
+impl<Value: CtoSafe + PartialEq> PartialEq for CtoRc<Value>
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
@@ -90,11 +109,11 @@ impl<T: CtoSafe + PartialEq> PartialEq for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe + Eq> Eq for CtoRc<T>
+impl<Value: CtoSafe + Eq> Eq for CtoRc<Value>
 {
 }
 
-impl<T: CtoSafe + PartialOrd> PartialOrd for CtoRc<T>
+impl<Value: CtoSafe + PartialOrd> PartialOrd for CtoRc<Value>
 {
 	#[inline(always)]
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering>
@@ -127,7 +146,7 @@ impl<T: CtoSafe + PartialOrd> PartialOrd for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe + Ord> Ord for CtoRc<T>
+impl<Value: CtoSafe + Ord> Ord for CtoRc<Value>
 {
 	#[inline(always)]
 	fn cmp(&self, other: &Self) -> Ordering
@@ -136,7 +155,7 @@ impl<T: CtoSafe + Ord> Ord for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe + Hash> Hash for CtoRc<T>
+impl<Value: CtoSafe + Hash> Hash for CtoRc<Value>
 {
 	#[inline(always)]
 	fn hash<H: Hasher>(&self, state: &mut H)
@@ -145,7 +164,7 @@ impl<T: CtoSafe + Hash> Hash for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe + Display> Display for CtoRc<T>
+impl<Value: CtoSafe + Display> Display for CtoRc<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -154,7 +173,7 @@ impl<T: CtoSafe + Display> Display for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe + Debug> Debug for CtoRc<T>
+impl<Value: CtoSafe + Debug> Debug for CtoRc<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -163,7 +182,7 @@ impl<T: CtoSafe + Debug> Debug for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> Pointer for CtoRc<T>
+impl<Value: CtoSafe> Pointer for CtoRc<Value>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -172,9 +191,9 @@ impl<T: CtoSafe> Pointer for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> Deref for CtoRc<T>
+impl<Value: CtoSafe> Deref for CtoRc<Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -183,32 +202,32 @@ impl<T: CtoSafe> Deref for CtoRc<T>
 	}
 }
 
-impl<T: CtoSafe> Borrow<T> for CtoRc<T>
+impl<Value: CtoSafe> Borrow<Value> for CtoRc<Value>
 {
 	#[inline(always)]
-	fn borrow(&self) -> &T
+	fn borrow(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<T: CtoSafe> AsRef<T> for CtoRc<T>
+impl<Value: CtoSafe> AsRef<Value> for CtoRc<Value>
 {
 	#[inline(always)]
-	fn as_ref(&self) -> &T
+	fn as_ref(&self) -> &Value
 	{
 		self.deref()
 	}
 }
 
-impl<T: CtoSafe> CtoRc<T>
+impl<Value: CtoSafe> CtoRc<Value>
 {
 	/// Downgrades this strong reference to a weak reference.
 	#[inline(always)]
-	pub fn downgrade(this: &Self) -> WeakCtoRc<T>
+	pub fn downgrade(this: &Self) -> WeakCtoRc<Value>
 	{
 		this.persistent_memory().weak_count_increment();
-		WeakCtoRc(this.persistent_memory_pointer)
+		WeakCtoRc(Some(this.persistent_memory_pointer))
 	}
 	
 	/// How many strong references are there (will always be at least one)?
@@ -234,7 +253,7 @@ impl<T: CtoSafe> CtoRc<T>
 	
 	/// If this object is unique (see `is_unique()`) then will return Some otherwise None.
 	#[inline(always)]
-	pub fn get_mut(this: &mut Self) -> Option<&mut T>
+	pub fn get_mut(this: &mut Self) -> Option<&mut Value>
 	{
 		if Self::is_unique(this)
 		{
@@ -250,25 +269,25 @@ impl<T: CtoSafe> CtoRc<T>
 	#[inline(always)]
 	pub fn ptr_eq(this: &Self, other: &Self) -> bool
 	{
-		this.persistent_memory_pointer == other.persistent_memory_pointer
+		this.persistent_memory_pointer.as_ptr() == other.persistent_memory_pointer.as_ptr()
 	}
 	
 	/// A pointer to use with C. Use wisely; dropping this object may cause the pointer to go out of scope.
 	#[inline(always)]
-	pub fn as_ptr(this: Self) -> *const T
+	pub fn as_ptr(this: Self) -> *const Value
 	{
-		this.deref() as *const T
+		this.deref() as *const Value
 	}
 	
 	#[inline(always)]
-	fn persistent_memory(&self) -> &CtoRcInner<T>
+	fn persistent_memory(&self) -> &CtoRcInner<Value>
 	{
-		unsafe { &*self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_ref() }
 	}
 	
 	#[inline(always)]
-	fn persistent_memory_mut(&self) -> &mut CtoRcInner<T>
+	fn persistent_memory_mut(&mut self) -> &mut CtoRcInner<Value>
 	{
-		unsafe { &mut *self.persistent_memory_pointer }
+		unsafe { self.persistent_memory_pointer.as_mut() }
 	}
 }

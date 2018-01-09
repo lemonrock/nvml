@@ -2,29 +2,28 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[derive(Debug)]
-struct CtoRcInner<T: CtoSafe>
+pub(crate) struct CtoRcInner<Value: CtoSafe>
 {
 	strong_counter: CtoRcCounter,
 	weak_counter: CtoRcCounter,
-	cto_pool_inner: *mut PMEMctopool,
-	value: T,
+	cto_pool_alloc_guard_reference: CtoPoolAllocGuardReference,
+	value: Value,
 }
 
-impl<T: CtoSafe> CtoSafe for CtoRcInner<T>
+impl<Value: CtoSafe> CtoSafe for CtoRcInner<Value>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
+	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference)
 	{
-		self.cto_pool_inner = cto_pool_inner;
+		self.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
 		
-		self.value.cto_pool_opened(cto_pool_inner)
+		self.value.cto_pool_opened(cto_pool_alloc_guard_reference)
 	}
 }
 
-impl<T: CtoSafe> Deref for CtoRcInner<T>
+impl<Value: CtoSafe> Deref for CtoRcInner<Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -33,7 +32,7 @@ impl<T: CtoSafe> Deref for CtoRcInner<T>
 	}
 }
 
-impl<T: CtoSafe> DerefMut for CtoRcInner<T>
+impl<Value: CtoSafe> DerefMut for CtoRcInner<Value>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -42,7 +41,7 @@ impl<T: CtoSafe> DerefMut for CtoRcInner<T>
 	}
 }
 
-impl<T: CtoSafe> CtoRcInner<T>
+impl<Value: CtoSafe> CtoRcInner<Value>
 {
 	#[inline(always)]
 	pub(crate) fn strong_count(&self) -> usize
@@ -84,15 +83,5 @@ impl<T: CtoSafe> CtoRcInner<T>
 	pub(crate) fn is_unique(&self) -> bool
 	{
 		self.strong_count() == 1 && self.weak_count() == 0
-	}
-	
-	#[inline(always)]
-	fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(&mut T) -> Result<(), InitializationError>>(&mut self, cto_pool_inner: &Arc<CtoPoolInner>, initializer: Initializer) -> Result<(), InitializationError>
-	{
-		self.strong_counter = CtoRcCounter::default();
-		self.weak_counter = CtoRcCounter::default();
-		
-		self.cto_pool_inner = cto_pool_inner.clone();
-		initializer(&mut self.value)
 	}
 }
