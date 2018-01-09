@@ -4,9 +4,10 @@
 
 /// A guard to ensure the CTO pool is not dropped too soon.
 /// Similar to a Rust Arc, but altered to address the fact that it will end-up in persistent storage.
+/// Also provides allocation methods.
 pub struct CtoPoolArc
 {
-	cto_pool_guard_inner: Shared<CtoPoolArcInner>,
+	cto_pool_arc_inner: Shared<CtoPoolArcInner>,
 }
 
 impl Drop for CtoPoolArc
@@ -14,9 +15,9 @@ impl Drop for CtoPoolArc
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		if unsafe { self.cto_pool_guard_inner.as_mut() }.release()
+		if unsafe { self.cto_pool_arc_inner.as_mut() }.release()
 		{
-			drop(unsafe { Box::from_unique(Unique::from(self.cto_pool_guard_inner.as_mut())) });
+			drop(unsafe { Box::from_unique(Unique::from(self.cto_pool_arc_inner.as_mut())) });
 		}
 	}
 }
@@ -26,13 +27,13 @@ impl Clone for CtoPoolArc
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		let mut guard = self.cto_pool_guard_inner;
+		let mut guard = self.cto_pool_arc_inner;
 		
 		unsafe { guard.as_mut() }.acquire();
 		
 		Self
 		{
-			cto_pool_guard_inner: self.cto_pool_guard_inner,
+			cto_pool_arc_inner: self.cto_pool_arc_inner,
 		}
 	}
 }
@@ -42,7 +43,7 @@ impl CtoPoolArc
 	#[inline(always)]
 	fn new(pool_pointer: *mut PMEMctopool) -> Self
 	{
-		let cto_pool_alloc_guard = Box::new
+		let cto_pool_alloc_arc = Box::new
 		(
 			CtoPoolArcInner
 			{
@@ -53,7 +54,7 @@ impl CtoPoolArc
 		
 		Self
 		{
-			cto_pool_guard_inner: Box::into_unique(cto_pool_alloc_guard).into(),
+			cto_pool_arc_inner: Box::into_unique(cto_pool_alloc_arc).into(),
 		}
 	}
 	
@@ -123,6 +124,6 @@ impl CtoPoolArc
 	#[inline(always)]
 	pub fn pool_pointer(&self) -> *mut PMEMctopool
 	{
-		unsafe { self.cto_pool_guard_inner.as_ref() }.pool_pointer
+		unsafe { self.cto_pool_arc_inner.as_ref() }.pool_pointer
 	}
 }
