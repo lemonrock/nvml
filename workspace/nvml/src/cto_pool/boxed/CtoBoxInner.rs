@@ -8,16 +8,6 @@ pub(crate) struct CtoBoxInner<Value: CtoSafe>
 	value: Value,
 }
 
-impl<T: CtoSafe> CtoSafe for CtoBoxInner<T>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
-	{
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
-		self.value.cto_pool_opened(cto_pool_arc);
-	}
-}
-
 impl<Value: CtoSafe> Deref for CtoBoxInner<Value>
 {
 	type Target = Value;
@@ -33,5 +23,30 @@ impl<Value: CtoSafe> DerefMut for CtoBoxInner<Value>
 	fn deref_mut(&mut self) -> &mut Value
 	{
 		&mut self.value
+	}
+}
+
+impl<Value: CtoSafe> CtoBoxInner<Value>
+{
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	fn created<InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		initializer(&mut self.value)
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.value.cto_pool_opened(cto_pool_arc)
 	}
 }

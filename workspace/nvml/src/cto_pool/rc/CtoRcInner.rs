@@ -10,16 +10,6 @@ pub(crate) struct CtoRcInner<Value: CtoSafe>
 	value: Value,
 }
 
-impl<Value: CtoSafe> CtoSafe for CtoRcInner<Value>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
-	{
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
-		self.value.cto_pool_opened(cto_pool_arc)
-	}
-}
-
 impl<Value: CtoSafe> Deref for CtoRcInner<Value>
 {
 	type Target = Value;
@@ -42,6 +32,34 @@ impl<Value: CtoSafe> DerefMut for CtoRcInner<Value>
 
 impl<Value: CtoSafe> CtoRcInner<Value>
 {
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		
+		let old = replace(&mut self.strong_counter, CtoRcCounter::default());
+		forget(old);
+		
+		let old = replace(&mut self.weak_counter, CtoRcCounter::default());
+		forget(old);
+	}
+	
+	#[inline(always)]
+	fn created<InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		initializer(&mut self.value)
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.value.cto_pool_opened(cto_pool_arc)
+	}
+	
 	#[inline(always)]
 	pub(crate) fn strong_count(&self) -> usize
 	{

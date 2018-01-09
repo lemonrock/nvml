@@ -2,14 +2,14 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-pub(crate) struct CtoMutexLockInner<T: CtoSafe>
+pub(crate) struct CtoMutexLockInner<Value: CtoSafe>
 {
 	#[cfg(unix)] mutex: UnsafeCell<pthread_mutex_t>,
 	cto_pool_arc: CtoPoolArc,
-	value: UnsafeCell<T>,
+	value: UnsafeCell<Value>,
 }
 
-impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
+impl<Value: CtoSafe> Drop for CtoMutexLockInner<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -33,25 +33,25 @@ impl<T: CtoSafe> Drop for CtoMutexLockInner<T>
 	}
 }
 
-unsafe impl<T: CtoSafe> Send for CtoMutexLockInner<T>
+unsafe impl<Value: CtoSafe> Send for CtoMutexLockInner<Value>
 {
 }
 
-unsafe impl<T: CtoSafe> Sync for CtoMutexLockInner<T>
+unsafe impl<Value: CtoSafe> Sync for CtoMutexLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> UnwindSafe for CtoMutexLockInner<T>
+impl<Value: CtoSafe> UnwindSafe for CtoMutexLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> RefUnwindSafe for CtoMutexLockInner<T>
+impl<Value: CtoSafe> RefUnwindSafe for CtoMutexLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> Deref for CtoMutexLockInner<T>
+impl<Value: CtoSafe> Deref for CtoMutexLockInner<Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -60,7 +60,7 @@ impl<T: CtoSafe> Deref for CtoMutexLockInner<T>
 	}
 }
 
-impl<T: CtoSafe> DerefMut for CtoMutexLockInner<T>
+impl<Value: CtoSafe> DerefMut for CtoMutexLockInner<Value>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -69,46 +69,8 @@ impl<T: CtoSafe> DerefMut for CtoMutexLockInner<T>
 	}
 }
 
-impl<T: CtoSafe> CtoMutexLockInner<T>
+impl<Value: CtoSafe> CtoMutexLockInner<Value>
 {
-	#[inline(always)]
-	pub(crate) fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuard<'mutex, T>
-	{
-		#[cfg(unix)]
-		{
-			let result = unsafe { pthread_mutex_lock(self.mutex.get()) };
-			debug_assert_pthread_result_ok!(result);
-		}
-		
-		CtoMutexLockGuard(self)
-	}
-	
-	#[inline(always)]
-	pub(crate) fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuard<'mutex, T>>
-	{
-		#[cfg(unix)]
-		{
-			// Error codes are EBUSY (lock in use) and EINVAL (which should not occur).
-			if unsafe { pthread_mutex_trylock(self.mutex.get()) } == ResultIsOk
-			{
-				Some(CtoMutexLockGuard(self))
-			}
-			else
-			{
-				None
-			}
-		}
-	}
-	
-	// Behavior is undefined if the current thread does not actually hold the mutex.
-	#[cfg(unix)]
-	#[inline(always)]
-	unsafe fn unlock_mutex(&self)
-	{
-		let result = pthread_mutex_unlock(self.mutex.get());
-		debug_assert_pthread_result_ok!(result);
-	}
-	
 	#[inline(always)]
 	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
@@ -156,10 +118,56 @@ impl<T: CtoSafe> CtoMutexLockInner<T>
 	}
 	
 	#[inline(always)]
+	fn created<InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		initializer(self.value.get())
+	}
+	
+	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
 		self.common_initialization(cto_pool_arc);
 		
 		self.deref_mut().cto_pool_opened(cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	pub(crate) fn lock<'mutex>(&'mutex self) -> CtoMutexLockGuard<'mutex, Value>
+	{
+		#[cfg(unix)]
+		{
+			let result = unsafe { pthread_mutex_lock(self.mutex.get()) };
+			debug_assert_pthread_result_ok!(result);
+		}
+		
+		CtoMutexLockGuard(self)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn try_lock<'mutex>(&'mutex self) -> Option<CtoMutexLockGuard<'mutex, Value>>
+	{
+		#[cfg(unix)]
+		{
+			// Error codes are EBUSY (lock in use) and EINVAL (which should not occur).
+			if unsafe { pthread_mutex_trylock(self.mutex.get()) } == ResultIsOk
+			{
+				Some(CtoMutexLockGuard(self))
+			}
+			else
+			{
+				None
+			}
+		}
+	}
+	
+	// Behavior is undefined if the current thread does not actually hold the mutex.
+	#[cfg(unix)]
+	#[inline(always)]
+	unsafe fn unlock_mutex(&self)
+	{
+		let result = pthread_mutex_unlock(self.mutex.get());
+		debug_assert_pthread_result_ok!(result);
 	}
 }

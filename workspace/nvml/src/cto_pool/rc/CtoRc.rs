@@ -18,19 +18,11 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		
 		{
-			let cto_rc_inner = persistent_memory_pointer.as_mut();
-			
-			cto_pool_arc.replace(&mut cto_rc_inner.cto_pool_arc);
-			
-			let old = replace(&mut cto_rc_inner.strong_counter, CtoRcCounter::default());
-			forget(old);
-			
-			let old = replace(&mut cto_rc_inner.weak_counter, CtoRcCounter::default());
-			forget(old);
-			
-			initializer(&mut cto_rc_inner.value)?;
+			persistent_memory_pointer.as_mut().created(cto_pool_arc, initializer)?;
 		}
+		
 		Ok
 		(
 			Self

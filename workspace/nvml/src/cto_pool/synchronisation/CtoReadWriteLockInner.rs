@@ -2,16 +2,16 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-pub(crate) struct CtoReadWriteLockInner<T: CtoSafe>
+pub(crate) struct CtoReadWriteLockInner<Value: CtoSafe>
 {
 	#[cfg(unix)] rwlock: UnsafeCell<pthread_rwlock_t>,
 	write_lock: UnsafeCell<bool>,
 	number_of_read_locks: AtomicUsize,
 	cto_pool_arc: CtoPoolArc,
-	value: UnsafeCell<T>,
+	value: UnsafeCell<Value>,
 }
 
-impl<T: CtoSafe> Drop for CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> Drop for CtoReadWriteLockInner<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -35,25 +35,25 @@ impl<T: CtoSafe> Drop for CtoReadWriteLockInner<T>
 	}
 }
 
-unsafe impl<T: CtoSafe> Send for CtoReadWriteLockInner<T>
+unsafe impl<Value: CtoSafe> Send for CtoReadWriteLockInner<Value>
 {
 }
 
-unsafe impl<T: CtoSafe> Sync for CtoReadWriteLockInner<T>
+unsafe impl<Value: CtoSafe> Sync for CtoReadWriteLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> UnwindSafe for CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> UnwindSafe for CtoReadWriteLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> RefUnwindSafe for CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> RefUnwindSafe for CtoReadWriteLockInner<Value>
 {
 }
 
-impl<T: CtoSafe> Deref for CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> Deref for CtoReadWriteLockInner<Value>
 {
-	type Target = T;
+	type Target = Value;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -62,7 +62,7 @@ impl<T: CtoSafe> Deref for CtoReadWriteLockInner<T>
 	}
 }
 
-impl<T: CtoSafe> DerefMut for CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> DerefMut for CtoReadWriteLockInner<Value>
 {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
@@ -71,8 +71,42 @@ impl<T: CtoSafe> DerefMut for CtoReadWriteLockInner<T>
 	}
 }
 
-impl<T: CtoSafe> CtoReadWriteLockInner<T>
+impl<Value: CtoSafe> CtoReadWriteLockInner<Value>
 {
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		#[cfg(unix)]
+		{
+			let old = replace(&mut self.rwlock, UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER));
+			forget(old);
+		}
+		
+		let old = replace(&mut self.write_lock, UnsafeCell::new(false));
+		forget(old);
+		
+		let old = replace(&mut self.number_of_read_locks, AtomicUsize::new(0));
+		forget(old);
+		
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	fn created<InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		initializer(self.value.get())
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.deref_mut().cto_pool_opened(cto_pool_arc);
+	}
+	
 	// This should be called once the mutex is at a stable memory address.
 	//
 	// According to the pthread_rwlock_rdlock spec, this function **may**
@@ -94,7 +128,7 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	// allow that because it could lead to aliasing issues.
 	#[cfg(unix)]
 	#[inline(always)]
-	pub(crate) fn read<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockReadGuard<'read_write_lock, T>
+	pub(crate) fn read<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockReadGuard<'read_write_lock, Value>
 	{
 		let result = unsafe { pthread_rwlock_rdlock(self.rwlock()) };
 		
@@ -121,7 +155,7 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	
 	#[cfg(unix)]
 	#[inline(always)]
-	pub(crate) fn try_read<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockReadGuard<'read_write_lock, T>>
+	pub(crate) fn try_read<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockReadGuard<'read_write_lock, Value>>
 	{
 		let result = unsafe { pthread_rwlock_tryrdlock(self.rwlock()) };
 		
@@ -146,7 +180,7 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	
 	#[cfg(unix)]
 	#[inline(always)]
-	pub(crate) fn write<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockWriteGuard<'read_write_lock, T>
+	pub(crate) fn write<'read_write_lock>(&'read_write_lock self) -> CtoReadWriteLockWriteGuard<'read_write_lock, Value>
 	{
 		let result = unsafe { pthread_rwlock_wrlock(self.rwlock()) };
 		
@@ -170,7 +204,7 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	
 	#[cfg(unix)]
 	#[inline(always)]
-	pub(crate) fn try_write<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockWriteGuard<'read_write_lock, T>>
+	pub(crate) fn try_write<'read_write_lock>(&'read_write_lock self) -> Option<CtoReadWriteLockWriteGuard<'read_write_lock, Value>>
 	{
 		let result = unsafe { pthread_rwlock_trywrlock(self.rwlock()) };
 		
@@ -274,32 +308,6 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	fn decrement_number_of_read_locks(&self)
 	{
 		self.number_of_read_locks.fetch_sub(1, NumberOfReadersOrdering);
-	}
-	
-	#[inline(always)]
-	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
-	{
-		#[cfg(unix)]
-		{
-			let old = replace(&mut self.rwlock, UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER));
-			forget(old);
-		}
-		
-		let old = replace(&mut self.write_lock, UnsafeCell::new(false));
-		forget(old);
-		
-		let old = replace(&mut self.number_of_read_locks, AtomicUsize::new(0));
-		forget(old);
-		
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
-	}
-	
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
-	{
-		self.common_initialization(cto_pool_arc);
-		
-		self.deref_mut().cto_pool_opened(cto_pool_arc);
 	}
 }
 

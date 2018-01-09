@@ -18,13 +18,11 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
+		
 		{
-			let cto_box_inner = persistent_memory_pointer.as_mut();
-			
-			cto_pool_arc.replace(&mut cto_box_inner.cto_pool_arc);
-			
-			initializer(&mut cto_box_inner.value)?;
+			persistent_memory_pointer.as_mut().created(cto_pool_arc, initializer)?;
 		}
+		
 		Ok
 		(
 			Self

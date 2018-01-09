@@ -7,13 +7,6 @@ pub trait CtoSafe: Sized
 {
 	#[doc(hidden)]
 	#[inline(always)]
-	fn common_initialization(&mut self, _cto_pool_arc: &CtoPoolArc)
-	{
-	
-	}
-	
-	#[doc(hidden)]
-	#[inline(always)]
 	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
 	{
 	}
