@@ -3,13 +3,13 @@
 
 
 #[derive(Debug)]
-struct CtoPoolAllocGuard
+struct CtoPoolArcInner
 {
 	pool_pointer: *mut PMEMctopool,
 	counter: AtomicUsize,
 }
 
-impl CtoPoolAllocGuard
+impl CtoPoolArcInner
 {
 	#[inline(always)]
 	fn acquire(&mut self)

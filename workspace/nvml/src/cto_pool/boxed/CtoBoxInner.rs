@@ -4,14 +4,14 @@
 
 pub(crate) struct CtoBoxInner<Value: CtoSafe>
 {
-	cto_pool_alloc_guard_reference: CtoPoolAllocGuardReference,
+	cto_pool_alloc_guard_reference: CtoPoolArc,
 	value: Value,
 }
 
 impl<T: CtoSafe> CtoSafe for CtoBoxInner<T>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolAllocGuardReference)
+	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
 	{
 		self.cto_pool_alloc_guard_reference = cto_pool_alloc_guard_reference.clone();
 		self.value.cto_pool_opened(cto_pool_alloc_guard_reference);

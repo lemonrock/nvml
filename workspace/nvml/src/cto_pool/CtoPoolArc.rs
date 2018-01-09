@@ -4,41 +4,59 @@
 
 /// A guard to ensure the CTO pool is not dropped too soon.
 /// Similar to a Rust Arc, but altered to address the fact that it will end-up in persistent storage.
-pub struct CtoPoolAllocGuardReference
+pub struct CtoPoolArc
 {
-	cto_pool_alloc_guard: Shared<CtoPoolAllocGuard>,
+	cto_pool_guard_inner: Shared<CtoPoolArcInner>,
 }
 
-impl Drop for CtoPoolAllocGuardReference
+impl Drop for CtoPoolArc
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		if unsafe { self.cto_pool_alloc_guard.as_mut() }.release()
+		if unsafe { self.cto_pool_guard_inner.as_mut() }.release()
 		{
-			drop(unsafe { Box::from_unique(Unique::from(self.cto_pool_alloc_guard.as_mut())) });
+			drop(unsafe { Box::from_unique(Unique::from(self.cto_pool_guard_inner.as_mut())) });
 		}
 	}
 }
 
-impl Clone for CtoPoolAllocGuardReference
+impl Clone for CtoPoolArc
 {
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		let mut guard = self.cto_pool_alloc_guard;
+		let mut guard = self.cto_pool_guard_inner;
 		
 		unsafe { guard.as_mut() }.acquire();
 		
 		Self
 		{
-			cto_pool_alloc_guard: self.cto_pool_alloc_guard,
+			cto_pool_guard_inner: self.cto_pool_guard_inner,
 		}
 	}
 }
 
-impl CtoPoolAllocGuardReference
+impl CtoPoolArc
 {
+	#[inline(always)]
+	fn new(pool_pointer: *mut PMEMctopool) -> Self
+	{
+		let cto_pool_alloc_guard = Box::new
+		(
+			CtoPoolArcInner
+			{
+				pool_pointer,
+				counter: AtomicUsize::new(1),
+			}
+		);
+		
+		Self
+		{
+			cto_pool_guard_inner: Box::into_unique(cto_pool_alloc_guard).into(),
+		}
+	}
+	
 //	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
 //	/// Returns on success a CtoVec.
 //	#[inline(always)]
@@ -105,24 +123,6 @@ impl CtoPoolAllocGuardReference
 	#[inline(always)]
 	pub fn pool_pointer(&self) -> *mut PMEMctopool
 	{
-		unsafe { self.cto_pool_alloc_guard.as_ref() }.pool_pointer
-	}
-	
-	#[inline(always)]
-	fn new(pool_pointer: *mut PMEMctopool) -> Self
-	{
-		let cto_pool_alloc_guard = Box::new
-		(
-			CtoPoolAllocGuard
-			{
-				pool_pointer,
-				counter: AtomicUsize::new(1),
-			}
-		);
-		
-		Self
-		{
-			cto_pool_alloc_guard: Box::into_unique(cto_pool_alloc_guard).into(),
-		}
+		unsafe { self.cto_pool_guard_inner.as_ref() }.pool_pointer
 	}
 }

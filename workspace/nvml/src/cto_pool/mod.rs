@@ -64,10 +64,11 @@ pub mod rc;
 
 
 include!("Allocator.rs");
+include!("CtoPool.rs");
 include!("CtoPoolAlloc.rs");
 include!("CtoPoolAllocationError.rs");
-include!("CtoPoolAllocGuard.rs");
-include!("CtoPoolAllocGuardReference.rs");
+include!("CtoPoolArcInner.rs");
+include!("CtoPoolArc.rs");
 include!("CtoPoolOpenError.rs");
 include!("CtoPoolPathExt.rs");
 include!("CtoSafe.rs");

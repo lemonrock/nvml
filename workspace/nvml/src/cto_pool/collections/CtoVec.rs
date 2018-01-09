@@ -27,7 +27,7 @@ impl<T: CtoSafe> Drop for CtoVec<T>
 impl<T: CtoSafe> CtoSafe for CtoVec<T>
 {
 	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_inner: *mut PMEMctopool)
+	fn cto_pool_opened(&mut self, cto_pool_alloc_guard_reference: &CtoPoolArc)
 	{
 		use ::std::heap::Heap;
 		
