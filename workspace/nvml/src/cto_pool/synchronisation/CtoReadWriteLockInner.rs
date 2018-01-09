@@ -92,11 +92,11 @@ impl<Value: CtoSafe> CtoReadWriteLockInner<Value>
 	}
 	
 	#[inline(always)]
-	fn created<InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
 		self.common_initialization(cto_pool_arc);
 		
-		initializer(self.value.get())
+		initializer(self.value.get(), cto_pool_arc)
 	}
 	
 	#[inline(always)]

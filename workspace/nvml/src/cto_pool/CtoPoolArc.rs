@@ -120,7 +120,7 @@ impl CtoPoolArc
 	/// Returns on success a CtoRc.
 	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
 	#[inline(always)]
-	pub fn allocate_rc<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRc<Value>, CtoPoolAllocationError<InitializationError>>
+	pub fn allocate_rc<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoRc<Value>, CtoPoolAllocationError<InitializationError>>
 	{
 		self.allocate::<CtoRc<Value>, InitializationError, Initializer>(initializer)
 	}
@@ -130,13 +130,13 @@ impl CtoPoolArc
 	/// Returns on success a CtoBox.
 	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
 	#[inline(always)]
-	pub fn allocate_box<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoBox<Value>, CtoPoolAllocationError<InitializationError>>
+	pub fn allocate_box<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoBox<Value>, CtoPoolAllocationError<InitializationError>>
 	{
 		self.allocate::<CtoBox<Value>, InitializationError, Initializer>(initializer)
 	}
 	
 	#[inline(always)]
-	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<P, CtoPoolAllocationError<InitializationError>>
+	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<P, CtoPoolAllocationError<InitializationError>>
 	{
 		self.pool_pointer().allocate(initializer, self)
 	}

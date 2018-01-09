@@ -5,7 +5,7 @@
 trait Allocator
 {
 	#[inline(always)]
-	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value) -> Result<(), InitializationError>>(self, initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<P, CtoPoolAllocationError<InitializationError>>;
+	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value, &CtoPoolArc) -> Result<(), InitializationError>>(self, initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<P, CtoPoolAllocationError<InitializationError>>;
 	
 	#[inline(always)]
 	fn aligned_allocate<T>(self) -> Result<*mut T, PmdkError>;
@@ -44,7 +44,7 @@ trait Allocator
 impl Allocator for *mut PMEMctopool
 {
 	#[inline(always)]
-	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value) -> Result<(), InitializationError>>(self, initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<P, CtoPoolAllocationError<InitializationError>>
+	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value, &CtoPoolArc) -> Result<(), InitializationError>>(self, initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<P, CtoPoolAllocationError<InitializationError>>
 	{
 		debug_assert!(!self.is_null(), "self is null");
 		

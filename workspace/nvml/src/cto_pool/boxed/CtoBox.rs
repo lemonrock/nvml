@@ -15,7 +15,7 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoBox<Value>
 	type Value = Value;
 	
 	#[inline(always)]
-	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value, &CtoPoolArc) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
 		let mut persistent_memory_pointer = Unique::new_unchecked(persistent_memory_pointer);
 		
@@ -54,19 +54,6 @@ impl<Value: CtoSafe> Drop for CtoBox<Value>
 		unsafe { drop_in_place(persistent_memory_pointer) }
 		
 		pool_pointer.free(persistent_memory_pointer);
-	}
-}
-
-impl<Value: CtoSafe + Clone> Clone for CtoBox<Value>
-{
-	#[inline(always)]
-	fn clone(&self) -> Self
-	{
-		self.persistent_memory().cto_pool_arc.allocate_box::<Value, (), _>(|clone|
-		{
-			unsafe { copy_nonoverlapping(self.deref(), clone, size_of::<Value>()) };
-			Ok(())
-		}).unwrap()
 	}
 }
 
