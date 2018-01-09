@@ -15,7 +15,7 @@ impl<RootValue: CtoSafe> PartialEq for CtoPool<RootValue>
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
 	{
-		self.0 == other.0
+		self.pool_pointer() == other.pool_pointer()
 	}
 }
 
