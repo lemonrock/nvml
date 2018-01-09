@@ -297,4 +297,4 @@ impl<T: CtoSafe> CtoReadWriteLockInner<T>
 	}
 }
 
-const NumberOfReadersOrdering: Ordering = Ordering::Relaxed;
+const NumberOfReadersOrdering: Ordering = Relaxed;

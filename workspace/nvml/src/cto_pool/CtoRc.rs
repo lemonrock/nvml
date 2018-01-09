@@ -225,7 +225,7 @@ impl<T: CtoSafe> CtoRc<T>
 		this.persistent_memory().weak_count()
 	}
 	
-	/// Is this object unique, ie there is only one strong reference and no weak references
+	/// Is this object unique, ie there is only one strong reference and no weak references?
 	#[inline(always)]
 	pub fn is_unique(this: &Self) -> bool
 	{
