@@ -47,7 +47,7 @@ impl<RootValue: CtoSafe> Deref for CtoPool<RootValue>
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
 	{
-		let existing_root = self.alloc().0.get_root();
+		let existing_root = self.pool_pointer().get_root();
 		if unlikely(existing_root.is_null())
 		{
 			panic!("No root object");
@@ -64,7 +64,7 @@ impl<RootValue: CtoSafe> DerefMut for CtoPool<RootValue>
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target
 	{
-		let existing_root = self.alloc().0.get_root();
+		let existing_root = self.pool_pointer().get_root();
 		if unlikely(existing_root.is_null())
 		{
 			panic!("No root object");
@@ -157,12 +157,12 @@ impl<RootValue: CtoSafe> CtoPool<RootValue>
 		
 		let cto_pool_alloc_guard_reference = CtoPoolArc::new(pool_pointer);
 		
-		let cto_pool_alloc: CtoPool<RootValue> = CtoPool(CtoPoolAlloc(pool_pointer, cto_pool_alloc_guard_reference), PhantomData);
+		let cto_pool_alloc: CtoPool<RootValue> = CtoPool(CtoPoolAlloc(cto_pool_alloc_guard_reference), PhantomData);
 		
 		let existing_root = pool_pointer.get_root();
 		if unlikely(existing_root.is_null())
 		{
-			let new_root = cto_pool_alloc.alloc().0.aligned_allocate::<RootValue>().map_err(|pmdk_error| CtoPoolOpenError::RootCreation(CtoPoolAllocationError::Allocation(pmdk_error)))?;
+			let new_root = cto_pool_alloc.pool_pointer().aligned_allocate::<RootValue>().map_err(|pmdk_error| CtoPoolOpenError::RootCreation(CtoPoolAllocationError::Allocation(pmdk_error)))?;
 			let root = unsafe { &mut * (new_root as *mut RootValue) };
 			root_value_initializer(root, cto_pool_alloc.allocator()).map_err(|initialization_error| CtoPoolOpenError::RootCreation(CtoPoolAllocationError::Initialization(initialization_error)))?;
 			pool_pointer.set_root(new_root);
@@ -180,7 +180,7 @@ impl<RootValue: CtoSafe> CtoPool<RootValue>
 	#[inline(always)]
 	pub fn allocator(&self) -> &CtoPoolArc
 	{
-		&self.alloc().1
+		&self.alloc().0
 	}
 	
 	/// Returns an object that can be used as a Rust `Alloc` for `RawVec`.
@@ -188,5 +188,11 @@ impl<RootValue: CtoSafe> CtoPool<RootValue>
 	pub fn alloc(&self) -> &CtoPoolAlloc
 	{
 		&self.0
+	}
+	
+	#[inline(always)]
+	fn pool_pointer(&self) -> *mut PMEMctopool
+	{
+		self.alloc().pool_pointer()
 	}
 }

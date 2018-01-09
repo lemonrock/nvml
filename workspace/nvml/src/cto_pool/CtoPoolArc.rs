@@ -58,6 +58,13 @@ impl CtoPoolArc
 		}
 	}
 	
+	/// Pointer to CTO pool from FFI `libpmemcto`.
+	#[inline(always)]
+	pub fn pool_pointer(&self) -> *mut PMEMctopool
+	{
+		unsafe { self.cto_pool_arc_inner.as_ref() }.pool_pointer
+	}
+	
 //	/// Allocate a CtoVec, which is similar to a Rust Vec but uses the persistent memory pool instead of the system allocator.
 //	/// Returns on success a CtoVec.
 //	#[inline(always)]
@@ -118,12 +125,5 @@ impl CtoPoolArc
 	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(&mut P::Value) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<P, CtoPoolAllocationError<InitializationError>>
 	{
 		self.pool_pointer().allocate(initializer, self)
-	}
-	
-	/// Pointer to CTO pool from FFI `libpmemcto`.
-	#[inline(always)]
-	pub fn pool_pointer(&self) -> *mut PMEMctopool
-	{
-		unsafe { self.cto_pool_arc_inner.as_ref() }.pool_pointer
 	}
 }

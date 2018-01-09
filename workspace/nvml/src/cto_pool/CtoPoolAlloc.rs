@@ -4,14 +4,14 @@
 
 /// A Rust `Alloc` allocator to be used with `RawVec` and other collection objects.
 #[derive(Clone)]
-pub struct CtoPoolAlloc(*mut PMEMctopool, CtoPoolArc);
+pub struct CtoPoolAlloc(CtoPoolArc);
 
 impl PartialEq for CtoPoolAlloc
 {
 	#[inline(always)]
 	fn eq(&self, other: &Self) -> bool
 	{
-		self.0 == other.0
+		self.pool_pointer() == other.pool_pointer()
 	}
 }
 
@@ -24,7 +24,7 @@ impl Debug for CtoPoolAlloc
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
 	{
-		f.write_str(&format!("CtoPoolAlloc({:?})", self.0))
+		f.write_str(&format!("CtoPoolAlloc({:?})", self.pool_pointer()))
 	}
 }
 
@@ -41,19 +41,19 @@ unsafe impl Alloc for CtoPoolAlloc
 	#[inline(always)]
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>
 	{
-		self.0.alloc_trait_allocate(&layout)
+		self.pool_pointer().alloc_trait_allocate(&layout)
 	}
 	
 	#[inline(always)]
 	unsafe fn dealloc(&mut self, ptr: *mut u8, _layout: Layout)
 	{
-		self.0.alloc_trait_free(ptr)
+		self.pool_pointer().alloc_trait_free(ptr)
 	}
 	
 	#[inline(always)]
 	unsafe fn realloc(&mut self, old_pointer: *mut u8, old_layout: Layout, new_layout: Layout) -> Result<*mut u8, AllocErr>
 	{
-		self.0.alloc_trait_reallocate(old_pointer, &old_layout, &new_layout)
+		self.pool_pointer().alloc_trait_reallocate(old_pointer, &old_layout, &new_layout)
 	}
 	
 	/// Almost useless as the usable size is a property of an allocated size.
@@ -74,13 +74,13 @@ unsafe impl Alloc for CtoPoolAlloc
 	#[inline(always)]
 	unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr>
 	{
-		self.0.alloc_trait_allocate(&layout).map(|allocation_pointer| Excess(allocation_pointer, self.0.usable_size(allocation_pointer as *mut c_void)))
+		self.pool_pointer().alloc_trait_allocate(&layout).map(|allocation_pointer| Excess(allocation_pointer, self.pool_pointer().usable_size(allocation_pointer as *mut c_void)))
 	}
 	
 	#[inline(always)]
 	unsafe fn realloc_excess(&mut self, old_pointer: *mut u8, old_layout: Layout, new_layout: Layout) -> Result<Excess, AllocErr>
 	{
-		self.0.alloc_trait_reallocate(old_pointer, &old_layout, &new_layout).map(|allocation_pointer| Excess(allocation_pointer, self.0.usable_size(allocation_pointer as *mut c_void)))
+		self.pool_pointer().alloc_trait_reallocate(old_pointer, &old_layout, &new_layout).map(|allocation_pointer| Excess(allocation_pointer, self.pool_pointer().usable_size(allocation_pointer as *mut c_void)))
 	}
 	
 	/// Useless. Use realloc.
@@ -101,14 +101,14 @@ unsafe impl Alloc for CtoPoolAlloc
 	fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr>
 		where Self: Sized
 	{
-		unsafe { self.0.alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut T)) }
+		unsafe { self.pool_pointer().alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut T)) }
 	}
 	
 	#[inline(always)]
 	unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>)
 		where Self: Sized
 	{
-		self.0.alloc_trait_free(ptr.as_ptr() as *mut u8);
+		self.pool_pointer().alloc_trait_free(ptr.as_ptr() as *mut u8);
 	}
 	
 	#[inline(always)]
@@ -117,7 +117,7 @@ unsafe impl Alloc for CtoPoolAlloc
 	{
 		match Layout::array::<UniqueT>(number_of_items)
 		{
-			Some(ref layout) => self.0.alloc_trait_allocate(layout).map(|allocation_pointer| unsafe { Unique::new_unchecked(allocation_pointer as *mut UniqueT) }),
+			Some(ref layout) => self.pool_pointer().alloc_trait_allocate(layout).map(|allocation_pointer| unsafe { Unique::new_unchecked(allocation_pointer as *mut UniqueT) }),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for alloc_array")),
 		}
@@ -129,7 +129,7 @@ unsafe impl Alloc for CtoPoolAlloc
 	{
 		match (Layout::array::<T>(old_number_of_items), Layout::array::<T>(new_number_of_items))
 		{
-			(Some(ref old_layout), Some(ref new_layout)) => self.0.alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut T)),
+			(Some(ref old_layout), Some(ref new_layout)) => self.pool_pointer().alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut T)),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for realloc_array")),
 		}
@@ -141,9 +141,24 @@ unsafe impl Alloc for CtoPoolAlloc
 	{
 		match Layout::array::<T>(number_of_items)
 		{
-			Some(_) => Ok(self.0.alloc_trait_free(pointer_to_free.as_ptr() as *mut _)),
+			Some(_) => Ok(self.pool_pointer().alloc_trait_free(pointer_to_free.as_ptr() as *mut _)),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for dealloc_array")),
 		}
+	}
+}
+
+impl CtoPoolAlloc
+{
+	#[inline(always)]
+	fn allocator(&self) -> &CtoPoolArc
+	{
+		&self.0
+	}
+	
+	#[inline(always)]
+	fn pool_pointer(&self) -> *mut PMEMctopool
+	{
+		self.allocator().pool_pointer()
 	}
 }
