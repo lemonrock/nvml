@@ -165,7 +165,6 @@ impl<Value: CtoSafe> WeakCtoArc<Value>
 							CtoArc
 							{
 								persistent_memory_pointer,
-								phantom: PhantomData,
 							}
 						),
 						

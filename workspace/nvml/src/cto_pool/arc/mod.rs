@@ -5,7 +5,6 @@
 use super::*;
 use ::std::isize;
 use ::std::usize;
-use ::std::marker::PhantomData;
 use ::std::process::abort;
 use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::fence;

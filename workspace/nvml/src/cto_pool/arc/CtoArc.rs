@@ -8,7 +8,7 @@
 pub struct CtoArc<Value: CtoSafe>
 {
 	persistent_memory_pointer: Shared<CtoArcInner<Value>>,
-	phantom: PhantomData<Value>,
+	//phantom: PhantomData<Value>,
 }
 
 unsafe impl<Value: CtoSafe + Sync + Send> Send for CtoArc<Value>
@@ -199,7 +199,6 @@ impl<Value: CtoSafe> Clone for CtoArc<Value>
 		Self
 		{
 			persistent_memory_pointer: self.persistent_memory_pointer,
-			phantom: PhantomData
 		}
 	}
 }
@@ -225,7 +224,6 @@ impl<Value: CtoSafe> CtoArc<Value>
 		{
 			// FIXME
 			persistent_memory_pointer: Shared::from(Box::into_unique(x)),
-			phantom: PhantomData
 		}
 	}
 	
