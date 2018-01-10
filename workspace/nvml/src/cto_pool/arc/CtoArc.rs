@@ -8,7 +8,40 @@
 pub struct CtoArc<Value: CtoSafe>
 {
 	persistent_memory_pointer: Shared<CtoArcInner<Value>>,
-	//phantom: PhantomData<Value>,
+}
+
+impl<Value: CtoSafe> PersistentMemoryWrapper for CtoArc<Value>
+{
+	type PersistentMemory = CtoArcInner<Value>;
+	
+	type Value = Value;
+	
+	#[inline(always)]
+	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value, &CtoPoolArc) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
+	{
+		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		
+		{
+			persistent_memory_pointer.as_mut().created(cto_pool_arc, initializer)?;
+		}
+		
+		Ok
+		(
+			Self
+			{
+				persistent_memory_pointer,
+			}
+		)
+	}
+}
+
+impl<Value: CtoSafe> CtoSafe for CtoArc<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.persistent_memory_mut().cto_pool_opened(cto_pool_arc)
+	}
 }
 
 unsafe impl<Value: CtoSafe + Sync + Send> Send for CtoArc<Value>
@@ -49,10 +82,7 @@ impl<Value: CtoSafe> Drop for CtoArc<Value>
 		// [2]: (https://github.com/rust-lang/rust/pull/41714)
 		fence(Acquire);
 		
-		unsafe
-		{
-			self.drop_slow();
-		}
+		self.drop_slow();
 	}
 }
 
@@ -205,28 +235,6 @@ impl<Value: CtoSafe> Clone for CtoArc<Value>
 
 impl<Value: CtoSafe> CtoArc<Value>
 {
-	/// Constructs a new `CtoArc<Value>`.
-	#[inline(always)]
-	pub fn new(value: Value) -> Self
-	{
-		// FIXME
-		
-		let x: Box<_> = Box::new(CtoArcInner
-		{
-			strong: AtomicUsize::new(1),
-			// Start the weak pointer count as 1 which is the weak pointer that's held by all the strong pointers.
-			// Useful because decrementing uses `fetch_sub()`, which returns the previous count.
-			weak: AtomicUsize::new(CtoArcInner::<Value>::WeakCountJustBeforeLock),
-			value,
-		});
-		
-		Self
-		{
-			// FIXME
-			persistent_memory_pointer: Shared::from(Box::into_unique(x)),
-		}
-	}
-	
 	/// Creates a new [`WeakCtoArc`][weak] pointer to this value.
 	///
 	/// [weak]: struct.WeakCtoArc.html
@@ -347,18 +355,20 @@ impl<Value: CtoSafe> CtoArc<Value>
 	
 	// Non-inlined part of `drop`.
 	#[inline(never)]
-	unsafe fn drop_slow(&mut self)
+	fn drop_slow(&mut self)
 	{
 		let ptr = self.persistent_memory_pointer();
 		
 		// Destroy the value at this time, even though we may not free the allocation itself (there may still be weak pointers lying around).
-		drop_in_place(self.persistent_memory_mut().deref_mut());
+		unsafe { drop_in_place(self.persistent_memory_mut().deref_mut()) };
 		
-		if self.persistent_memory().decrement_weak_reference_count() == 1
+		if self.persistent_memory().decrement_weak_reference_count() == CtoArcInner::<Value>::WeakCountJustBeforeLock
 		{
-			// FIXME
 			fence(Acquire);
-			::std::heap::Heap.dealloc(ptr as *mut u8, Layout::for_value(&*ptr))
+			
+			let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
+			
+			pool_pointer.free(ptr);
 		}
 	}
 	

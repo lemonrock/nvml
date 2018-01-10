@@ -2,13 +2,11 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-struct CtoArcInner<Value: CtoSafe>
+pub(crate) struct CtoArcInner<Value: CtoSafe>
 {
-	strong: AtomicUsize,
-	
-	// the value WeakCounterLockSentinel acts as a sentinel for temporarily "locking" the ability to upgrade weak pointers or downgrade strong ones; this is used to avoid races in `make_mut` and `get_mut`.
-	weak: AtomicUsize,
-	
+	strong_counter: AtomicUsize,
+	weak_counter: AtomicUsize,
+	cto_pool_arc: CtoPoolArc,
 	value: Value,
 }
 
@@ -42,6 +40,35 @@ impl<Value: CtoSafe> DerefMut for CtoArcInner<Value>
 
 impl<Value: CtoSafe> CtoArcInner<Value>
 {
+	#[inline(always)]
+	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		cto_pool_arc.replace(&mut self.cto_pool_arc);
+	}
+	
+	#[inline(always)]
+	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	{
+		let old = replace(&mut self.strong_counter, AtomicUsize::new(1));
+		forget(old);
+		
+		// Start the weak pointer count as 1 which is the weak pointer that's held by all the strong pointers.
+		let old = replace(&mut self.weak_counter, AtomicUsize::new(CtoArcInner::<Value>::WeakCountJustBeforeLock));
+		forget(old);
+		
+		self.common_initialization(cto_pool_arc);
+		
+		initializer(&mut self.value, cto_pool_arc)
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.common_initialization(cto_pool_arc);
+		
+		self.value.cto_pool_opened(cto_pool_arc)
+	}
+	
 	// A soft limit on the amount of references that may be made to a `CtoArc`.
 	// Going above this limit will abort your program (although not necessarily) at _exactly_ `MaximumNumberOfReferences + 1` references.
 	// `MaximumNumberOfReferences` is less than `WeakCounterLockSentinel` to allow `WeakCounterLockSentinel` to be used as a lock sentinel.
@@ -80,77 +107,77 @@ impl<Value: CtoSafe> CtoArcInner<Value>
 	#[inline(always)]
 	fn increment_weak_reference_count(&self) -> usize
 	{
-		self.weak.fetch_add(1, Relaxed)
+		self.weak_counter.fetch_add(1, Relaxed)
 	}
 	
 	// Returns previous reference count
 	#[inline(always)]
 	fn decrement_weak_reference_count(&self) -> usize
 	{
-		self.weak.fetch_sub(1, Relaxed)
+		self.weak_counter.fetch_sub(1, Relaxed)
 	}
 	
 	#[inline(always)]
 	fn weak_count_relaxed(&self) -> usize
 	{
-		self.weak.load(Relaxed)
+		self.weak_counter.load(Relaxed)
 	}
 	
 	//noinspection SpellCheckingInspection
 	#[inline(always)]
 	fn weak_count_seqcst(&self) -> usize
 	{
-		self.weak.load(SeqCst)
+		self.weak_counter.load(SeqCst)
 	}
 	
 	#[inline(always)]
 	fn strong_count_relaxed(&self) -> usize
 	{
-		self.strong.load(Relaxed)
+		self.strong_counter.load(Relaxed)
 	}
 	
 	//noinspection SpellCheckingInspection
 	#[inline(always)]
 	fn strong_count_seqcst(&self) -> usize
 	{
-		self.strong.load(SeqCst)
+		self.strong_counter.load(SeqCst)
 	}
 	
 	#[inline(always)]
 	fn increment_weak_count_cas_acquire_relaxed(&self, current_reference_count: usize) -> Result<usize, usize>
 	{
-		self.weak.compare_exchange_weak(current_reference_count, current_reference_count + 1, Acquire, Relaxed)
+		self.weak_counter.compare_exchange_weak(current_reference_count, current_reference_count + 1, Acquire, Relaxed)
 	}
 	
 	#[inline(always)]
 	fn try_to_lock_weak_count(&self) -> bool
 	{
-		self.weak.compare_exchange(Self::WeakCountJustBeforeLock, Self::WeakCounterLockSentinel, Acquire, Relaxed).is_ok()
+		self.weak_counter.compare_exchange(Self::WeakCountJustBeforeLock, Self::WeakCounterLockSentinel, Acquire, Relaxed).is_ok()
 	}
 	
 	#[inline(always)]
 	fn unlock_weak_count(&self)
 	{
-		self.weak.store(Self::WeakCountJustBeforeLock, Release);
+		self.weak_counter.store(Self::WeakCountJustBeforeLock, Release);
 	}
 	
 	#[inline(always)]
 	fn increment_strong_count_cas_relaxed_relaxed(&self, current_reference_count: usize) -> Result<usize, usize>
 	{
-		self.strong.compare_exchange_weak(current_reference_count, current_reference_count + 1, Relaxed, Relaxed)
+		self.strong_counter.compare_exchange_weak(current_reference_count, current_reference_count + 1, Relaxed, Relaxed)
 	}
 	
 	// Returns previous reference count
 	#[inline(always)]
 	fn increment_strong_reference_count(&self) -> usize
 	{
-		self.strong.fetch_add(1, Relaxed)
+		self.strong_counter.fetch_add(1, Relaxed)
 	}
 	
 	// Returns previous reference count
 	#[inline(always)]
 	fn decrement_strong_reference_count(&self) -> usize
 	{
-		self.strong.fetch_sub(1, Release)
+		self.strong_counter.fetch_sub(1, Release)
 	}
 }

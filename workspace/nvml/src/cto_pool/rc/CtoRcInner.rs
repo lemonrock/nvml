@@ -36,17 +36,17 @@ impl<Value: CtoSafe> CtoRcInner<Value>
 	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
 		cto_pool_arc.replace(&mut self.cto_pool_arc);
-		
-		let old = replace(&mut self.strong_counter, CtoRcCounter::default());
-		forget(old);
-		
-		let old = replace(&mut self.weak_counter, CtoRcCounter::default());
-		forget(old);
 	}
 	
 	#[inline(always)]
 	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
+		let old = replace(&mut self.strong_counter, CtoRcCounter::default());
+		forget(old);
+		
+		let old = replace(&mut self.weak_counter, CtoRcCounter::default());
+		forget(old);
+		
 		self.common_initialization(cto_pool_arc);
 		
 		initializer(&mut self.value, cto_pool_arc)

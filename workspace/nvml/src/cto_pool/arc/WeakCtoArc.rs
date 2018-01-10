@@ -90,11 +90,9 @@ impl<Value: CtoSafe> Drop for WeakCtoArc<Value>
 			{
 				fence(Acquire);
 				
-				unsafe
-				{
-					// FIXME
-					::std::heap::Heap.dealloc(ptr as *mut u8, Layout::for_value(&*ptr))
-				}
+				let pool_pointer = cto_arc_inner.cto_pool_arc.pool_pointer();
+				
+				pool_pointer.free(ptr);
 			}
 		}
 	}
