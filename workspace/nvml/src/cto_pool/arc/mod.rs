@@ -5,6 +5,8 @@
 use super::*;
 use ::std::isize;
 use ::std::usize;
+use ::std::marker::PhantomData;
+use ::std::mem::transmute;
 use ::std::process::abort;
 use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::fence;
@@ -15,6 +17,7 @@ use ::std::sync::atomic::Ordering::SeqCst;
 
 
 include!("CtoArc.rs");
+include!("CtoArcCell.rs");
 include!("CtoArcInner.rs");
 include!("WeakCtoArc.rs");
 
