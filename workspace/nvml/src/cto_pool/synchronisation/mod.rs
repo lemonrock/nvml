@@ -57,8 +57,6 @@ include!("debug_assert_pthread_result_ok.rs");
 include!("debug_assert_pthread_result_ok_dragonfly.rs");
 
 
-//include!("CtoArc.rs");
-//include!("CtoArcInner.rs");
 include!("CtoConditionVariable.rs");
 include!("CtoConditionVariableInner.rs");
 include!("CtoMutexLock.rs");

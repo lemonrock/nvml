@@ -52,6 +52,9 @@ use ::std::path::Path;
 use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::Ordering::SeqCst;
 
+/// An Arc like that in regular Rust's stdlib.
+pub mod arc;
+
 /// A Box like that in regular Rust's stdlib.
 pub mod boxed;
 
