@@ -70,7 +70,7 @@ impl<'a, I: Iterator> Drop for CtoVecSplice<'a, I>
 			}
 			
 			// There may be more elements. Use the lower bound as an estimate.
-			// FIXME: Is the upper bound a better guess? Or something else?
+			// Is the upper bound a better guess? Or something else?
 			let (lower_bound, _upper_bound) = self.replace_with.size_hint();
 			if lower_bound > 0
 			{

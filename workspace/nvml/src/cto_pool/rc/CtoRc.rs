@@ -47,22 +47,32 @@ impl<Value: CtoSafe> Drop for CtoRc<Value>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		let should_be_dropped_because_there_are_no_strong_references =
+		let has_no_more_strong_references =
 		{
-			let cto_rc_inner = self.persistent_memory_mut();
+			let cto_rc_inner = self.persistent_memory();
+			
 			cto_rc_inner.strong_count_decrement();
+			
 			cto_rc_inner.strong_count() == 0
 		};
 		
-		if should_be_dropped_because_there_are_no_strong_references
+		if has_no_more_strong_references
 		{
-			let pool_pointer = self.persistent_memory().cto_pool_arc.pool_pointer();
+			let ptr = self.persistent_memory_pointer();
 			
-			let persistent_memory_pointer = self.persistent_memory_pointer.as_ptr();
+			// Destroy the value at this time, even though we may not free the allocation itself (there may still be weak pointers lying around).
+			unsafe { drop_in_place(self.persistent_memory_mut().deref_mut()) };
 			
-			unsafe { drop_in_place(persistent_memory_pointer) }
+			let cto_rc_inner = self.persistent_memory();
 			
-			pool_pointer.free(persistent_memory_pointer);
+			cto_rc_inner.weak_count_decrement();
+			
+			if cto_rc_inner.weak_count() == 0
+			{
+				let pool_pointer = cto_rc_inner.cto_pool_arc.pool_pointer();
+				
+				pool_pointer.free(ptr);
+			}
 		}
 	}
 }
@@ -222,7 +232,11 @@ impl<Value: CtoSafe> CtoRc<Value>
 	pub fn downgrade(this: &Self) -> WeakCtoRc<Value>
 	{
 		this.persistent_memory().weak_count_increment();
-		WeakCtoRc(Some(this.persistent_memory_pointer))
+		
+		WeakCtoRc
+		{
+			persistent_memory_pointer: Some(this.persistent_memory_pointer),
+		}
 	}
 	
 	/// How many strong references are there (will always be at least one)?
@@ -284,5 +298,11 @@ impl<Value: CtoSafe> CtoRc<Value>
 	fn persistent_memory_mut(&mut self) -> &mut CtoRcInner<Value>
 	{
 		unsafe { self.persistent_memory_pointer.as_mut() }
+	}
+	
+	#[inline(always)]
+	fn persistent_memory_pointer(&self) -> *mut CtoRcInner<Value>
+	{
+		self.persistent_memory_pointer.as_ptr()
 	}
 }

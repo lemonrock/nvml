@@ -211,6 +211,7 @@ impl<Value: CtoSafe> CtoArc<Value>
 	pub fn new(value: Value) -> Self
 	{
 		// FIXME
+		
 		let x: Box<_> = Box::new(CtoArcInner
 		{
 			strong: AtomicUsize::new(1),
@@ -352,7 +353,7 @@ impl<Value: CtoSafe> CtoArc<Value>
 	{
 		let ptr = self.persistent_memory_pointer();
 		
-		// Destroy the data at this time, even though we may not free the allocation itself (there may still be weak pointers lying around).
+		// Destroy the value at this time, even though we may not free the allocation itself (there may still be weak pointers lying around).
 		drop_in_place(self.persistent_memory_mut().deref_mut());
 		
 		if self.persistent_memory().decrement_weak_reference_count() == 1

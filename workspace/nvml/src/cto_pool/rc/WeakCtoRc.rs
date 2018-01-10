@@ -3,16 +3,28 @@
 
 
 /// Very similar to Rust's Rc Weak.
-pub struct WeakCtoRc<Value: CtoSafe>(Option<Shared<CtoRcInner<Value>>>);
+pub struct WeakCtoRc<Value: CtoSafe>
+{
+	persistent_memory_pointer: Option<Shared<CtoRcInner<Value> > >,
+}
 
 impl<Value: CtoSafe> Drop for WeakCtoRc<Value>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		if let Some(shared_cto_rc_inner) = self.0
+		if let Some(persistent_memory_pointer) = self.persistent_memory_pointer
 		{
-			(unsafe { shared_cto_rc_inner.as_ref() }).weak_count_decrement();
+			let cto_rc_inner = unsafe { persistent_memory_pointer.as_ref() };
+			
+			cto_rc_inner.weak_count_decrement();
+			
+			if cto_rc_inner.strong_count() == 0 && cto_rc_inner.weak_count() == 0
+			{
+				let pool_pointer = cto_rc_inner.cto_pool_arc.pool_pointer();
+				
+				pool_pointer.free(persistent_memory_pointer.as_ptr());
+			}
 		}
 	}
 }
@@ -22,12 +34,15 @@ impl<Value: CtoSafe> Clone for WeakCtoRc<Value>
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		if let Some(shared_cto_rc_inner) = self.0
+		if let Some(shared_cto_rc_inner) = self.persistent_memory_pointer
 		{
 			(unsafe { shared_cto_rc_inner.as_ref() }).weak_count_increment();
 		}
 		
-		WeakCtoRc(self.0)
+		WeakCtoRc
+		{
+			persistent_memory_pointer: self.persistent_memory_pointer
+		}
 	}
 }
 
@@ -55,7 +70,10 @@ impl<Value: CtoSafe> WeakCtoRc<Value>
 	#[inline(always)]
 	pub fn new() -> Self
 	{
-		WeakCtoRc(None)
+		WeakCtoRc
+		{
+			persistent_memory_pointer: None,
+		}
 	}
 	
 	/// Upgrades a weak reference to a strong one.
@@ -63,13 +81,13 @@ impl<Value: CtoSafe> WeakCtoRc<Value>
 	#[inline(always)]
 	pub fn upgrade(&self) -> Option<CtoRc<Value>>
 	{
-		self.0.map(|shared_cto_rc_inner|
+		self.persistent_memory_pointer.map(|persistent_memory_pointer|
 		{
-			let cto_rc_inner = unsafe { shared_cto_rc_inner.as_ref() };
+			let cto_rc_inner = unsafe { persistent_memory_pointer.as_ref() };
 			cto_rc_inner.strong_count_increment();
 			CtoRc
 			{
-				persistent_memory_pointer: shared_cto_rc_inner,
+				persistent_memory_pointer,
 			}
 		})
 	}
@@ -79,7 +97,7 @@ impl<Value: CtoSafe> WeakCtoRc<Value>
 	#[inline(always)]
 	pub fn strong_count(&self) -> Option<usize>
 	{
-		self.0.map(|shared_cto_rc_inner| unsafe { shared_cto_rc_inner.as_ref() }.strong_count())
+		self.persistent_memory_pointer.map(|persistent_memory_pointer| unsafe { persistent_memory_pointer.as_ref() }.strong_count())
 	}
 	
 	/// How many weak references are there?
@@ -88,6 +106,6 @@ impl<Value: CtoSafe> WeakCtoRc<Value>
 	#[inline(always)]
 	pub fn weak_count(&self) -> Option<usize>
 	{
-		self.0.map(|shared_cto_rc_inner| unsafe { shared_cto_rc_inner.as_ref() }.weak_count())
+		self.persistent_memory_pointer.map(|persistent_memory_pointer| unsafe { persistent_memory_pointer.as_ref() }.weak_count())
 	}
 }
