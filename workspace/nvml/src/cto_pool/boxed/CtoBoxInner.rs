@@ -61,6 +61,6 @@ impl<Value: CtoSafe> CtoBoxInner<Value>
 	fn from_raw_value_pointer(raw_value_pointer: *mut Value) -> *mut Self
 	{
 		// Works because Value is the first field and we use #[repr(C)]
-		raw_value_pointer as *mut CtoBoxInner<Value>
+		raw_value_pointer as *mut Self
 	}
 }

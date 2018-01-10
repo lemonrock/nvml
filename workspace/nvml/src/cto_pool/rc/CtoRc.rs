@@ -283,9 +283,28 @@ impl<Value: CtoSafe> CtoRc<Value>
 	
 	/// A pointer to use with C. Use wisely; dropping this object may cause the pointer to go out of scope.
 	#[inline(always)]
-	pub fn as_ptr(this: Self) -> *const Value
+	pub fn as_ptr(this: &Self) -> *const Value
 	{
 		this.deref() as *const Value
+	}
+	
+	/// Gets a raw pointer to Value, suitable for use with FFI.
+	/// Must be eventually passed to `from_raw()`, or a very serious (possibly irrecoverable even with reboots) memory leak will occur.
+	#[inline(always)]
+	pub fn into_raw(mut this: Self) -> *mut Value
+	{
+		this.persistent_memory_mut().into_raw_value_pointer()
+	}
+	
+	/// Gets a CtoRc from a raw pointer to Value, typically passed back from FFI.
+	/// Must be a pointer originally created using `into_raw()`.
+	#[inline(always)]
+	pub unsafe fn from_raw(raw_value_pointer: *mut Value) -> Self
+	{
+		Self
+		{
+			persistent_memory_pointer: Shared::new_unchecked(CtoRcInner::from_raw_value_pointer(raw_value_pointer)),
+		}
 	}
 	
 	#[inline(always)]

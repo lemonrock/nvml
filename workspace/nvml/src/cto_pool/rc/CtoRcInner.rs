@@ -2,12 +2,13 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+#[repr(C)]
 pub(crate) struct CtoRcInner<Value: CtoSafe>
 {
+	value: Value,
 	strong_counter: CtoRcCounter,
 	weak_counter: CtoRcCounter,
 	cto_pool_arc: CtoPoolArc,
-	value: Value,
 }
 
 impl<Value: CtoSafe> Deref for CtoRcInner<Value>
@@ -56,6 +57,19 @@ impl<Value: CtoSafe> CtoRcInner<Value>
 		self.common_initialization(cto_pool_arc);
 		
 		self.value.cto_pool_opened(cto_pool_arc)
+	}
+	
+	#[inline(always)]
+	fn into_raw_value_pointer(&mut self) -> *mut Value
+	{
+		&mut self.value
+	}
+	
+	#[inline(always)]
+	fn from_raw_value_pointer(raw_value_pointer: *mut Value) -> *mut Self
+	{
+		// Works because Value is the first field and we use #[repr(C)]
+		raw_value_pointer as *mut Self
 	}
 	
 	#[inline(always)]
