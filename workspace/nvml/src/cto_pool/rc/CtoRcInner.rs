@@ -2,9 +2,11 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+// #[repr(C)] is required otherwise `from_raw_value_pointer()` will be very broken indeed.
 #[repr(C)]
 pub(crate) struct CtoRcInner<Value: CtoSafe>
 {
+	// Field order matters. `value: Value` must be first otherwise `from_raw_value_pointer()` will be very broken indeed.
 	value: Value,
 	strong_counter: CtoRcCounter,
 	weak_counter: CtoRcCounter,
@@ -62,7 +64,7 @@ impl<Value: CtoSafe> CtoRcInner<Value>
 	#[inline(always)]
 	fn into_raw_value_pointer(&mut self) -> *mut Value
 	{
-		&mut self.value
+		self.deref_mut()
 	}
 	
 	#[inline(always)]
