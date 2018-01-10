@@ -13,8 +13,8 @@ impl CtoSafe for CtoConditionVariable
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
 	{
-		let invalid = replace(&mut self.inner, CtoConditionVariableInner::new());
-		forget(invalid);
+		let old = replace(&mut self.inner, CtoConditionVariableInner::new());
+		forget(old);
 	}
 }
 

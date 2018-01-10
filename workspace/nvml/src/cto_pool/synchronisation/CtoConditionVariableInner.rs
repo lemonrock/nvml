@@ -32,10 +32,6 @@ impl Drop for CtoConditionVariableInner
 	}
 }
 
-impl CtoSafe for CtoConditionVariableInner
-{
-}
-
 unsafe impl Send for CtoConditionVariableInner
 {
 }

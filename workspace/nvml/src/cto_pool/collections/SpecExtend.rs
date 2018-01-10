@@ -2,17 +2,17 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-trait SpecExtend<T: CtoSafe, I>
+trait SpecExtend<T, I>
 {
-	fn spec_extend(&mut self, iter: I);
+	fn spec_extend(&mut self, iterator: I);
 }
 
 impl<T: CtoSafe, I: Iterator<Item=T>> SpecExtend<T, I> for CtoVec<T>
 {
 	#[inline(always)]
-	default fn spec_extend(&mut self, iter: I)
+	default fn spec_extend(&mut self, iterator: I)
 	{
-		self.extend_desugared(iter)
+		self.extend_desugared(iterator)
 	}
 }
 
@@ -21,15 +21,16 @@ impl<T: CtoSafe, I: TrustedLen<Item=T>> SpecExtend<T, I> for CtoVec<T>
 	#[inline(always)]
 	default fn spec_extend(&mut self, iterator: I)
 	{
-		// This is the case for a TrustedLen iterator.
 		let (low, high) = iterator.size_hint();
 		if let Some(high_value) = high
 		{
 			debug_assert_eq!(low, high_value, "TrustedLen iterator's size hint is not exact: {:?}", (low, high));
 		}
+		
 		if let Some(additional) = high
 		{
 			self.reserve(additional);
+			
 			unsafe
 			{
 				let mut ptr = self.as_mut_ptr().offset(self.len() as isize);
@@ -51,29 +52,18 @@ impl<T: CtoSafe, I: TrustedLen<Item=T>> SpecExtend<T, I> for CtoVec<T>
 	}
 }
 
-impl<T: CtoSafe> SpecExtend<T, CtoVecIntoIter<T>> for CtoVec<T>
-{
-	#[inline(always)]
-	fn spec_extend(&mut self, mut iterator: CtoVecIntoIter<T>)
-	{
-		unsafe
-		{
-			self.append_elements(iterator.as_slice() as _);
-		}
-		iterator.ptr = iterator.end;
-	}
-}
-
 impl<'a, T: 'a + CtoSafe + Clone, I: Iterator<Item=&'a T>> SpecExtend<&'a T, I> for CtoVec<T>
 {
 	#[inline(always)]
-	default fn spec_extend(&mut self, iterator: I) {
+	default fn spec_extend(&mut self, iterator: I)
+	{
 		self.spec_extend(iterator.cloned())
 	}
 }
 
 impl<'a, T: 'a + CtoSafe + Copy> SpecExtend<&'a T, slice::Iter<'a, T>> for CtoVec<T>
 {
+	#[inline(always)]
 	fn spec_extend(&mut self, iterator: slice::Iter<'a, T>)
 	{
 		let slice = iterator.as_slice();
@@ -84,5 +74,18 @@ impl<'a, T: 'a + CtoSafe + Copy> SpecExtend<&'a T, slice::Iter<'a, T>> for CtoVe
 			self.set_len(len + slice.len());
 			self.get_unchecked_mut(len..).copy_from_slice(slice);
 		}
+	}
+}
+
+impl<T: CtoSafe> SpecExtend<T, CtoVecIntoIter<T>> for CtoVec<T>
+{
+	#[inline(always)]
+	fn spec_extend(&mut self, mut iterator: CtoVecIntoIter<T>)
+	{
+		unsafe
+		{
+			self.append_elements(iterator.as_slice() as _);
+		}
+		iterator.ptr = iterator.end;
 	}
 }

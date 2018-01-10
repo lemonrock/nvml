@@ -7,67 +7,131 @@ pub trait CtoSafe: Sized
 {
 	#[doc(hidden)]
 	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc);
+}
+
+impl<'a, Value: CtoSafe> CtoSafe for &'a mut Value
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let x = &mut **self;
+		x.cto_pool_opened(cto_pool_arc)
+	}
+}
+
+impl CtoSafe for u8
+{
+	#[inline(always)]
 	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
 	{
 	}
 }
 
-impl<'a, Value: CtoSafe> CtoSafe for &'a Value
-{
-}
-
-impl CtoSafe for u8
-{
-}
-
 impl CtoSafe for i8
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for u16
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for i16
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for u32
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for i32
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for u64
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for i64
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for usize
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for isize
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for f32
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for f64
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl CtoSafe for bool
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
 }
 
 impl<Value: CtoSafe> CtoSafe for Option<Value>
 {
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		if let Some(ref mut value) = *self
+		{
+			value.cto_pool_opened(cto_pool_arc)
+		}
+	}
 }
