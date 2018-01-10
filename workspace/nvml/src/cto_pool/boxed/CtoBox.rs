@@ -299,6 +299,25 @@ impl<Value: CtoSafe> AsMut<Value> for CtoBox<Value>
 
 impl<Value: CtoSafe> CtoBox<Value>
 {
+	/// Gets a raw pointer to Value, suitable for use with FFI.
+	/// Must be eventually passed to `from_raw()`, or a very serious (possibly irrecoverable even with reboots) memory leak will occur.
+	#[inline(always)]
+	pub fn into_raw(mut this: Self) -> *mut Value
+	{
+		this.persistent_memory_mut().into_raw_value_pointer()
+	}
+	
+	/// Gets a CtoBox from a raw pointer to Value, typically passed back from FFI.
+	/// Must be a pointer originally created using `into_raw()`.
+	#[inline(always)]
+	pub unsafe fn from_raw(raw_value_pointer: *mut Value) -> Self
+	{
+		Self
+		{
+			persistent_memory_pointer: Unique::new_unchecked(CtoBoxInner::from_raw_value_pointer(raw_value_pointer)),
+		}
+	}
+	
 	#[inline(always)]
 	fn persistent_memory(&self) -> &CtoBoxInner<Value>
 	{

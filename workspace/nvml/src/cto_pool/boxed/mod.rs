@@ -3,7 +3,12 @@
 
 
 use super::*;
+use ::std::ptr::null_mut;
+use ::std::sync::atomic;
+use ::std::sync::atomic::AtomicPtr;
+use ::std::sync::atomic::Ordering::Relaxed;
 
 
+include!("CtoAtomicOption.rs");
 include!("CtoBox.rs");
 include!("CtoBoxInner.rs");

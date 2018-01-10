@@ -30,7 +30,7 @@ impl<Value: CtoSafe> CtoArcCell<Value>
 		CtoArcCell
 		(
 			AtomicUsize::new(Self::cto_arc_to_usize(cto_arc)),
-			PhantomData
+			PhantomData,
 		)
 	}
 	
