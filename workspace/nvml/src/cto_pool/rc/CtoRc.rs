@@ -20,7 +20,7 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
 		
 		{
-			persistent_memory_pointer.as_mut().created(cto_pool_arc, initializer)?;
+			persistent_memory_pointer.as_mut().allocated(cto_pool_arc, initializer)?;
 		}
 		
 		Ok

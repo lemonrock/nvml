@@ -11,7 +11,6 @@ pub struct CtoVec<T: CtoSafe>
 
 impl<T: CtoSafe> Drop for CtoVec<T>
 {
-	// TODO: Review Drop
 	#[inline(always)]
 	fn drop(&mut self)
 	{

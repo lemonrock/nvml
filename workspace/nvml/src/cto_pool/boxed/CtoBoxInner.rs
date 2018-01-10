@@ -31,11 +31,11 @@ impl<Value: CtoSafe> CtoBoxInner<Value>
 	#[inline(always)]
 	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
 	}
 	
 	#[inline(always)]
-	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	fn allocated<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
 		self.common_initialization(cto_pool_arc);
 		

@@ -3,7 +3,7 @@
 
 
 /// A guard to ensure the CTO pool is not dropped too soon.
-/// Similar to a Rust Arc, but altered to address the fact that it will end-up in persistent storage.
+/// Similar to a Rust Arc, but altered to address the fact that it will end-up in persistent storage and does not have weak references.
 /// Also provides allocation methods.
 pub struct CtoPoolArc
 {
@@ -42,10 +42,9 @@ impl CtoPoolArc
 {
 	/// Used in conjunction with `CtoSafe.cto_pool_opened()` to make sure that old references to persistent objects are discarded.
 	#[inline(always)]
-	pub fn replace(&self, location: &mut Self)
+	pub fn write(&self, location: &mut Self)
 	{
-		let old = replace(location, self.clone());
-		forget(old);
+		unsafe { write(location, self.clone()) };
 	}
 	
 	/// Pointer to CTO pool from FFI `libpmemcto`.

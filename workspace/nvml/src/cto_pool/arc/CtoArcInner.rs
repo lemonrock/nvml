@@ -43,18 +43,16 @@ impl<Value: CtoSafe> CtoArcInner<Value>
 	#[inline(always)]
 	fn common_initialization(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
 	}
 	
 	#[inline(always)]
-	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	fn allocated<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
-		let old = replace(&mut self.strong_counter, AtomicUsize::new(1));
-		forget(old);
+		unsafe { write(&mut self.strong_counter, AtomicUsize::new(1)) };
 		
 		// Start the weak pointer count as 1 which is the weak pointer that's held by all the strong pointers.
-		let old = replace(&mut self.weak_counter, AtomicUsize::new(CtoArcInner::<Value>::WeakCountJustBeforeLock));
-		forget(old);
+		unsafe { write(&mut self.weak_counter, AtomicUsize::new(Self::WeakCountJustBeforeLock)) };
 		
 		self.common_initialization(cto_pool_arc);
 		

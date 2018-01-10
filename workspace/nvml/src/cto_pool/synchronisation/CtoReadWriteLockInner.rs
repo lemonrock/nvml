@@ -78,21 +78,18 @@ impl<Value: CtoSafe> CtoReadWriteLockInner<Value>
 	{
 		#[cfg(unix)]
 		{
-			let old = replace(&mut self.rwlock, UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER));
-			forget(old);
+			unsafe { write(&mut self.rwlock, UnsafeCell::new(PTHREAD_RWLOCK_INITIALIZER)) }
 		}
 		
-		let old = replace(&mut self.write_lock, UnsafeCell::new(false));
-		forget(old);
+		unsafe { write(&mut self.write_lock, UnsafeCell::new(false)) };
 		
-		let old = replace(&mut self.number_of_read_locks, AtomicUsize::new(0));
-		forget(old);
+		unsafe { write(&mut self.number_of_read_locks, AtomicUsize::new(0)) };
 		
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
 	}
 	
 	#[inline(always)]
-	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	fn allocated<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
 		self.common_initialization(cto_pool_arc);
 		

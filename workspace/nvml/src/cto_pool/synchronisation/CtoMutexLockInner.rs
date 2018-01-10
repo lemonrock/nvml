@@ -77,8 +77,7 @@ impl<Value: CtoSafe> CtoMutexLockInner<Value>
 		#[cfg(unix)]
 		unsafe
 		{
-			let old = replace(&mut self.mutex, UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER));
-			forget(old);
+			write(&mut self.mutex, UnsafeCell::new(PTHREAD_MUTEX_INITIALIZER));
 			
 			// self.mutex must be at a stable memory address.
 			//
@@ -114,11 +113,11 @@ impl<Value: CtoSafe> CtoMutexLockInner<Value>
 			debug_assert_pthread_result_ok!(result);
 		}
 		
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
 	}
 	
 	#[inline(always)]
-	fn created<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
+	fn allocated<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&mut self, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<(), InitializationError>
 	{
 		self.common_initialization(cto_pool_arc);
 		

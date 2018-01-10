@@ -45,11 +45,8 @@ use ::std::mem::uninitialized;
 use ::std::panic::UnwindSafe;
 use ::std::panic::RefUnwindSafe;
 use ::std::sync::atomic::AtomicUsize;
-//use ::std::sync::atomic::fence;
 use ::std::sync::atomic::Ordering;
 use ::std::sync::atomic::Ordering::Relaxed;
-//use ::std::sync::atomic::Ordering::Release;
-//use ::std::sync::atomic::Ordering::SeqCst;
 use ::std::time::Duration;
 
 

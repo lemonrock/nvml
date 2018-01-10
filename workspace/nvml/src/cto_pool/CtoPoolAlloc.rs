@@ -11,7 +11,7 @@ impl CtoSafe for CtoPoolAlloc
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		cto_pool_arc.replace(&mut self.0);
+		cto_pool_arc.write(&mut self.0);
 	}
 }
 
