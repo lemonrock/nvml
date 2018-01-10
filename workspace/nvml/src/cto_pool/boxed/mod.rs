@@ -3,6 +3,7 @@
 
 
 use super::*;
+use ::std::mem::forget;
 use ::std::ptr::null_mut;
 use ::std::sync::atomic;
 use ::std::sync::atomic::AtomicPtr;

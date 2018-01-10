@@ -9,6 +9,21 @@ pub struct CtoAtomicOption<Value: CtoSafe>
 	inner_cto_box: AtomicPtr<Value>,
 }
 
+impl<Value: CtoSafe> CtoSafe for CtoAtomicOption<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let value = self.inner_cto_box.load(SeqCst);
+		if !value.is_null()
+		{
+			let mut cto_box = unsafe { CtoBox::from_raw(value) };
+			cto_box.cto_pool_opened(cto_pool_arc);
+			forget(cto_box);
+		}
+	}
+}
+
 unsafe impl<Value: CtoSafe + Send> Send for CtoAtomicOption<Value>
 {
 }
@@ -23,7 +38,6 @@ impl<Value: CtoSafe> Drop for CtoAtomicOption<Value>
 	fn drop(&mut self)
 	{
 		let value = self.inner_cto_box.load(Relaxed);
-		
 		if !value.is_null()
 		{
 			drop(unsafe { CtoBox::from_raw(value) });

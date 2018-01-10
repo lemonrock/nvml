@@ -22,6 +22,7 @@ bitflags = "1.0"
 errno = "0.2"
 libc = "0.2"
 nvml-sys = { path = "../nvml-sys", version = "0.0.6" }
+parking_lot = "0.5.3"
 quick-error = "1.2.0"
 rust-extra = "0.0.10"
 serde = "1.0"

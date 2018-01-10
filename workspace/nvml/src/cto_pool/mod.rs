@@ -61,6 +61,9 @@ pub mod boxed;
 /// Collections
 pub mod collections;
 
+/// Extensions and wrapper to make use of parking lot's excellent synchronisation primitives.
+pub mod parking_lot_ext;
+
 /// A Rc like that in regular Rust's stdlib.
 pub mod rc;
 

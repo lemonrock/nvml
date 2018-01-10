@@ -19,6 +19,24 @@ impl<Value: CtoSafe> Drop for CtoArcCell<Value>
 	}
 }
 
+impl<Value: CtoSafe> CtoSafe for CtoArcCell<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		match self.0.load(SeqCst)
+		{
+			Self::InvalidValueForCtoArc => panic!("InvalidValueForCtoArc was persisted"),
+			bytes =>
+			{
+				let mut cto_arc = Self::usize_to_cto_arc(bytes);
+				cto_arc.cto_pool_opened(cto_pool_arc);
+				forget(cto_arc);
+			}
+		}
+	}
+}
+
 impl<Value: CtoSafe> CtoArcCell<Value>
 {
 	const InvalidValueForCtoArc: usize = 0;
