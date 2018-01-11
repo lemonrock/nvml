@@ -233,8 +233,46 @@ impl<Value: CtoSafe> Clone for CtoArc<Value>
 	}
 }
 
+impl<Value: CtoSafe + Clone> CtoArc<Value>
+{
+	/// Produces a clone of the data
+	#[inline(always)]
+	pub(crate) fn deep_clone(&self) -> Self
+	{
+		let cto_arc_inner = self.persistent_memory();
+		let cto_pool_arc = &cto_arc_inner.cto_pool_arc;
+		let persistent_memory_pointer = cto_pool_arc.pool_pointer().aligned_allocate().unwrap();
+		
+		unsafe
+		{
+			Self::initialize_persistent_memory::<(), _>(persistent_memory_pointer, cto_pool_arc, |value_mut_pointer, _cto_pool_arc|
+			{
+				write(value_mut_pointer, cto_arc_inner.value.clone());
+				Ok(())
+			}).unwrap()
+		}
+	}
+}
+
 impl<Value: CtoSafe> CtoArc<Value>
 {
+	/// Produces a clone of the data, customized.
+	#[inline(always)]
+	pub(crate) fn deep_clone_customized<CallbackError, DeepCloneCallback: FnOnce(*mut Value, &CtoPoolArc, &Value) -> Result<(), CallbackError>>(&self, deep_clone_initializer: DeepCloneCallback) -> Result<Self, CallbackError>
+	{
+		let cto_arc_inner = self.persistent_memory();
+		let cto_pool_arc = &cto_arc_inner.cto_pool_arc;
+		let persistent_memory_pointer = cto_pool_arc.pool_pointer().aligned_allocate().unwrap();
+		
+		unsafe
+		{
+			Self::initialize_persistent_memory(persistent_memory_pointer, cto_pool_arc, |value_mut_pointer, cto_pool_arc|
+			{
+				deep_clone_initializer(value_mut_pointer, cto_pool_arc, &cto_arc_inner.value)
+			})
+		}
+	}
+	
 	/// A pointer to use with C. Use wisely; dropping this object may cause the pointer to go out of scope.
 	#[inline(always)]
 	pub fn as_ptr(this: &Self) -> *const Value

@@ -3,8 +3,10 @@
 
 
 use super::*;
+use super::arc::CtoArcCell;
 use ::parking_lot::Condvar;
 use ::parking_lot::Mutex;
+use ::parking_lot::MutexGuard;
 use ::parking_lot::ReentrantMutex;
 use ::parking_lot::RwLock;
 use ::std::cell::Cell;
@@ -19,3 +21,5 @@ include!("CtoParkingLotConditionVariable.rs");
 include!("CtoParkingLotMutexLock.rs");
 include!("CtoParkingLotReadWriteLock.rs");
 include!("CtoParkingLotReentrantMutexLock.rs");
+include!("ReadCopyUpdateLock.rs");
+include!("ReadCopyUpdateLockWriteGuard.rs");

@@ -52,7 +52,7 @@ impl<Value: CtoSafe> CtoArcCell<Value>
 		)
 	}
 	
-	/// Returns a copy of the value stored by the `CtoArcCell`.
+	/// Returns a cheap copy of the value stored by the `CtoArcCell`.
 	#[inline(always)]
 	pub fn get(&self) -> CtoArc<Value>
 	{
