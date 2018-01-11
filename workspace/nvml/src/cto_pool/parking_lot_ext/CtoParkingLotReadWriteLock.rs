@@ -2,13 +2,13 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Wrapper type. Refer to `parking_lot::Mutex`.
-/// Access the mutex by using `mutex()` or `deref()`.
-pub struct CtoParkingLotMutexLock<Value: CtoSafe>(Mutex<Value>, CtoPoolArc);
+/// Wrapper type. Refer to `parking_lot::RwLock`.
+/// Access the mutex by using `deref()` or `deref_mut()`.
+pub struct CtoParkingLotReadWriteLock<Value: CtoSafe>(RwLock<Value>, CtoPoolArc);
 
-impl<Value: CtoSafe> Deref for CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> Deref for CtoParkingLotReadWriteLock<Value>
 {
-	type Target = Mutex<Value>;
+	type Target = RwLock<Value>;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -17,7 +17,7 @@ impl<Value: CtoSafe> Deref for CtoParkingLotMutexLock<Value>
 	}
 }
 
-impl<Value: CtoSafe> CtoSafe for CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> CtoSafe for CtoParkingLotReadWriteLock<Value>
 {
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
@@ -34,7 +34,7 @@ impl<Value: CtoSafe> CtoSafe for CtoParkingLotMutexLock<Value>
 	}
 }
 
-impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> CtoParkingLotReadWriteLock<Value>
 {
 	/// Create a new instance on the Stack (or inside a persistent memory object).
 	#[inline(always)]
@@ -61,7 +61,7 @@ impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
 			{
 				unsafe { drop_in_place(&mut this.1) };
 				
-				// No need to drop anything in Mutex
+				// No need to drop anything in RwLock
 				
 				forget(this);
 				
@@ -70,48 +70,48 @@ impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
 		}
 	}
 	
-	/// Access the mutex.
+	/// Access the rwlock.
 	#[inline(always)]
-	pub fn mutex(&self) -> &Mutex<Value>
+	pub fn rwlock(&self) -> &RwLock<Value>
 	{
 		self.deref()
 	}
 	
 	#[inline(always)]
-	fn hack_to_mutate_mutex_private_fields(&mut self) -> &mut Mutex_HorribleHackToAccessPrivateFields<Value>
+	fn hack_to_mutate_mutex_private_fields(&mut self) -> &mut RwLock_HorribleHackToAccessPrivateFields<Value>
 	{
-		unsafe { &mut * (&mut self.0 as *mut Mutex<Value> as *mut Mutex_HorribleHackToAccessPrivateFields<Value>) }
+		unsafe { &mut * (&mut self.0 as *mut RwLock<Value> as *mut RwLock_HorribleHackToAccessPrivateFields<Value>) }
 	}
 	
 	#[inline(always)]
-	fn initialize_raw_mutex(mutate_mutex_private_fields: &mut Mutex_HorribleHackToAccessPrivateFields<Value>)
+	fn initialize_raw_mutex(mutate_mutex_private_fields: &mut RwLock_HorribleHackToAccessPrivateFields<Value>)
 	{
-		unsafe { write(&mut mutate_mutex_private_fields.raw, RawMutex_HorribleHackToAccessPrivateFields::new()) };
+		unsafe { write(&mut mutate_mutex_private_fields.raw, RawRwLock_HorribleHackToAccessPrivateFields::new()) };
 	}
 }
 
 #[allow(non_camel_case_types)]
-struct Mutex_HorribleHackToAccessPrivateFields<T: ?Sized>
+struct RwLock_HorribleHackToAccessPrivateFields<T: ?Sized>
 {
-	raw: RawMutex_HorribleHackToAccessPrivateFields,
+	raw: RawRwLock_HorribleHackToAccessPrivateFields,
 	data: UnsafeCell<T>,
 }
 
 #[allow(non_camel_case_types)]
-struct RawMutex_HorribleHackToAccessPrivateFields
+struct RawRwLock_HorribleHackToAccessPrivateFields
 {
 	#[allow(dead_code)]
-	state: AtomicU8,
+	state: AtomicUsize,
 }
 
-impl RawMutex_HorribleHackToAccessPrivateFields
+impl RawRwLock_HorribleHackToAccessPrivateFields
 {
 	#[inline(always)]
 	fn new() -> Self
 	{
 		Self
 		{
-			state: AtomicU8::new(0),
+			state: AtomicUsize::new(0),
 		}
 	}
 }

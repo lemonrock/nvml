@@ -4,10 +4,13 @@
 
 use super::*;
 use ::parking_lot::Mutex;
+use ::parking_lot::RwLock;
 use ::std::cell::UnsafeCell;
 use ::std::mem::forget;
 use ::std::mem::uninitialized;
 use ::std::sync::atomic::AtomicU8;
+use ::std::sync::atomic::AtomicUsize;
 
 
 include!("CtoParkingLotMutexLock.rs");
+include!("CtoParkingLotReadWriteLock.rs");

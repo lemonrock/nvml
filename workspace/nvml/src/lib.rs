@@ -48,7 +48,7 @@ extern crate alloc;
 extern crate errno;
 extern crate libc;
 extern crate nvml_sys;
-extern crate parking_lot;
+pub extern crate parking_lot;
 #[macro_use] extern crate quick_error;
 extern crate rust_extra;
 extern crate serde;
