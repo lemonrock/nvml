@@ -96,6 +96,16 @@ impl CtoPoolArc
 		self.allocate::<CtoReadWriteLock<Value>, InitializationError, Initializer>(initializer)
 	}
 
+	/// Allocate a CtoParkingLotMutexLock, which is a CtoSafe wrapper around a parking lot mutex which uses the persistent memory pool instead of the system allocator.
+	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
+	/// Returns on success a CtoParkingLotMutexLock.
+	/// Do not use Heap-allocated objects for fields of T, ie only use CtoSafe fields.
+	#[inline(always)]
+	pub fn allocate_parking_lot_mutex_lock<Value: CtoSafe, InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(&self, initializer: Initializer) -> Result<CtoParkingLotMutexLock<Value>, InitializationError>
+	{
+		CtoParkingLotMutexLock::new(initializer, self)
+	}
+
 	/// Allocate a CtoMutexLock, which is similar to a Rust Mutex but uses the persistent memory pool instead of the system allocator.
 	/// The reference passed to initializer() will be ALMOST uninitialized memory; it won't even be zeroed or have default values.
 	/// Returns on success a CtoMutexLock.

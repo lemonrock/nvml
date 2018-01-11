@@ -13,6 +13,7 @@
 #![feature(exact_size_is_empty)]
 #![feature(fused)]
 #![feature(inclusive_range)]
+#![feature(integer_atomics)]
 #![feature(offset_to)]
 #![feature(optin_builtin_traits)]
 #![feature(pattern)]
@@ -31,6 +32,14 @@
 //!
 //! This crate provides mid-level Rust wrappers for working with persistent memory by wrapping the PMDK, Persistent Memory Development Kit (formerly NVML, and also known as pmem).
 //! For more documentation, check [pmem.io](https://pmem.io).
+//!
+//! Persistent memory is available as 'pools', each of which can be used in a particular way.
+//!
+//! The most interesting modules are `cto_pool`, `block_pool`  and `log_pool`.
+//! The module `persistent_memory` provides low-level support.
+//! The module `object_pool` can not work well with Rust.
+//!
+//! The struct `Configuration` can be used to create and manage several different pools of persistent memory.
 //!
 
 
@@ -51,15 +60,17 @@ extern crate syscall_alt;
 include!("use_path.rs");
 
 
-/// Block pools are similar to persistent arrays
+/// Block pools are similar to persistent arrays.
 pub mod block_pool;
 
-/// CTO pools are equivalent to multiple `malloc`-like (Heap) allocators
+/// CTO pools are equivalent to multiple `malloc`-like (Heap) allocators.
+/// Get started with the struct `CtoPool`.
+/// Use the method `CtoPool::new()` to create a new instance, and `self.allocator()` to access an allocator that can construct CTO equivalents of Box, Rc, Arc, Mutex, etc.
 pub mod cto_pool;
 
 mod errors;
 
-/// Log pools are similar to database or filesystem write logs
+/// Log pools are similar to database or filesystem write logs.
 pub mod log_pool;
 
 /// Object pools allow the storage of arbitrary objects, arranged in graphs or lists, with support for Mutexes, Read-Write locks, condition variables and transactions.

@@ -4,6 +4,7 @@
 
 use self::arc::CtoArc;
 use self::collections::CtoVec;
+use self::parking_lot_ext::CtoParkingLotMutexLock;
 use self::string::CtoString;
 use self::synchronisation::CtoMutexLock;
 use self::synchronisation::CtoReadWriteLock;
