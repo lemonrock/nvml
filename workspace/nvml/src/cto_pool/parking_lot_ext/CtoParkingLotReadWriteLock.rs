@@ -23,11 +23,11 @@ impl<Value: CtoSafe> CtoSafe for CtoParkingLotReadWriteLock<Value>
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
 		{
-			let mutate_mutex_private_fields = self.hack_to_mutate_mutex_private_fields();
+			let mutate_private_fields = self.hack_to_mutate_private_fields();
 			
-			Self::initialize_raw_mutex(mutate_mutex_private_fields);
+			Self::initialize_raw(mutate_private_fields);
 			
-			unsafe { &mut *mutate_mutex_private_fields.data.get() }.cto_pool_opened(cto_pool_arc);
+			unsafe { &mut *mutate_private_fields.data.get() }.cto_pool_opened(cto_pool_arc);
 		}
 		
 		cto_pool_arc.write(&mut self.1);
@@ -47,10 +47,10 @@ impl<Value: CtoSafe> CtoParkingLotReadWriteLock<Value>
 		}
 		
 		{
-			Self::initialize_raw_mutex(this.hack_to_mutate_mutex_private_fields());
+			Self::initialize_raw(this.hack_to_mutate_private_fields());
 		}
 		
-		let result = initializer(this.hack_to_mutate_mutex_private_fields().data.get(), cto_pool_arc);
+		let result = initializer(this.hack_to_mutate_private_fields().data.get(), cto_pool_arc);
 		
 		// Note: Since an UnsafeCell is just a NewType wrapper (ie, has one field, called, `value`, of type `Value`), the pointer is always valid and UnsafeCell is validly initialized.
 		// However, if a panic occurs and `drop()` is invoked, all bets are off.
@@ -78,15 +78,15 @@ impl<Value: CtoSafe> CtoParkingLotReadWriteLock<Value>
 	}
 	
 	#[inline(always)]
-	fn hack_to_mutate_mutex_private_fields(&mut self) -> &mut RwLock_HorribleHackToAccessPrivateFields<Value>
+	fn hack_to_mutate_private_fields(&mut self) -> &mut RwLock_HorribleHackToAccessPrivateFields<Value>
 	{
 		unsafe { &mut * (&mut self.0 as *mut RwLock<Value> as *mut RwLock_HorribleHackToAccessPrivateFields<Value>) }
 	}
 	
 	#[inline(always)]
-	fn initialize_raw_mutex(mutate_mutex_private_fields: &mut RwLock_HorribleHackToAccessPrivateFields<Value>)
+	fn initialize_raw(mutate_private_fields: &mut RwLock_HorribleHackToAccessPrivateFields<Value>)
 	{
-		unsafe { write(&mut mutate_mutex_private_fields.raw, RawRwLock_HorribleHackToAccessPrivateFields::new()) };
+		unsafe { write(&mut mutate_private_fields.raw, RawRwLock_HorribleHackToAccessPrivateFields::new()) };
 	}
 }
 

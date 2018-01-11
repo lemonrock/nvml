@@ -4,11 +4,11 @@
 
 /// Wrapper type. Refer to `parking_lot::Mutex`.
 /// Access the mutex by using `mutex()` or `deref()`.
-pub struct CtoParkingLotMutexLock<Value: CtoSafe>(Mutex<Value>, CtoPoolArc);
+pub struct CtoParkingLotReentrantMutexLock<Value: CtoSafe>(ReentrantMutex<Value>, CtoPoolArc);
 
-impl<Value: CtoSafe> Deref for CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> Deref for CtoParkingLotReentrantMutexLock<Value>
 {
-	type Target = Mutex<Value>;
+	type Target = ReentrantMutex<Value>;
 	
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target
@@ -17,7 +17,7 @@ impl<Value: CtoSafe> Deref for CtoParkingLotMutexLock<Value>
 	}
 }
 
-impl<Value: CtoSafe> CtoSafe for CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> CtoSafe for CtoParkingLotReentrantMutexLock<Value>
 {
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
@@ -34,7 +34,7 @@ impl<Value: CtoSafe> CtoSafe for CtoParkingLotMutexLock<Value>
 	}
 }
 
-impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
+impl<Value: CtoSafe> CtoParkingLotReentrantMutexLock<Value>
 {
 	/// Create a new instance on the Stack (or inside a persistent memory object).
 	#[inline(always)]
@@ -61,7 +61,7 @@ impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
 			{
 				unsafe { drop_in_place(&mut this.1) };
 				
-				// No need to drop anything in Mutex
+				// No need to drop anything in RawMutex
 				
 				forget(this);
 				
@@ -70,48 +70,56 @@ impl<Value: CtoSafe> CtoParkingLotMutexLock<Value>
 		}
 	}
 	
-	/// Access the mutex.
+	/// Access the reentrant mutex.
 	#[inline(always)]
-	pub fn mutex(&self) -> &Mutex<Value>
+	pub fn reentrant_mutex(&self) -> &ReentrantMutex<Value>
 	{
 		self.deref()
 	}
 	
 	#[inline(always)]
-	fn hack_to_mutate_private_fields(&mut self) -> &mut Mutex_HorribleHackToAccessPrivateFields<Value>
+	fn hack_to_mutate_private_fields(&mut self) -> &mut ReentrantMutex_HorribleHackToAccessPrivateFields<Value>
 	{
-		unsafe { &mut * (&mut self.0 as *mut Mutex<Value> as *mut Mutex_HorribleHackToAccessPrivateFields<Value>) }
+		unsafe { &mut * (&mut self.0 as *mut ReentrantMutex<Value> as *mut ReentrantMutex_HorribleHackToAccessPrivateFields<Value>) }
 	}
 	
 	#[inline(always)]
-	fn initialize_raw(mutate_private_fields: &mut Mutex_HorribleHackToAccessPrivateFields<Value>)
+	fn initialize_raw(mutate_mutex_private_fields: &mut ReentrantMutex_HorribleHackToAccessPrivateFields<Value>)
 	{
-		unsafe { write(&mut mutate_private_fields.raw, RawMutex_HorribleHackToAccessPrivateFields::new()) };
+		unsafe { write(&mut mutate_mutex_private_fields.raw, RawReentrantMutex_HorribleHackToAccessPrivateFields::new()) };
 	}
 }
 
 #[allow(non_camel_case_types)]
-struct Mutex_HorribleHackToAccessPrivateFields<T: ?Sized>
+struct ReentrantMutex_HorribleHackToAccessPrivateFields<T: ?Sized>
 {
-	raw: RawMutex_HorribleHackToAccessPrivateFields,
+	raw: RawReentrantMutex_HorribleHackToAccessPrivateFields,
 	data: UnsafeCell<T>,
 }
 
 #[allow(non_camel_case_types)]
-struct RawMutex_HorribleHackToAccessPrivateFields
+struct RawReentrantMutex_HorribleHackToAccessPrivateFields
 {
 	#[allow(dead_code)]
-	state: AtomicU8,
+	owner: AtomicUsize,
+	
+	#[allow(dead_code)]
+	lock_count: Cell<usize>,
+	
+	#[allow(dead_code)]
+	mutex: RawMutex_HorribleHackToAccessPrivateFields,
 }
 
-impl RawMutex_HorribleHackToAccessPrivateFields
+impl RawReentrantMutex_HorribleHackToAccessPrivateFields
 {
 	#[inline(always)]
 	fn new() -> Self
 	{
 		Self
 		{
-			state: AtomicU8::new(0),
+			owner: AtomicUsize::new(0),
+			lock_count: Cell::new(0),
+			mutex: RawMutex_HorribleHackToAccessPrivateFields::new(),
 		}
 	}
 }
