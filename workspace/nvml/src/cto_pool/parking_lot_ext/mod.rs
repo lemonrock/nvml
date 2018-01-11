@@ -3,6 +3,7 @@
 
 
 use super::*;
+use ::parking_lot::Condvar;
 use ::parking_lot::Mutex;
 use ::parking_lot::ReentrantMutex;
 use ::parking_lot::RwLock;
@@ -14,6 +15,7 @@ use ::std::sync::atomic::AtomicU8;
 use ::std::sync::atomic::AtomicUsize;
 
 
+include!("CtoParkingLotConditionVariable.rs");
 include!("CtoParkingLotMutexLock.rs");
 include!("CtoParkingLotReadWriteLock.rs");
 include!("CtoParkingLotReentrantMutexLock.rs");

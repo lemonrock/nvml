@@ -4,7 +4,7 @@
 
 /// Wrapper type. Refer to `parking_lot::RwLock`.
 /// Access the mutex by using `deref()` or `deref_mut()`.
-pub struct CtoParkingLotReadWriteLock<Value: CtoSafe>(RwLock<Value>, CtoPoolArc);
+pub struct CtoParkingLotReadWriteLock<Value: CtoSafe>(RwLock<Value>);
 
 impl<Value: CtoSafe> Deref for CtoParkingLotReadWriteLock<Value>
 {
@@ -29,8 +29,6 @@ impl<Value: CtoSafe> CtoSafe for CtoParkingLotReadWriteLock<Value>
 			
 			unsafe { &mut *mutate_private_fields.data.get() }.cto_pool_opened(cto_pool_arc);
 		}
-		
-		cto_pool_arc.write(&mut self.1);
 	}
 }
 
@@ -41,10 +39,6 @@ impl<Value: CtoSafe> CtoParkingLotReadWriteLock<Value>
 	pub fn new<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<Self, InitializationError>
 	{
 		let mut this: Self = unsafe { uninitialized() };
-		
-		{
-			cto_pool_arc.write(&mut this.1);
-		}
 		
 		{
 			Self::initialize_raw(this.hack_to_mutate_private_fields());
@@ -59,10 +53,6 @@ impl<Value: CtoSafe> CtoParkingLotReadWriteLock<Value>
 			Ok(_) => Ok(this),
 			Err(error) =>
 			{
-				unsafe { drop_in_place(&mut this.1) };
-				
-				// No need to drop anything in RwLock
-				
 				forget(this);
 				
 				Err(error)

@@ -4,7 +4,7 @@
 
 /// Wrapper type. Refer to `parking_lot::Mutex`.
 /// Access the mutex by using `mutex()` or `deref()`.
-pub struct CtoParkingLotReentrantMutexLock<Value: CtoSafe>(ReentrantMutex<Value>, CtoPoolArc);
+pub struct CtoParkingLotReentrantMutexLock<Value: CtoSafe>(ReentrantMutex<Value>);
 
 impl<Value: CtoSafe> Deref for CtoParkingLotReentrantMutexLock<Value>
 {
@@ -29,8 +29,6 @@ impl<Value: CtoSafe> CtoSafe for CtoParkingLotReentrantMutexLock<Value>
 			
 			unsafe { &mut *mutate_private_fields.data.get() }.cto_pool_opened(cto_pool_arc);
 		}
-		
-		cto_pool_arc.write(&mut self.1);
 	}
 }
 
@@ -41,10 +39,6 @@ impl<Value: CtoSafe> CtoParkingLotReentrantMutexLock<Value>
 	pub fn new<InitializationError, Initializer: FnOnce(*mut Value, &CtoPoolArc) -> Result<(), InitializationError>>(initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<Self, InitializationError>
 	{
 		let mut this: Self = unsafe { uninitialized() };
-		
-		{
-			cto_pool_arc.write(&mut this.1);
-		}
 		
 		{
 			Self::initialize_raw(this.hack_to_mutate_private_fields());
@@ -59,10 +53,6 @@ impl<Value: CtoSafe> CtoParkingLotReentrantMutexLock<Value>
 			Ok(_) => Ok(this),
 			Err(error) =>
 			{
-				unsafe { drop_in_place(&mut this.1) };
-				
-				// No need to drop anything in RawMutex
-				
 				forget(this);
 				
 				Err(error)
