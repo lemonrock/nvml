@@ -30,6 +30,9 @@ pub mod file_backed_memory;
 /// Different kinds of persistence and flushing for drop of file-backed persistent memory references.
 pub mod persist_on_drop;
 
+/// Different implementations of persistence.
+pub mod persistence;
+
 
 include!("c_voidExt.rs");
 include!("c_voidMutExt.rs");

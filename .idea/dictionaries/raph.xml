@@ -68,6 +68,7 @@
       <w>poolsize</w>
       <w>prefault</w>
       <w>pthread</w>
+      <w>recurses</w>
       <w>repr</w>
       <w>rpmem</w>
       <w>rwlock</w>
