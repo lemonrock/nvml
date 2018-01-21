@@ -5,7 +5,7 @@
 /// An iterator that moves out of a vector.
 pub struct CtoVecIntoIter<T: CtoSafe>
 {
-	buf: Shared<T>,
+	buf: NonNull<T>,
 	cap: usize,
 	ptr: *const T,
 	end: *const T,

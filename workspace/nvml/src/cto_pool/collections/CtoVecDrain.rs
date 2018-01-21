@@ -14,7 +14,7 @@ pub struct CtoVecDrain<'a, T: 'a + CtoSafe>
 	/// Current remaining range to remove
 	iter: slice::Iter<'a, T>,
 	
-	vec: Shared<CtoVec<T>>,
+	vec: NonNull<CtoVec<T>>,
 }
 
 impl<'a, T: 'a + CtoSafe + Debug> Debug for CtoVecDrain<'a, T>

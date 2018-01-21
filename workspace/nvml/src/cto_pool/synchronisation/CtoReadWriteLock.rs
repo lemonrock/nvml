@@ -5,7 +5,7 @@
 /// A Mutex, similar to that in Rust, but lacking the concept of Poison.
 pub struct CtoReadWriteLock<Value: CtoSafe>
 {
-	persistent_memory_pointer: Shared<CtoReadWriteLockInner<Value>>,
+	persistent_memory_pointer: NonNull<CtoReadWriteLockInner<Value>>,
 }
 
 impl<Value: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<Value>
@@ -17,7 +17,7 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoReadWriteLock<Value>
 	#[inline(always)]
 	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value, &CtoPoolArc) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		let mut persistent_memory_pointer = NonNull::new_unchecked(persistent_memory_pointer);
 		
 		{
 			persistent_memory_pointer.as_mut().allocated(cto_pool_arc, initializer)?;

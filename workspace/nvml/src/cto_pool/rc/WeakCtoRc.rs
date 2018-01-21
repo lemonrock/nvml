@@ -5,7 +5,7 @@
 /// Very similar to Rust's Rc Weak.
 pub struct WeakCtoRc<Value: CtoSafe>
 {
-	persistent_memory_pointer: Option<Shared<CtoRcInner<Value> > >,
+	persistent_memory_pointer: Option<NonNull<CtoRcInner<Value>>>,
 }
 
 impl<Value: CtoSafe> Drop for WeakCtoRc<Value>

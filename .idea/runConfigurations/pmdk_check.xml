@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="nvml check" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+  <configuration default="false" name="pmdk check" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
     <option name="channel" value="NIGHTLY" />
     <option name="command" value="check" />
     <option name="nocapture" value="false" />

@@ -107,45 +107,45 @@ unsafe impl Alloc for CtoPoolAlloc
 	}
 	
 	#[inline(always)]
-	fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr>
+	fn alloc_one<T>(&mut self) -> Result<NonNull<T>, AllocErr>
 		where Self: Sized
 	{
-		unsafe { self.pool_pointer().alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| Unique::new_unchecked(allocation_pointer as *mut T)) }
+		unsafe { self.pool_pointer().alloc_trait_allocate(&Layout::new::<T>()).map(|allocation_pointer| NonNull::new_unchecked(allocation_pointer as *mut T)) }
 	}
 	
 	#[inline(always)]
-	unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>)
+	unsafe fn dealloc_one<T>(&mut self, ptr: NonNull<T>)
 		where Self: Sized
 	{
 		self.pool_pointer().alloc_trait_free(ptr.as_ptr() as *mut u8);
 	}
 	
 	#[inline(always)]
-	fn alloc_array<UniqueT>(&mut self, number_of_items: usize) -> Result<Unique<UniqueT>, AllocErr>
+	fn alloc_array<T>(&mut self, number_of_items: usize) -> Result<NonNull<T>, AllocErr>
 		where Self: Sized
 	{
-		match Layout::array::<UniqueT>(number_of_items)
+		match Layout::array::<T>(number_of_items)
 		{
-			Some(ref layout) => self.pool_pointer().alloc_trait_allocate(layout).map(|allocation_pointer| unsafe { Unique::new_unchecked(allocation_pointer as *mut UniqueT) }),
+			Some(ref layout) => self.pool_pointer().alloc_trait_allocate(layout).map(|allocation_pointer| unsafe { NonNull::new_unchecked(allocation_pointer as *mut T) }),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for alloc_array")),
 		}
 	}
 	
 	#[inline(always)]
-	unsafe fn realloc_array<T>(&mut self, old_pointer: Unique<T>, old_number_of_items: usize, new_number_of_items: usize) -> Result<Unique<T>, AllocErr>
+	unsafe fn realloc_array<T>(&mut self, old_pointer: NonNull<T>, old_number_of_items: usize, new_number_of_items: usize) -> Result<NonNull<T>, AllocErr>
 		where Self: Sized
 	{
 		match (Layout::array::<T>(old_number_of_items), Layout::array::<T>(new_number_of_items))
 		{
-			(Some(ref old_layout), Some(ref new_layout)) => self.pool_pointer().alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|Unique::new_unchecked(allocation_pointer as *mut T)),
+			(Some(ref old_layout), Some(ref new_layout)) => self.pool_pointer().alloc_trait_reallocate(old_pointer.as_ptr() as *mut _, old_layout, new_layout).map(|allocation_pointer|NonNull::new_unchecked(allocation_pointer as *mut T)),
 			
 			_ => Err(AllocErr::invalid_input("invalid layout for realloc_array")),
 		}
 	}
 	
 	#[inline(always)]
-	unsafe fn dealloc_array<T>(&mut self, pointer_to_free: Unique<T>, number_of_items: usize) -> Result<(), AllocErr>
+	unsafe fn dealloc_array<T>(&mut self, pointer_to_free: NonNull<T>, number_of_items: usize) -> Result<(), AllocErr>
 		where Self: Sized
 	{
 		match Layout::array::<T>(number_of_items)

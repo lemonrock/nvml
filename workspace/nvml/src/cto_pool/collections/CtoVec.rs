@@ -884,7 +884,7 @@ impl<T: CtoSafe> CtoVec<T>
 				tail_start: end,
 				tail_len: len - end,
 				iter: range_slice.iter(),
-				vec: Shared::from(self),
+				vec: NonNull::from(self),
 			}
 		}
 	}
@@ -1019,7 +1019,7 @@ impl<T: CtoSafe> IntoIterator for CtoVec<T>
 
 			CtoVecIntoIter
 			{
-				buf: Shared::new_unchecked(begin),
+				buf: NonNull::new_unchecked(begin),
 				cap,
 				ptr: begin,
 				end,

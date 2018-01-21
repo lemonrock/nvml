@@ -7,6 +7,8 @@
 #![deny(missing_docs)]
 #![feature(alloc)]
 #![feature(allocator_api)]
+#![feature(asm)]
+#![feature(box_into_raw_non_null)]
 #![feature(collections_range)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]

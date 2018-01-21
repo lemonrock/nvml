@@ -47,9 +47,8 @@ use ::std::ops::DerefMut;
 #[cfg(unix)] use ::std::os::unix::ffi::OsStrExt;
 use ::std::ptr::copy_nonoverlapping;
 use ::std::ptr::drop_in_place;
+use ::std::ptr::NonNull;
 use ::std::ptr::null;
-use ::std::ptr::Shared;
-use ::std::ptr::Unique;
 use ::std::ptr::write;
 use ::std::path::Path;
 use ::std::sync::atomic::AtomicUsize;
@@ -58,8 +57,8 @@ use ::std::sync::atomic::Ordering::SeqCst;
 /// An Arc like that in regular Rust's stdlib.
 pub mod arc;
 
-/// A block_allocator
-pub mod block_allocator;
+///// A block_allocator
+//pub mod block_allocator;
 
 /// A Box like that in regular Rust's stdlib.
 pub mod boxed;
@@ -76,8 +75,13 @@ pub mod rc;
 /// Synchronisation
 pub mod synchronisation;
 
-// /// A String like that in regular Rust's stdlib.
+/// A String like that in regular Rust's stdlib.
 pub mod string;
+
+/// A doubly linked list implementation
+pub mod doubly_linked_list;
+
+
 
 
 include!("Allocator.rs");

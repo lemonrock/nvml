@@ -18,7 +18,7 @@
 /// [`upgrade`]: struct.Weak.html#method.upgrade
 pub struct WeakCtoArc<Value: CtoSafe>
 {
-	persistent_memory_pointer: Option<Shared<CtoArcInner<Value>>>,
+	persistent_memory_pointer: Option<NonNull<CtoArcInner<Value>>>,
 }
 
 unsafe impl<Value: CtoSafe + Sync + Send> Send for WeakCtoArc<Value>

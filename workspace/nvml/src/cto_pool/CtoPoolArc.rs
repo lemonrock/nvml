@@ -7,7 +7,7 @@
 /// Also provides allocation methods.
 pub struct CtoPoolArc
 {
-	cto_pool_arc_inner: Shared<CtoPoolArcInner>,
+	cto_pool_arc_inner: NonNull<CtoPoolArcInner>,
 }
 
 impl Drop for CtoPoolArc
@@ -17,7 +17,7 @@ impl Drop for CtoPoolArc
 	{
 		if unsafe { self.cto_pool_arc_inner.as_mut() }.release()
 		{
-			drop(unsafe { Box::from_unique(Unique::from(self.cto_pool_arc_inner.as_mut())) });
+			drop(unsafe { Box::from_raw(self.cto_pool_arc_inner.as_ptr()) });
 		}
 	}
 }
@@ -192,7 +192,7 @@ impl CtoPoolArc
 		
 		Self
 		{
-			cto_pool_arc_inner: Box::into_unique(cto_pool_alloc_arc).into(),
+			cto_pool_arc_inner: Box::into_raw_non_null(cto_pool_alloc_arc).into(),
 		}
 	}
 }

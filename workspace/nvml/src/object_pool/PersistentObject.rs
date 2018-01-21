@@ -398,7 +398,7 @@ impl<T: Persistable> PersistentObject<T>
 			}
 		}
 		
-		Self::allocate_uninitialized_and_construct_object_internal(object_pool, &mut self.oid, (allocate::<T>), arguments)
+		Self::allocate_uninitialized_and_construct_object_internal(object_pool, &mut self.oid, allocate::<T>, arguments)
 	}
 	
 	/// Allocate and construct a persistent object.
@@ -416,7 +416,7 @@ impl<T: Persistable> PersistentObject<T>
 			result == -1
 		}
 		
-		Self::allocate_uninitialized_and_construct_object_internal(object_pool, &mut self.oid, (allocate::<T>), arguments)
+		Self::allocate_uninitialized_and_construct_object_internal(object_pool, &mut self.oid, allocate::<T>, arguments)
 	}
 	
 	#[inline(always)]

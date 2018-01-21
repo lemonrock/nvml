@@ -7,6 +7,7 @@
       <w>chunksize</w>
       <w>condvar</w>
       <w>dedup</w>
+      <w>dereferenced</w>
       <w>eagain</w>
       <w>ebusy</w>
       <w>ecanceled</w>
@@ -35,6 +36,7 @@
       <w>libpmemcto</w>
       <w>libpmemlog</w>
       <w>libpmemobj</w>
+      <w>linearizability</w>
       <w>longjmp</w>
       <w>longlong</w>
       <w>macos</w>
@@ -56,6 +58,7 @@
       <w>nbyte</w>
       <w>nonoverlapping</w>
       <w>nvml</w>
+      <w>philippas</w>
       <w>pmdk</w>
       <w>pmem</w>
       <w>pmemblk</w>
@@ -73,9 +76,12 @@
       <w>rpmem</w>
       <w>rwlock</w>
       <w>setjmp</w>
+      <w>spinlock</w>
       <w>strdup</w>
       <w>structs</w>
+      <w>sundell</w>
       <w>toid</w>
+      <w>tsigas</w>
       <w>unsafety</w>
       <w>wakeups</w>
       <w>wcsdup</w>

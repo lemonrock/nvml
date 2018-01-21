@@ -20,7 +20,6 @@ use ::std::ptr::copy;
 use ::std::ptr::copy_nonoverlapping;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::read;
-use ::std::ptr::Shared;
 use ::std::ptr::write;
 use ::std::slice;
 use ::std::slice::from_raw_parts;

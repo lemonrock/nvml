@@ -82,7 +82,7 @@ impl<B: Block> BlockAllocator<B>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn receive_solitary_chain_back(&mut self, solitary_chain: *mut Chain<B>)
+	pub(crate) fn receive_solitary_chain_back(&self, solitary_chain: *mut Chain<B>)
 	{
 		let solitary_chain = unsafe { &mut * solitary_chain };
 		
@@ -125,7 +125,7 @@ impl<B: Block> BlockAllocator<B>
 	}
 	
 	#[inline(always)]
-	fn nothing_to_merge_with_so_add_to_free_list(&mut self, solitary_chain: &mut Chain<B>)
+	fn nothing_to_merge_with_so_add_to_free_list(&self, solitary_chain: &mut Chain<B>)
 	{
 		debug_assert!(solitary_chain.memory_for_this_chain_is_available(), "This method should only be called with a chain that is available");
 		
@@ -136,7 +136,7 @@ impl<B: Block> BlockAllocator<B>
 	}
 	
 	#[inline(always)]
-	fn remove_from_free_list_already_taken_subsequent_chain_that_is_being_merged(&mut self, subsequent_chain: &mut Chain<B>)
+	fn remove_from_free_list_already_taken_subsequent_chain_that_is_being_merged(&self, subsequent_chain: &mut Chain<B>)
 	{
 		debug_assert!(solitary_chain.memory_for_this_chain_is_in_use(), "This method should only be called with a chain that is in use");
 		
@@ -148,8 +148,35 @@ impl<B: Block> BlockAllocator<B>
 	
 	/// Allocate
 	// this: &CtoArc could be reduced to a Strong-only Arc, as there will never be weak references.
-	pub fn allocate<'chains>(&mut self, requested_size: usize) -> Chains<'chains, B>
+	pub fn allocate<'chains>(this: &CtoArc<Self>, requested_size: usize) -> Chains<'chains, B>
 	{
+		struct FreeList([SomeChains; MaximumNumberOfBlocksInAChain]);
+		
+		impl FreeList
+		{
+			#[inline(always)]
+			fn entry(&self, number_of_blocks_required: usize)
+			{
+				debug_assert_ne!(number_of_blocks_required, 0, "can not ask for zero blocks");
+				debug_assert!(number_of_blocks_required <= MaximumNumberOfBlocksInAChain, "can not ask for more than MaximumNumberOfBlocksInAChain");
+				
+				let free_list_index = number_of_blocks_required - 1;
+				
+				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
+				let (number_of_chains, always_increasing_sentinel) = self.0[number_of_blocks_required];
+				
+				// Let's say we've locked this entry somehow.
+				if yep_ok
+				{
+					// Get the first chain in the queue of chains.
+					let locked_chain;
+					
+				}
+			}
+		}
+		
+		
+		
 		let required_size = size_of::<ChainMetadata<B>> + requested_size;
 		let remainder = required_size % this.block_size;
 		
@@ -164,18 +191,38 @@ impl<B: Block> BlockAllocator<B>
 		
 		let mut linked_list_of_chains: *mut Chain<B> = null_mut();
 		
+		let free_list = &this.free_list;
 		
+		// TODO: We have to cap number_of_blocks to find to the size of the free_list
 		// TODO: When out of memory this will loop forever!
 		let mut number_of_blocks_remaining_to_find = number_of_blocks_required;
 		while number_of_blocks_remaining_to_find != 0
 		{
 			let free_list_index = number_of_blocks_remaining_to_find - 1;
 			
-			let mut incrementing_free_list_index = free_list_index;
-			while incrementing_free_list_index < self.free_list.len()
+			if number_of_blocks_remaining_to_find > MaximumNumberOfBlocksInAChain
 			{
 				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
-				let (number_of_chains, always_increasing_sentinel) = self.free_list[incrementing_free_list_index];
+				let (number_of_chains, always_increasing_sentinel) = free_list[MaximumNumberOfBlocksInAChain - 1];
+				
+				// Let's say we've locked this entry somehow.
+				if yep_ok
+				{
+				
+				}
+			}
+			else
+			{
+			
+			}
+			
+			
+			
+			let mut incrementing_free_list_index = free_list_index;
+			while incrementing_free_list_index < free_list.len()
+			{
+				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
+				let (number_of_chains, always_increasing_sentinel) = free_list[incrementing_free_list_index];
 				
 				// Let's say we've locked this entry somehow.
 				if yep_ok
@@ -191,7 +238,6 @@ impl<B: Block> BlockAllocator<B>
 						locked_chain.snap_off_back_if_longer_than_required_capacity_and_recycle_into_block_allocator(number_of_blocks_to_retain, self);
 					}
 					
-					let this = &CtoArc<self>;
 					if linked_list_of_chains.is_null()
 					{
 						return Chains::new(this, locked_chain);

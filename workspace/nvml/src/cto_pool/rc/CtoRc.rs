@@ -5,7 +5,7 @@
 /// Similar to a Rust Rc but allocated in a persistent memory CTO Pool.
 pub struct CtoRc<Value: CtoSafe>
 {
-	persistent_memory_pointer: Shared<CtoRcInner<Value>>
+	persistent_memory_pointer: NonNull<CtoRcInner<Value>>
 }
 
 impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
@@ -17,7 +17,7 @@ impl<Value: CtoSafe> PersistentMemoryWrapper for CtoRc<Value>
 	#[inline(always)]
 	unsafe fn initialize_persistent_memory<InitializationError, Initializer: FnOnce(*mut Self::Value, &CtoPoolArc) -> Result<(), InitializationError>>(persistent_memory_pointer: *mut Self::PersistentMemory, cto_pool_arc: &CtoPoolArc, initializer: Initializer) -> Result<Self, InitializationError>
 	{
-		let mut persistent_memory_pointer = Shared::new_unchecked(persistent_memory_pointer);
+		let mut persistent_memory_pointer = NonNull::new_unchecked(persistent_memory_pointer);
 		
 		{
 			persistent_memory_pointer.as_mut().allocated(cto_pool_arc, initializer)?;
@@ -303,7 +303,7 @@ impl<Value: CtoSafe> CtoRc<Value>
 	{
 		Self
 		{
-			persistent_memory_pointer: Shared::new_unchecked(CtoRcInner::from_raw_value_pointer(raw_value_pointer)),
+			persistent_memory_pointer: NonNull::new_unchecked(CtoRcInner::from_raw_value_pointer(raw_value_pointer)),
 		}
 	}
 	
