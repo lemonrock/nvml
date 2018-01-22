@@ -17,7 +17,7 @@ use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
 
 
-include!("BackOff.rs");
+include!("Back_Off.rs");
 include!("IsNotNull.rs");
 
 
@@ -618,12 +618,12 @@ impl<T> Node<T>
 /// Need to also read Sundell, H.: Efficient and Practical Non-Blocking Data Structures. PhD thesis, Department of Computing Science, Chalmers University of Technology (2004).
 /// Which seems to discuss iteration and arbitrary insert / delete.
 #[derive(Debug)]
-pub struct DequeOrDoublyLinkedList<T>
+pub struct DoublyLinkedListAndDeque<T>
 {
 	head_and_tail_dummy_node: Node<T>,
 }
 
-impl<T> Default for DequeOrDoublyLinkedList<T>
+impl<T> Default for DoublyLinkedListAndDeque<T>
 {
 	#[inline(always)]
 	fn default() -> Self
@@ -648,7 +648,26 @@ impl<T> Default for DequeOrDoublyLinkedList<T>
 	}
 }
 
-impl<T> DequeOrDoublyLinkedList<T>
+impl<T> DoublyLinkedListAndDeque<T>
+{
+	// `head()` must be non-null.
+	// `head()` is a dummy node.
+	#[inline(always)]
+	fn head(&self) -> &Node<T>
+	{
+		&self.head_and_tail_dummy_node
+	}
+	
+	// `tail()` must be non-null.
+	// `tail()` is a dummy node.
+	#[inline(always)]
+	fn tail(&self) -> &Node<T>
+	{
+		&self.head_and_tail_dummy_node
+	}
+}
+
+impl<T> DoublyLinkedListAndDeque<T>
 {
 	/// The `PushLeft` operation inserts a new node at the leftmost position in the deque.
 	/// The algorithm first repeatedly tries in the loop L4 to insert the new node (`node`) between the head node (`prev`) and the leftmost node (`next`), by atomically changing the next pointer of the head node.
@@ -769,21 +788,5 @@ impl<T> DequeOrDoublyLinkedList<T>
 		node.RemoveCrossReference();
 		node.REL();
 		value
-	}
-	
-	// `head()` must be non-null.
-	// `head()` is a dummy node.
-	#[inline(always)]
-	fn head(&self) -> &Node<T>
-	{
-		&self.head_and_tail_dummy_node
-	}
-	
-	// `tail()` must be non-null.
-	// `tail()` is a dummy node.
-	#[inline(always)]
-	fn tail(&self) -> &Node<T>
-	{
-		&self.head_and_tail_dummy_node
 	}
 }

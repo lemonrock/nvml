@@ -9,7 +9,7 @@
 /// The duration of the back-off is initialized to some value (eg proportional to the number of threads) at the start of an operation, and for each consecutive entering of the back-off mode during one operation invocation, the duration of the back-off is changed using some scheme, eg increased exponentially.
 #[allow(non_snake_case)]
 #[inline(always)]
-fn BackOff()
+fn Back_Off()
 {
 	// Issues a pause, yielding the thread to allow a spinlock to be fair on hyper-threaded architectures, so that we don't hog the cpu if we are spinning.
 	hint_core_should_pause();

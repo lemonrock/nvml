@@ -3,21 +3,21 @@
 
 
 use ::std::marker::PhantomData;
+use ::std::mem::forget;
+use ::std::ptr::NonNull;
 use ::std::ptr::null;
-use ::std::ptr::write;
 use ::std::sync::atomic::fence;
 use ::std::sync::atomic::AtomicUsize;
-use ::std::sync::atomic::Ordering;
 use ::std::sync::atomic::Ordering::Acquire;
-use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
 
 
-include!("BackOff.rs");
+include!("Back_Off.rs");
 include!("hint_core_should_pause.rs");
 include!("IsNotNull.rs");
+include!("Link.rs");
+include!("LockFreeDoublyLinkedListAndDeque.rs");
+include!("LockFreeDoublyLinkedListAndDequeCursor.rs");
+include!("Node.rs");
 
-
-/// Implementation based on the paper: "Lock-free deques and doubly linked lists", by Håkan Sundell and Philippas Tsigas, 2008
-x
 
