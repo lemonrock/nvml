@@ -43,11 +43,11 @@ impl<T> Default for LockFreeDoublyLinkedListAndDeque<T>
 			dummy_tail_node: Node::head_or_tail_dummy_node(),
 		};
 		
-		this.head().next = Link::new_without_marks(this.tail());
-		this.head().prev = Link::Null;
+		this.dummy_head_node.next = this.tail().without_delete_mark();
+		this.dummy_head_node.prev = TaggedPointerToNode::Null;
 		
-		this.tail().next = Link::Null;
-		this.tail().prev = Link::new_without_marks(this.head());
+		this.dummy_tail_node.next = TaggedPointerToNode::Null;
+		this.dummy_tail_node.prev = this.head().without_delete_mark();
 		
 		fence(Release);
 		
@@ -59,35 +59,35 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 {
 	/// Inserts this value at the head of the list.
 	#[inline(always)]
-	pub fn insert_value_at_head(&self, value: Box<T>)
+	pub fn insert_value_at_head(&self, value: NonNull<T>)
 	{
 		self.PushLeft(value)
 	}
 	
 	/// Inserts this value at the tail of the list.
 	#[inline(always)]
-	pub fn insert_value_at_tail(&self, value: Box<T>)
+	pub fn insert_value_at_tail(&self, value: NonNull<T>)
 	{
 		self.PushRight(value)
 	}
 	
 	/// Removes a value from the head of the list, if any.
 	#[inline(always)]
-	pub fn remove_value_from_head(&self) -> Option<Box<T>>
+	pub fn remove_value_from_head(&self) -> Option<NonNull<T>>
 	{
 		self.PopLeft()
 	}
 	
 	/// Removes a value from the tail of the list, if any.
 	#[inline(always)]
-	pub fn remove_value_from_tail(&self) -> Option<Box<T>>
+	pub fn remove_value_from_tail(&self) -> Option<NonNull<T>>
 	{
 		self.PopRight()
 	}
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PushLeft(&self, value: Box<T>)
+	fn PushLeft(&self, value: NonNull<T>)
 	{
 		// L1
 		let node = Node::CreateNode(value);
@@ -102,13 +102,13 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		loop
 		{
 			// L5
-			node.prev.StoreRef(Link::new_without_marks(prev));
+			node.prev.StoreRef(prev.without_delete_mark());
 			
 			// L6
-			node.next.StoreRef(Link::new_without_marks(next));
+			node.next.StoreRef(next.without_delete_mark());
 			
 			// L7
-			if prev.next.CASRef(Link::new_without_marks(next), Link::new_without_marks(node))
+			if prev.next.CASRef(next.without_delete_mark(), node.without_delete_mark())
 			{
 				break
 			}
@@ -129,7 +129,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PushRight(&self, value: Box<T>)
+	fn PushRight(&self, value: NonNull<T>)
 	{
 		// R1
 		let node = Node::CreateNode(value);
@@ -144,13 +144,13 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		loop
 		{
 			// R5
-			node.prev.StoreRef(Link::new_without_marks(prev));
+			node.prev.StoreRef(prev.without_delete_mark());
 			
 			// R6
-			node.next.StoreRef(Link::new_without_marks(next));
+			node.next.StoreRef(next.without_delete_mark());
 			
 			// R7
-			if prev.next.CASRef(Link::new_without_marks(next), Link::new_without_marks(node))
+			if prev.next.CASRef(next.without_delete_mark(), node.without_delete_mark())
 			{
 				break
 			}
@@ -168,7 +168,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PopLeft(&self) -> Option<Box<T>>
+	fn PopLeft(&self) -> Option<NonNull<T>>
 	{
 		// PL1
 		let mut prev = self.head().DeRefLink();
@@ -176,7 +176,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		// PL2
 		let mut node;
 		let mut next;
-		let mut value = None;
+		let value;
 		loop
 		{
 			// PL3
@@ -202,7 +202,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 				node.prev.SetMark();
 		
 				// PL10
-				prev.next.CASRef(node, Link::new_without_marks(next.p()));
+				prev.next.CASRef(node, next.p().without_delete_mark());
 		
 				// PL11
 				next.p().ReleaseRef2(node);
@@ -212,7 +212,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			}
 			
 			// PL13
-			if node.next.CASRef(next, Link::new_with_delete_mark(next.p()))
+			if node.next.CASRef(next, next.p().with_delete_mark())
 			{
 				// PL14
 				prev = prev.CorrectPrev(next);
@@ -221,7 +221,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 				prev.ReleaseRef();
 		
 				// PL16
-				value = node.value;
+				value = node.move_value();
 		
 				// PL17
 				break
@@ -243,9 +243,9 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PopRight(&self) -> Option<Box<T>>
+	fn PopRight(&self) -> Option<NonNull<T>>
 	{
-		let mut value = None;
+		let value;
 		
 		// PR1
 		let next = self.tail().DeRefLink();
@@ -257,7 +257,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		loop
 		{
 			// PR4
-			if node.next != Link::new_without_marks(next)
+			if node.next != next.without_delete_mark()
 			{
 				// PR5
 				node = node.CorrectPrev(next);
@@ -277,7 +277,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			}
 			
 			// PR11
-			if node.next.CASRef(Link::new_without_marks(next), Link::new_with_delete_mark(next))
+			if node.next.CASRef(next.without_delete_mark(), next.with_delete_mark())
 			{
 				// PR13
 				let prev = node.prev.DeRefLink();
@@ -291,7 +291,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 				// There is no PR16 in the algorithm
 				
 				// PR17
-				value = node.value;
+				value = node.move_value();
 		
 				// PR18
 				break
@@ -310,7 +310,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PushEnd(mut node: &Node<T>, next: &Node<T>)
+	fn PushEnd(mut node: TaggedPointerToNode<T>, next: TaggedPointerToNode<T>)
 	{
 		// P1
 		loop
@@ -319,13 +319,13 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			let link1 = next.prev;
 			
 			// P3
-			if link1.d_is_true() || node.next != Link::new_without_marks(next)
+			if link1.d_is_true() || node.next != next.without_delete_mark()
 			{
 				break
 			}
 			
 			// P4
-			if next.prev.CASRef(link1, Link::new_without_marks(node))
+			if next.prev.CASRef(link1, node.without_delete_mark())
 			{
 				// P5
 				if node.prev.d_is_true()
@@ -348,15 +348,15 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	/// The data structure is given an orientation by denoting the head side as being left and the tail side as being right, and we can consequently use this orientation to relate nodes as being to the left or right of each other.
 	#[inline(always)]
-	fn head(&self) -> &Node<T>
+	fn head(&self) -> TaggedPointerToNode<T>
 	{
-		&self.dummy_head_node
+		TaggedPointerToNode::new(&self.dummy_head_node as *const Node<T> as usize)
 	}
 	
 	/// The data structure is given an orientation by denoting the head side as being left and the tail side as being right, and we can consequently use this orientation to relate nodes as being to the left or right of each other.
 	#[inline(always)]
-	fn tail(&self) -> &Node<T>
+	fn tail(&self) -> TaggedPointerToNode<T>
 	{
-		&self.dummy_tail_node
+		TaggedPointerToNode::new(&self.dummy_tail_node as *const Node<T> as usize)
 	}
 }

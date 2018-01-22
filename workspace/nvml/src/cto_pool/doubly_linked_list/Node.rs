@@ -5,21 +5,12 @@
 #[derive(Debug)]
 struct Node<T>
 {
-	value: Option<Box<T>>,
-	prev: Link<T>,
-	next: Link<T>,
+	value: Option<NonNull<T>>,
+	prev: TaggedPointerToNode<T>,
+	next: TaggedPointerToNode<T>,
 	
 	// Not part of algorithm per-se.
 	reference_count: AtomicUsize,
-}
-
-impl<T> Drop for Node<T>
-{
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		forget(self.value);
-	}
 }
 
 impl<T> PartialEq for Node<T>
@@ -58,14 +49,25 @@ impl<T> Node<T>
 	}
 	
 	#[inline(always)]
-	fn empty_node(initial_reference_count: usize) -> Self
+	pub(crate) fn move_value(&mut self) -> Option<NonNull<T>>
 	{
-		
+		replace(&mut self.value, None)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn clone_value(&mut self) -> Option<NonNull<T>>
+	{
+		replace(&mut self.value, None)
+	}
+	
+	#[inline(always)]
+	const fn empty_node(initial_reference_count: usize) -> Self
+	{
 		Self
 		{
 			value: None,
-			prev: Link::Null,
-			next: Link::Null,
+			prev: TaggedPointerToNode::Null,
+			next: TaggedPointerToNode::Null,
 			reference_count: AtomicUsize::new(initial_reference_count),
 		}
 	}
@@ -82,29 +84,38 @@ impl<T> Node<T>
 	/// "New nodes are created dynamically with the CreateNode function which in turn makes use of the NewNode function for the actual memory allocation".
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn CreateNode<'a>(value: Box<T>) -> &'a Self
+	fn CreateNode<'a>(value: NonNull<T>) -> TaggedPointerToNode<T>
 	{
 		// CN1
 		let mut node = Self::NewNode();
 		
 		// CN2
-		node.as_mut().value = Some(value);
+		unsafe { node.as_mut() }.value = Some(value);
 		
 		// CN3
-		node.as_ref()
+		TaggedPointerToNode
+		{
+			tagged_pointer: node.as_ptr() as usize,
+			phantom_data: PhantomData,
+		}
 	}
 	
+	/// The procedure `DeleteNode` should be called when a node has been logically removed from the data structure and its memory should eventually be reclaimed.
+	/// The user operation that called `DeleteNode` is responsible\* for removing all references to the deleted node from the active nodes in the data structure.
+	/// This is similar to what is required when calling a memory allocator directly in a sequential data structure.
+	/// However, independently of the state at the call of `DeleteNode` and of when concurrent operations eventually remove their (own or created) references to the deleted node, 'BEWARE&CLEANUP' will not reclaim the deleted node until it is safe to do so, ie, when there are no threads that could potentially access the node anymore, thus completely avoiding the possibility of dangling pointers.
+	/// \* After the call of `DeleteNode`, concurrent operations may still use references to the deleted node and might even temporary add links to it, although concurrent operations that observe a deleted node are supposed to eventually remove all references and links to it.
 	#[allow(non_snake_case)]
 	#[inline(always)]
 	fn DeleteNode(&self)
 	{
-		let node = self;
+		let _node = self;
 		
 		unimplemented!("External definition required")
 	}
 	
-	// FIXME: Not currently linked to from any algorithm code...
-	/// Callback procedure for memory management.
+	/// `TerminateNode` makes sure that none of the node’s contained links have any claim on any other node.
+	/// `TerminateNode` is called on a deleted node when there are no claims from any other node or thread to the node.
 	#[allow(non_snake_case)]
 	#[inline(always)]
 	fn TerminateNode(&self)
@@ -112,14 +123,13 @@ impl<T> Node<T>
 		let node = self;
 		
 		// TN1
-		node.prev.StoreRef(Link::Null);
+		node.prev.StoreRef(TaggedPointerToNode::Null);
 		
 		// TN2
-		node.next.StoreRef(Link::Null)
+		node.next.StoreRef(TaggedPointerToNode::Null)
 	}
 	
-	// FIXME: Not currently linked to from any algorithm code...
-	/// Callback procedure for memory management.
+	/// The procedure `CleanUpNode` makes sure that all references from the links in the given node point to active nodes, thus removing redundant reference chains passing through an arbitrary number of deleted nodes.
 	#[allow(non_snake_case)]
 	#[inline(always)]
 	fn CleanUpNode(&self)
@@ -143,7 +153,7 @@ impl<T> Node<T>
 			let prev2 = prev.prev.DeRefLink();
 			
 			// CU5
-			node.prev.CASRef((prev.p(), true), (prev2.p(), true));
+			node.prev.CASRef(prev.p().with_delete_mark(), prev2.p().with_delete_mark());
 			
 			// CU6
 			prev2.ReleaseRef2(prev);
@@ -166,7 +176,7 @@ impl<T> Node<T>
 			let next2 = next.next.DeRefLink();
 			
 			// CU11
-			node.next.CASRef((next.p(), true), (next2.p(), true));
+			node.next.CASRef(next.p().with_delete_mark(), next2.p().with_delete_mark());
 			
 			// CU12
 			next2.ReleaseRef2(next);
@@ -174,138 +184,5 @@ impl<T> Node<T>
 		
 		// CU13
 		prev.ReleaseRef2(next)
-	}
-	
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn ReleaseRef(&self)
-	{
-		let node = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	// Problem: some parts of the algorithm call `ReleaseRef()` with 2 (two) arguments! WTF?
-	// Hence this overloaded variant, `ReleaseRef2()`.
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn ReleaseRef2(&self, what_is_this: &Self)
-	{
-		// Assumption about ReleaseRef2
-		self.ReleaseRef();
-		what_is_this.ReleaseRef();
-	}
-	
-	//noinspection SpellCheckingInspection
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn CorrectPrev(&self, node: &Self) -> &Node<T>
-	{
-		let mut prev = self;
-		
-		// CP1
-		let mut lastlink: *const Self = null();
-		
-		// CP2
-		loop
-		{
-			// CP3
-			let link1 = node.prev;
-			if link1.d_is_true()
-			{
-				break
-			}
-			
-			// CP4
-			let mut prev2 = prev.next.DeRefLink();
-		
-			// CP5
-			if prev2.d_is_true()
-			{
-				// CP6
-				if lastlink.is_not_null()
-				{
-					let lastlink_ref = unsafe { &* lastlink };
-					
-					// CP7
-					prev.prev.SetMark();
-				
-					// CP8
-					lastlink_ref.next.CASRef(prev, Link::new_without_marks(prev2.p()));
-					
-					// CP9
-					prev2.p().ReleaseRef2(prev);
-		
-					// CP10
-					prev = lastlink_ref;
-					lastlink = null();
-					
-					// CP11
-					continue
-				}
-				
-				// CP12
-				prev2.p().ReleaseRef();
-	
-				// CP13
-				prev2 = prev.prev.DeRefLink();
-				
-				// CP14
-				prev.ReleaseRef();
-				prev = prev2;
-				
-				// CP15
-				continue
-			}
-			
-			// CP16
-			if prev2 != node
-			{
-				// CP17
-				if lastlink.is_not_null()
-				{
-					let lastlink_ref = unsafe { &* lastlink };
-					lastlink_ref.ReleaseRef()
-				}
-				
-				// CP18
-				lastlink = prev as *const Node<T>;
-				
-				// CP19
-				prev = prev2;
-				
-				// CP20
-				continue
-			}
-			
-			// CP21
-			prev2.ReleaseRef();
-		
-			// CP22
-			if node.prev.CASRef(link1, Link::new_without_marks(prev))
-			{
-				// CP23
-				if prev.prev.d_is_true()
-				{
-					continue
-				}
-		
-				// CP24
-				break
-			}
-			
-			// CP25
-			Back_Off()
-		}
-		
-		// CP26
-		if lastlink.is_not_null()
-		{
-			let lastlink_ref = unsafe { &* lastlink };
-			lastlink_ref.ReleaseRef()
-		}
-		
-		// CP27
-		prev
 	}
 }

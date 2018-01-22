@@ -2,16 +2,6 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-// TODO: value is NOT Box<T>
-/*
-
-	
-	it needs to be reference counted, otherwise fn Read() won't work.
-	
-	returning &Box<T> (or any other &) won't work well.
-
-	A variant we could create re-uses the list memory from an allocator.§
-*/
 /// A 'cursor' over the doubly-linked list.
 /// This cursor potentially isn't safe to use if another thread is calling `PopRight()` or `PopLeft()`. It isn't clear how to free a Read()'s reference count.
 /// The remaining necessary functionality for initializing the cursor positions like `First()` and `Last()` can be trivially derived by using the dummy nodes.
@@ -19,13 +9,14 @@
 pub struct LockFreeDoublyLinkedListAndDequeCursor<'a, T: 'a>
 {
 	list: &'a LockFreeDoublyLinkedListAndDeque<T>,
-	position: &'a Node<T>,
+	position: TaggedPointerToNode<T>,
 }
 
-impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
+impl<'a, T: 'a> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 {
+	/// Creates a new cursor starting from the head.
 	#[inline(always)]
-	fn from_head(list: &'a LockFreeDoublyLinkedListAndDeque<T>) -> Self
+	pub fn from_head(list: &'a LockFreeDoublyLinkedListAndDeque<T>) -> Self
 	{
 		Self
 		{
@@ -34,8 +25,9 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 		}
 	}
 	
+	/// Creates a new cursor starting from the tail.
 	#[inline(always)]
-	fn from_tail(list: &'a LockFreeDoublyLinkedListAndDeque<T>) -> Self
+	pub fn from_tail(list: &'a LockFreeDoublyLinkedListAndDeque<T>) -> Self
 	{
 		Self
 		{
@@ -49,8 +41,9 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	#[inline(always)]
 	pub fn forward(&mut self) -> bool
 	{
-		let mut cursor = &mut self.position;
-		self.Next(cursor)
+		let tail = self.tail();
+		let cursor = self.cursor();
+		Self::Next(cursor, tail)
 	}
 	
 	/// Moves the cursor from right to left, ie moves it closer to the head.
@@ -58,21 +51,65 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	#[inline(always)]
 	pub fn backward(&mut self) -> bool
 	{
-		let mut cursor = &mut self.position;
-		self.Prev(cursor)
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
+		Self::Prev(cursor, head, tail)
+	}
+	
+	/// Tries to read the next value after advancing the cursor.
+	/// Use carefully; if another thread also tries to read or delete or pop, then multiple copies of the result `NonNull<T>` will exist.
+	/// Returns None if there are no more values, or if created with `Self::from_tail()`.
+	#[inline(always)]
+	pub fn forward_and_read_next_value(&'a mut self) -> Option<NonNull<T>>
+	{
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
+		
+		if Self::Next(cursor, tail)
+		{
+			Self::Read(cursor, head, tail)
+		}
+		else
+		{
+			None
+		}
+	}
+	
+	/// Tries to read the previous value after retarding the cursor.
+	/// Use carefully; if another thread also tries to read or delete or pop, then multiple copies of the result `NonNull<T>` will exist.
+	/// Returns None if there are no more values, or if created with `Self::from_head()`.
+	#[inline(always)]
+	pub fn backward_and_read_previous_value(&'a mut self) -> Option<NonNull<T>>
+	{
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
+		
+		if Self::Prev(cursor, head, tail)
+		{
+			Self::Read(cursor, head, tail)
+		}
+		else
+		{
+			None
+		}
 	}
 	
 	/// Tries to read the next value after advancing the cursor.
 	/// Returns a reference.
 	/// Returns None if there are no more values, or if created with `Self::from_tail()`.
 	#[inline(always)]
-	pub fn forward_and_read_next_value(&'a mut self) -> Option<&'a Box<T>>
+	pub fn forward_and_delete_next_value(&mut self) -> Option<NonNull<T>>
 	{
-		let mut cursor = &mut self.position;
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
 		
-		if self.Next(cursor)
+		if Self::Next(cursor, tail)
 		{
-			self.Read(cursor)
+			Self::Delete(cursor, head, tail)
 		}
 		else
 		{
@@ -84,49 +121,15 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	/// Returns a reference.
 	/// Returns None if there are no more values, or if created with `Self::from_head()`.
 	#[inline(always)]
-	pub fn backward_and_read_previous_value(&'a mut self) -> Option<&'a Box<T>>
+	pub fn backward_and_delete_previous_value(&mut self) -> Option<NonNull<T>>
 	{
-		let mut cursor = &mut self.position;
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
 		
-		if self.Prev(cursor)
+		if Self::Prev(cursor, head, tail)
 		{
-			self.Read(cursor)
-		}
-		else
-		{
-			None
-		}
-	}
-	
-	/// Tries to read the next value after advancing the cursor.
-	/// Returns a reference.
-	/// Returns None if there are no more values, or if created with `Self::from_tail()`.
-	#[inline(always)]
-	pub fn forward_and_delete_next_value(&mut self) -> Option<Box<T>>
-	{
-		let mut cursor = &mut self.position;
-		
-		if self.Next(cursor)
-		{
-			self.Delete(cursor)
-		}
-		else
-		{
-			None
-		}
-	}
-	
-	/// Tries to read the previous value after retarding the cursor.
-	/// Returns a reference.
-	/// Returns None if there are no more values, or if created with `Self::from_head()`.
-	#[inline(always)]
-	pub fn backward_and_delete_previous_value(&mut self) -> Option<Box<T>>
-	{
-		let mut cursor = &mut self.position;
-		
-		if self.Prev(cursor)
-		{
-			self.Delete(cursor)
+			Self::Delete(cursor, head, tail)
 		}
 		else
 		{
@@ -138,49 +141,53 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	/// If current position is the head, then inserts immediately after the head, ie equivalent to `insert_value_at_head()`.
 	/// The cursor will be positioned 'on' the inserted value.
 	#[inline(always)]
-	pub fn insert_value_before_current_position(&mut self, value: Box<T>)
+	pub fn insert_value_before_current_position(&mut self, value: NonNull<T>)
 	{
-		let mut cursor = &mut self.position;
-		self.InsertBefore(cursor, value)
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
+		Self::InsertBefore(cursor, value, head, tail)
 	}
 	
 	/// Insert value after cursor's current position.
 	/// If current position is the tail, then inserts immediately before the tail, ie equivalent to `insert_value_at_tail()`.
 	/// The cursor will be positioned 'on' the inserted value.
 	#[inline(always)]
-	pub fn insert_value_after_current_position(&mut self, value: Box<T>)
+	pub fn insert_value_after_current_position(&mut self, value: NonNull<T>)
 	{
-		let mut cursor = &mut self.position;
-		self.InsertAfter(cursor, value)
+		let head = self.head();
+		let tail = self.tail();
+		let cursor = self.cursor();
+		Self::InsertAfter(cursor, value, head, tail)
 	}
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn Next(&self, cursor: &mut &Node<T>) -> bool
+	fn Next(cursor: &mut TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>) -> bool
 	{
 		// NT1
 		loop
 		{
 			// NT2
-			if *cursor == self.tail()
+			if *cursor == tail
 			{
 				return false
 			}
 			
 			// NT3
-			let next = (*cursor).DeRefLink().next;
+			let next = (*cursor).next.DeRefLink();
 			
 			// NT4
 			let d = next.next.d();
 			
 			// NT5
-			if d && (*cursor).next != Link::new_with_delete_mark(next)
+			if d && (*cursor).next != next.with_delete_mark()
 			{
 				// NT6
 				next.prev.SetMark();
 				
 				// NT7
-				(*cursor).next.CASRef(next, next.p);
+				(*cursor).next.CASRef(next, next.p());
 				
 				// NT8
 				next.ReleaseRef();
@@ -196,7 +203,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 			*cursor = next;
 			
 			// NT12
-			if !d && next != self.tail()
+			if !d && next != tail
 			{
 				return true
 			}
@@ -204,23 +211,22 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	}
 	
 	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn Prev(&self, cursor: &mut &Node<T>) -> bool
+	fn Prev(cursor: &mut TaggedPointerToNode<T>, head: TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>) -> bool
 	{
 		// PV1
 		loop
 		{
 			// PV2
-			if *cursor == self.head()
+			if *cursor == head
 			{
 				return false
 			}
 		
 			// PV3
-			let prev = (*cursor).DeRefLink().prev;
+			let mut prev = (*cursor).prev.DeRefLink();
 		
 			// PV4
-			if prev.next == Link::new_without_marks(*cursor) && (*cursor).next.d_is_false()
+			if prev.next == (*cursor).without_delete_mark() && (*cursor).next.d_is_false()
 			{
 				// PV5
 				(*cursor).ReleaseRef();
@@ -229,7 +235,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 				*cursor = prev;
 		
 				// PV7
-				if prev != self.head()
+				if prev != head
 				{
 					return true
 				}
@@ -241,7 +247,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 				prev.ReleaseRef();
 		
 				// PV10
-				self.Next(cursor);
+				Self::Next(cursor, tail);
 			}
 			// PV11
 			else
@@ -257,18 +263,16 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn Read(&self, cursor: &'a mut &Node<T>) -> Option<&'a Box<T>>
+	fn Read(cursor: &'a mut TaggedPointerToNode<T>, head: TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>) -> Option<NonNull<T>>
 	{
 		// RD1
-		if *cursor == self.head() || *cursor == self.tail()
+		if *cursor == head || *cursor == tail
 		{
 			return None
 		}
 		
 		// RD2
-		// WAS: let value = (*cursor).value;
-		// Changed to pass out a reference.
-		let value = (*cursor).value.as_ref();
+		let value = (*cursor).clone_value();
 		
 		// RD3
 		if (*cursor).next.d_is_true()
@@ -281,20 +285,19 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	}
 
 	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn InsertBefore(&self, cursor: &mut &Node<T>, value: Box<T>)
+	fn InsertBefore(cursor: &mut TaggedPointerToNode<T>, value: NonNull<T>, head: TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>)
 	{
 		// IB1
-		if *cursor == self.head()
+		if *cursor == head
 		{
-			return self.InsertAfter(cursor, value)
+			return Self::InsertAfter(cursor, value, head, tail)
 		}
 	
 		// IB2
 		let node = Node::CreateNode(value);
 		
 		// IB3
-		let mut prev = (*cursor).DeRefLink().prev;
+		let mut prev = (*cursor).prev.DeRefLink();
 		
 		// IB4
 		let mut next;
@@ -304,7 +307,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 			while (*cursor).next.d_is_true()
 			{
 				// IB6
-				self.Next(cursor);
+				Self::Next(cursor, tail);
 		
 				// IB7
 				prev = prev.CorrectPrev(*cursor);
@@ -314,13 +317,13 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 			next = *cursor;
 		
 			// IB9
-			node.prev.StoreRef(Link::new_without_marks(prev));
+			node.prev.StoreRef(prev.without_delete_mark());
 		
 			// IB10
-			node.next.StoreRef(Link::new_without_marks(next));
+			node.next.StoreRef(next.without_delete_mark());
 		
 			// IB11
-			if prev.next.CASRef(Link::new_without_marks(*cursor), Link::new_without_marks(node))
+			if prev.next.CASRef((*cursor).without_delete_mark(), node.without_delete_mark())
 			{
 				break
 			}
@@ -343,13 +346,12 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	}
 	
 	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn InsertAfter(&self, cursor: &mut &Node<T>, value: Box<T>)
+	fn InsertAfter(cursor: &mut TaggedPointerToNode<T>, value: NonNull<T>, head: TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>)
 	{
 		// IA1
-		if *cursor == self.tail()
+		if *cursor == tail
 		{
-			return self.InsertBefore(cursor, value)
+			return Self::InsertBefore(cursor, value, head, tail)
 		}
 		
 		// IA2
@@ -365,13 +367,13 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 			let next = prev.next.DeRefLink();
 		
 			// IA6
-			node.prev.StoreRef(Link::new_without_marks(prev));
+			node.prev.StoreRef(prev.without_delete_mark());
 		
 			// IA7
-			node.next.StoreRef(Link::new_without_marks(next));
+			node.next.StoreRef(next.without_delete_mark());
 		
 			// IA8
-			if (*cursor).next.CASRef(Link::new_without_marks(next), Link::new_without_marks(node))
+			if (*cursor).next.CASRef(next.without_delete_mark(), node.without_delete_mark())
 			{
 				break
 			}
@@ -387,7 +389,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 				node.DeleteNode();
 				
 				// IA12
-				return self.InsertBefore(cursor, value)
+				return Self::InsertBefore(cursor, value, head, tail)
 			}
 			
 			// IA13
@@ -406,13 +408,13 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn Delete(&self, cursor: &mut &Node<T>) -> Option<Box<T>>
+	fn Delete(cursor: &mut TaggedPointerToNode<T>, head: TaggedPointerToNode<T>, tail: TaggedPointerToNode<T>) -> Option<NonNull<T>>
 	{
 		// D1
-		let node = *cursor;
+		let mut node = *cursor;
 		
 		// D2
-		if node == self.head() || node == self.tail()
+		if node == head || node == tail
 		{
 			return None
 		}
@@ -421,7 +423,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 		loop
 		{
 			// D4
-			let next = (*cursor).DeRefLink().next;
+			let next = (*cursor).next.DeRefLink();
 			
 			// D5
 			if next.d_is_true()
@@ -435,7 +437,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 			
 			// D8
 			// NOTE: CAS, not CASRef
-			if node.next.CAS(next, Link::new_with_delete_mark(next.p()))
+			if node.next.CAS(next, next.p().with_delete_mark())
 			{
 				let mut prev;
 				
@@ -447,7 +449,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 		
 					// D11
 					// NOTE: CAS, not CASRef
-					if prev.d_is_true() || node.prev.CAS(prev, Link::new_with_delete_mark(prev.p()))
+					if prev.d_is_true() || node.prev.CAS(prev, prev.p().with_delete_mark())
 					{
 						break
 					}
@@ -461,7 +463,7 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 				next.ReleaseRef();
 		
 				// D14
-				let value = node.value;
+				let value = node.move_value();
 		
 				// D15
 				node.ReleaseRef();
@@ -474,14 +476,20 @@ impl<'a, T> LockFreeDoublyLinkedListAndDequeCursor<'a, T>
 	}
 	
 	#[inline(always)]
-	fn head(&self) -> &Node<T>
+	fn head(&self) -> TaggedPointerToNode<T>
 	{
 		self.list.head()
 	}
 	
 	#[inline(always)]
-	fn tail(&self) -> &Node<T>
+	fn tail(&self) -> TaggedPointerToNode<T>
 	{
 		self.list.tail()
+	}
+	
+	#[inline(always)]
+	fn cursor(&mut self) -> &mut TaggedPointerToNode<T>
+	{
+		&mut self.position
 	}
 }

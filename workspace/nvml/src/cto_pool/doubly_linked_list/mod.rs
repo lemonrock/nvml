@@ -3,7 +3,10 @@
 
 
 use ::std::marker::PhantomData;
-use ::std::mem::forget;
+use ::std::mem::replace;
+use ::std::mem::transmute;
+use ::std::ops::Deref;
+use ::std::ops::DerefMut;
 use ::std::ptr::NonNull;
 use ::std::ptr::null;
 use ::std::sync::atomic::fence;
@@ -15,9 +18,7 @@ use ::std::sync::atomic::Ordering::Release;
 include!("Back_Off.rs");
 include!("hint_core_should_pause.rs");
 include!("IsNotNull.rs");
-include!("Link.rs");
 include!("LockFreeDoublyLinkedListAndDeque.rs");
 include!("LockFreeDoublyLinkedListAndDequeCursor.rs");
 include!("Node.rs");
-
-
+include!("TaggedPointerToNode.rs");
