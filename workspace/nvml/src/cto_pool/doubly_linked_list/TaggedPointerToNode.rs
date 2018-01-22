@@ -74,6 +74,17 @@ impl<T> DerefMut for TaggedPointerToNode<T>
 
 impl<T> TaggedPointerToNode<T>
 {
+	const IsDeleteMarkBit: usize = 0x01;
+	
+	const LockDereferenceBit: usize = 0x02;
+	
+	const AllMarkBits: usize = Self::LockDereferenceBit | Self::IsDeleteMarkBit;
+	
+	const PointerMask: usize = !Self::AllMarkBits;
+	
+	// Ideally, instead of 0, it should be `null::<T>() as usize`, but `null()` is not allowed in constants and const fn.
+	pub(crate) const Null: Self = Self::new(/*null::<T>() as usize*/ 0);
+	
 	/// This function is a synthesis of Sundell & Tsigas, 2008's `CASRef` and Gildentam et al 2005 / 2008 (?2009) `CompareAndSwapRef`.
 	/// The function `CASRef` is used to update a link for which there might be concurrent updates.
 	/// It returns `true` if the update was successful and `false` otherwise.
@@ -178,13 +189,37 @@ impl<T> TaggedPointerToNode<T>
 	pub(crate) fn DeRefLink(&self) -> Self
 	{
 		// Called `address` in Sundell & Tsigas.
-		let _address = self;
+		let address = self;
 		
-		unimplemented!("External definition required")
+		let tagged_pointer_atomic: &AtomicUsize = unsafe { transmute(&address.tagged_pointer) };
+		
+		let mut node_pointer: usize;
+		while
+		{
+			node_pointer = tagged_pointer_atomic.fetch_or(Self::LockDereferenceBit, Acquire);
+			node_pointer & Self::LockDereferenceBit != 0
+		}
+		{
+			Back_Off()
+		}
+		
+		let node = Self::new(node_pointer);
+		
+		// Purpose of this - increment reference count to prevent deletion?
+		if node.ptr().is_not_null()
+		{
+			node.increment_reference_count()
+		}
+		
+		let old = tagged_pointer_atomic.fetch_and(!Self::LockDereferenceBit, Release);
+		
+		debug_assert_eq!(old & Self::LockDereferenceBit, 0, "Did not set LockDereferenceBit spinlock somehow");
+		
+		node
 	}
 	
-	/// The procedure ReleaseRef should be called when the given node will not be accessed by the current thread anymore. It clears the corresponding spinlock'd flag.
-	/// \* The original algorithm in Sundell & Tsigas used a hazard pointer and a tracing garbage collector.
+	/// The procedure ReleaseRef should be called when the given node will not be accessed by the current thread anymore. It clears the corresponding spinlock'd flag\*.
+	/// \* The original algorithm in Gildentam et al used a hazard pointer and a tracing garbage collector.
 	#[allow(non_snake_case)]
 	#[inline(always)]
 	fn ReleaseRef(self)
@@ -200,19 +235,11 @@ impl<T> TaggedPointerToNode<T>
 	#[inline(always)]
 	fn ReleaseRef2(self, what_is_this: Self)
 	{
-		// Assumption about ReleaseRef2
 		self.ReleaseRef();
+		
+		// Assumption that this is what we should do with the second argument.
 		what_is_this.ReleaseRef();
 	}
-	
-	const IsDeleteMarkBit: usize = 0x01;
-	
-	const AllMarkBits: usize = Self::IsDeleteMarkBit;
-	
-	const PointerMask: usize = !Self::AllMarkBits;
-	
-	// Ideally, instead of 0, it should be `null::<T>() as usize`, but `null()` is not allowed in constants and const fn.
-	pub(crate) const Null: Self = Self::new(/*null::<T>() as usize*/ 0);
 	
 	/// This function ***MUST*** only ever called on `prev` pointers
 	/// NOTE: The Sundell & Tsigas paper defines `link` as `link: pointer to pointer to Node`,
@@ -367,6 +394,13 @@ impl<T> TaggedPointerToNode<T>
 		Self::new(tagged_pointer | Self::IsDeleteMarkBit)
 	}
 	
+	/// Strictly speaking, a potentially null reference to a known, good pointer, so a subset of Self
+	#[inline(always)]
+	pub(crate) fn p<'a>(self) -> Self
+	{
+		Self::new(self.ptr() as usize)
+	}
+	
 	#[inline(always)]
 	pub(crate) fn d(self) -> bool
 	{
@@ -389,13 +423,6 @@ impl<T> TaggedPointerToNode<T>
 	pub(crate) fn d_is_true_(tagged_pointer: usize) -> bool
 	{
 		tagged_pointer & Self::IsDeleteMarkBit == Self::IsDeleteMarkBit
-	}
-	
-	/// Strictly speaking, a potentially null reference to a known, good pointer, so a subset of Self
-	#[inline(always)]
-	pub(crate) fn p<'a>(self) -> Self
-	{
-		Self::new(self.ptr() as usize)
 	}
 	
 	/// Strictly speaking, a potentially null reference to a known, good pointer, so a subset of Self.
