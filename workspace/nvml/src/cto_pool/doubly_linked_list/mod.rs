@@ -11,6 +11,7 @@ use ::std::ptr::NonNull;
 use ::std::ptr::null;
 use ::std::sync::atomic::fence;
 use ::std::sync::atomic::AtomicUsize;
+use ::std::sync::atomic::Ordering::AcqRel;
 use ::std::sync::atomic::Ordering::Acquire;
 use ::std::sync::atomic::Ordering::Release;
 

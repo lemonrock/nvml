@@ -74,6 +74,135 @@ impl<T> DerefMut for TaggedPointerToNode<T>
 
 impl<T> TaggedPointerToNode<T>
 {
+	/// This function is a synthesis of Sundell & Tsigas, 2008's `CASRef` and Gildentam et al 2005 / 2008 (?2009) `CompareAndSwapRef`.
+	/// The function `CASRef` is used to update a link for which there might be concurrent updates.
+	/// It returns `true` if the update was successful and `false` otherwise.
+	/// The thread calling `CASRef` should hold a spinlock'd 'LockDereference' flag\* to the node that is to be stored in the link.
+	/// NOTE: The Sundell & Tsigas paper defines `old` as `old: pointer to Node` and `new` as `new: pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
+	/// `node` is also called `new` in Sundell & Tsigas.
+	/// This function *can* be called with `node` pointers **with** the delete flag set.
+	/// \* The original algorithm in Gildentam et al used a hazard pointer and a tracing garbage collector.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	pub(crate) fn CASRef(&self, old: Self, node: Self) -> bool
+	{
+		// Called `address` in Sundell & Tsigas.
+		let link = self;
+		
+		// C1
+		if link.CAS(old, node)
+		{
+			// C2
+			let node = node.ptr();
+			if node.is_not_null()
+			{
+				// C3
+				unsafe { &*node }.increment_reference_count()
+				
+				// C4
+				// (no-op for us as we do not use a tracing garbage collector)
+			}
+			
+			// C5
+			let old = old.ptr();
+			if old.is_not_null()
+			{
+				unsafe { &*old }.decrement_reference_count()
+			}
+			
+			// C6
+			return true
+		}
+		
+		// C7
+		false
+	}
+	
+	/// This function is a synthesis of Sundell & Tsigas, 2008's `StoreRef` and Gildentam et al 2005 / 2008 (?2009) `StoreRef`.
+	/// NOTE: The Sundell & Tsigas paper defines `node` as `node: pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
+	/// Definition in "Efficient and Reliable Lock-Free Memory Reclamation Based on Reference Counting", Gildentam et al 2005 / Gildentam et al 2005 / 2008 (?2009).
+	/// To update a link for which there cannot be any concurrent updates the procedure `StoreRef` should be called.
+	/// This procedure will make sure that any thread that then calls `DeRefLink` on the link (`TaggedPointerToNode`) can safely do so, if the thread has a spinlock'd 'LockDereference' flag\* to the node which contains the link.
+	/// The requirements are that that no other thread than the calling thread will possibly write concurrently to the link (otherwise `CASRef` should be invoked instead).
+	/// This function should only be called with `node` pointers **without** the delete flag set.
+	/// \* The original algorithm in Gildentam et al used a hazard pointer and a tracing garbage collector.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	pub(crate) fn StoreRef(&self, node: Self)
+	{
+		// Called `address` in Sundell & Tsigas.
+		let link = self;
+		
+		// S1
+		let old = link.ptr();
+		
+		// S2
+		link.set_tagged_pointer(node.tagged_pointer());
+		
+		// S3
+		let node = node.ptr();
+		if node.is_not_null()
+		{
+			// S4
+			unsafe { &* node }.increment_reference_count()
+			
+			// S7
+			// (no-op for us as we do not use a tracing garbage collector)
+		}
+		
+		// S6
+		if old.is_not_null()
+		{
+			unsafe { &* old }.decrement_reference_count();
+		}
+	}
+	
+	/// NOTE: The Sundell & Tsigas paper defines `address` as `address: pointer to word`, `old` as `old: word` and `new` as `new: word`.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	pub(crate) fn CAS(&self, _old: Self, _new: Self) -> bool
+	{
+		let _address = self;
+		
+		unimplemented!("External definition required")
+	}
+	
+	/// The function `DeRefLink` safely dereferences the given link, setting a spinlock'd 'LockDereference' flag inside the dereferenced node\*, thus guaranteeing the safety of future accesses to the returned node.
+	/// In particular, the calling thread can safely dereference and/or update any links in the returned node subsequently.
+	/// NOTE: The Sundell & Tsigas paper defines the result of this function as `:pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
+	/// \* The original algorithm in Gildentam et al used a hazard pointer and a tracing garbage collector.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	pub(crate) fn DeRefLink(&self) -> Self
+	{
+		// Called `address` in Sundell & Tsigas.
+		let _address = self;
+		
+		unimplemented!("External definition required")
+	}
+	
+	/// The procedure ReleaseRef should be called when the given node will not be accessed by the current thread anymore. It clears the corresponding spinlock'd flag.
+	/// \* The original algorithm in Sundell & Tsigas used a hazard pointer and a tracing garbage collector.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	fn ReleaseRef(self)
+	{
+		let _node = self;
+		
+		unimplemented!("External definition required")
+	}
+	
+	// Problem: some parts of the algorithm call `ReleaseRef()` with 2 (two) arguments! WTF?
+	// Hence this overloaded variant, `ReleaseRef2()`.
+	#[allow(non_snake_case)]
+	#[inline(always)]
+	fn ReleaseRef2(self, what_is_this: Self)
+	{
+		// Assumption about ReleaseRef2
+		self.ReleaseRef();
+		what_is_this.ReleaseRef();
+	}
+	
 	const IsDeleteMarkBit: usize = 0x01;
 	
 	const AllMarkBits: usize = Self::IsDeleteMarkBit;
@@ -103,75 +232,6 @@ impl<T> TaggedPointerToNode<T>
 				break
 			}
 		}
-	}
-	
-	/// NOTE: The Sundell & Tsigas paper defines `address` as `address: pointer to word`, `old` as `old: word` and `new` as `new: word`.
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	pub(crate) fn CAS(&self, _old: Self, _new: Self) -> bool
-	{
-		let _address = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	/// The function `CASRef` (also called `CompareAndSwapRef` in related papers) is used to update a link for which there might be concurrent updates.
-	/// It returns `true` if the update was successful and `false` otherwise.
-	/// The thread calling `CASRef` should have an HP to the node that is to be stored in the link.
-	/// NOTE: The Sundell & Tsigas paper defines `old` as `old: pointer to Node` and `new` as `new: pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	pub(crate) fn CASRef(&self, _old: Self, _new: Self) -> bool
-	{
-		let _address = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	/// NOTE: The Sundell & Tsigas paper defines `node` as `node: pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	pub(crate) fn StoreRef(&self, _node: Self)
-	{
-		let _address = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	
-	// ?Hence this function is defined for *both* `Link` and `Node`?
-	
-	/// The function `DeRefLink` safely dereferences the given link, setting an HP to the dereferenced node, thus guaranteeing the safety of future accesses to the returned node.
-	/// In particular, the calling thread can safely dereference and/or update any links in the returned node subsequently.
-	/// NOTE: The Sundell & Tsigas paper defines the result of this function as `:pointer to Node`, but they define `pointer` far more loosely than we do, ie it can be a reference (`&Node<T>`), raw and null (`*const Node<T>`) or tagged with a delete mark (`TaggedPointerToNode<T>`).
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	pub(crate) fn DeRefLink(&self) -> Self
-	{
-		let _address = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	/// The procedure ReleaseRef should be called when the given node will not be accessed by the current thread anymore. It clears the corresponding HP.
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn ReleaseRef(self)
-	{
-		let _node = self;
-		
-		unimplemented!("External definition required")
-	}
-	
-	// Problem: some parts of the algorithm call `ReleaseRef()` with 2 (two) arguments! WTF?
-	// Hence this overloaded variant, `ReleaseRef2()`.
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn ReleaseRef2(self, what_is_this: Self)
-	{
-		// Assumption about ReleaseRef2
-		self.ReleaseRef();
-		what_is_this.ReleaseRef();
 	}
 	
 	//noinspection SpellCheckingInspection
@@ -333,7 +393,15 @@ impl<T> TaggedPointerToNode<T>
 	#[inline(always)]
 	pub(crate) fn p<'a>(self) -> Self
 	{
-		Self::new(self.tagged_pointer() & Self::PointerMask)
+		Self::new(self.ptr() as usize)
+	}
+	
+	/// Strictly speaking, a potentially null reference to a known, good pointer, so a subset of Self.
+	/// Can be null.
+	#[inline(always)]
+	fn ptr(self) -> *const Node<T>
+	{
+		(self.tagged_pointer() & Self::PointerMask) as *const Node<T>
 	}
 	
 	#[inline(always)]
@@ -352,5 +420,13 @@ impl<T> TaggedPointerToNode<T>
 		let tagged_pointer_atomic: &AtomicUsize = unsafe { transmute(&self.tagged_pointer) };
 		
 		tagged_pointer_atomic.load(Acquire)
+	}
+	
+	#[inline(always)]
+	fn set_tagged_pointer(&self, tagged_pointer: usize)
+	{
+		let tagged_pointer_atomic: &AtomicUsize = unsafe { transmute(&self.tagged_pointer) };
+		
+		tagged_pointer_atomic.store(tagged_pointer, Release)
 	}
 }

@@ -9,7 +9,6 @@ struct Node<T>
 	prev: TaggedPointerToNode<T>,
 	next: TaggedPointerToNode<T>,
 	
-	// Not part of algorithm per-se.
 	reference_count: AtomicUsize,
 }
 
@@ -184,5 +183,19 @@ impl<T> Node<T>
 		
 		// CU13
 		prev.ReleaseRef2(next)
+	}
+	
+	#[inline(always)]
+	fn increment_reference_count(&self)
+	{
+		self.reference_count.fetch_add(1, AcqRel);
+	}
+	
+	#[inline(always)]
+	fn decrement_reference_count(&self)
+	{
+		debug_assert_ne!(self.reference_count.load(Acquire), 0, "reference_count should never be zero during `Node.decrement_reference_count()`");
+		
+		self.reference_count.fetch_sub(1, AcqRel);
 	}
 }
