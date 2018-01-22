@@ -160,11 +160,13 @@ impl<T> TaggedPointerToNode<T>
 	/// NOTE: The Sundell & Tsigas paper defines `address` as `address: pointer to word`, `old` as `old: word` and `new` as `new: word`.
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	pub(crate) fn CAS(&self, _old: Self, _new: Self) -> bool
+	pub(crate) fn CAS(&self, old: Self, new: Self) -> bool
 	{
-		let _address = self;
+		let address = self;
 		
-		unimplemented!("External definition required")
+		let tagged_pointer_atomic: &AtomicUsize = unsafe { transmute(&address.tagged_pointer) };
+		
+		tagged_pointer_atomic.compare_exchange(old.tagged_pointer, new.tagged_pointer, Acquire, Acquire).is_ok()
 	}
 	
 	/// The function `DeRefLink` safely dereferences the given link, setting a spinlock'd 'LockDereference' flag inside the dereferenced node\*, thus guaranteeing the safety of future accesses to the returned node.
