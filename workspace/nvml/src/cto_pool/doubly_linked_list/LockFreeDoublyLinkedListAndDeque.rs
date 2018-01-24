@@ -11,6 +11,8 @@ pub struct LockFreeDoublyLinkedListAndDeque<T>
 {
 	dummy_head_node: Node<T>,
 	dummy_tail_node: Node<T>,
+	head: AtomicLink<T>,
+	tail: AtomicLink<T>,
 }
 
 unsafe impl<T> Send for LockFreeDoublyLinkedListAndDeque<T>
@@ -37,17 +39,26 @@ impl<T> Default for LockFreeDoublyLinkedListAndDeque<T>
 	#[inline(always)]
 	fn default() -> Self
 	{
-		let mut this = Self
+		let this = unsafe
 		{
-			dummy_head_node: Node::head_or_tail_dummy_node(),
-			dummy_tail_node: Node::head_or_tail_dummy_node(),
+			let mut this: Self = uninitialized();
+			write(&mut this.dummy_head_node, Node::head_or_tail_dummy_node());
+			write(&mut this.dummy_tail_node, Node::head_or_tail_dummy_node());
+			write(&mut this.head, AtomicLink::from_raw_pointer(&mut this.dummy_head_node));
+			write(&mut this.tail, AtomicLink::from_raw_pointer(&mut this.dummy_tail_node));
+			
+			// head.next => tail
+			// tail.prev => head
+			write(&mut this.dummy_head_node.next, AtomicLink::from_raw_pointer(&mut this.dummy_tail_node));
+			write(&mut this.dummy_tail_node.previous, AtomicLink::from_raw_pointer(&mut this.dummy_head_node));
+			
+			// head.prev => null
+			// tail.next => null
+			write(&mut this.dummy_head_node.previous, AtomicLink::Null);
+			write(&mut this.dummy_tail_node.next, AtomicLink::Null);
+			
+			this
 		};
-		
-		this.dummy_head_node.next = this.tail().without_delete_mark();
-		this.dummy_head_node.prev = TaggedPointerToNode::Null;
-		
-		this.dummy_tail_node.next = TaggedPointerToNode::Null;
-		this.dummy_tail_node.prev = this.head().without_delete_mark();
 		
 		fence(Release);
 		
@@ -57,6 +68,22 @@ impl<T> Default for LockFreeDoublyLinkedListAndDeque<T>
 
 impl<T> LockFreeDoublyLinkedListAndDeque<T>
 {
+	/// Creates a new cursor starting from the head.
+	/// A `Cursor` is similar to an iterator but is more capable.
+	#[inline(always)]
+	pub fn cursor_from_head<'a>(&'a self) -> Cursor<'a, T>
+	{
+		Cursor::new(self, self.head())
+	}
+
+	/// Creates a new cursor starting from the tail.
+	/// A `Cursor` is similar to an iterator but is more capable.
+	#[inline(always)]
+	pub fn cursor_from_tail<'a>(&'a self) -> Cursor<'a, T>
+	{
+		Cursor::new(self, self.tail())
+	}
+	
 	/// Inserts this value at the head of the list.
 	#[inline(always)]
 	pub fn insert_value_at_head(&self, value: NonNull<T>)
@@ -90,25 +117,25 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	fn PushLeft(&self, value: NonNull<T>)
 	{
 		// L1
-		let node = Node::CreateNode(value);
+		let node: DereferencedLink<T> = Node::CreateNode(value);
 		
 		// L2
-		let prev = self.head().DeRefLink();
+		let prev: DereferencedLink<T> = self.head().DeRefLink();
 		
 		// L3
-		let mut next = prev.next.DeRefLink();
+		let mut next: DereferencedLink<T> = prev.next_link_atomic().DeRefLink();
 		
 		// L4
 		loop
 		{
 			// L5
-			node.prev.StoreRef(prev.without_delete_mark());
+			node.previous_link_atomic().StoreRef(prev.without_delete_tag_link_stack());
 			
 			// L6
-			node.next.StoreRef(next.without_delete_mark());
+			node.next_link_atomic().StoreRef(next.without_delete_tag_link_stack());
 			
 			// L7
-			if prev.next.CASRef(next.without_delete_mark(), node.without_delete_mark())
+			if prev.next_link_atomic().CASRef(next.without_delete_tag_link_stack(), node.without_delete_tag_link_stack())
 			{
 				break
 			}
@@ -117,7 +144,7 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			next.ReleaseRef();
 			
 			// L9
-			next = prev.next.DeRefLink();
+			next = prev.next_link_atomic().DeRefLink();
 			
 			// L10
 			Back_Off()
@@ -132,25 +159,25 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	fn PushRight(&self, value: NonNull<T>)
 	{
 		// R1
-		let node = Node::CreateNode(value);
+		let node: DereferencedLink<T> = Node::CreateNode(value);
 		
 		// R2
-		let next = self.tail().DeRefLink();
+		let next: DereferencedLink<T> = self.tail().DeRefLink();
 		
 		// R3
-		let mut prev = next.prev.DeRefLink();
+		let mut prev: DereferencedLink<T> = next.previous_link_atomic().DeRefLink();
 		
 		// R4
 		loop
 		{
 			// R5
-			node.prev.StoreRef(prev.without_delete_mark());
+			node.previous_link_atomic().StoreRef(prev.without_delete_tag_link_stack());
 			
 			// R6
-			node.next.StoreRef(next.without_delete_mark());
+			node.next_link_atomic().StoreRef(next.without_delete_tag_link_stack());
 			
 			// R7
-			if prev.next.CASRef(next.without_delete_mark(), node.without_delete_mark())
+			if prev.next_link_atomic().CASRef(next.without_delete_tag_link_stack(), node.without_delete_tag_link_stack())
 			{
 				break
 			}
@@ -171,48 +198,50 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	fn PopLeft(&self) -> Option<NonNull<T>>
 	{
 		// PL1
-		let mut prev = self.head().DeRefLink();
+		let mut prev: DereferencedLink<T> = self.head().DeRefLink();
 		
 		// PL2
-		let mut node;
-		let mut next;
+		let mut node: DereferencedLink<T>;
+		let mut next: DereferencedLink<T>;
 		let value;
 		loop
 		{
 			// PL3
-			node = prev.next.DeRefLink();
+			node = prev.next_link_atomic().DeRefLink();
 		
 			// PL4
-			if node == self.tail()
+			if node.to_link_stack() == self.tail().without_lock_dereference_tag_but_with_delete_tag_if_set()
 			{
 				// PL5
-				node.ReleaseRef2(prev);
+				node.ReleaseRef();
+				prev.ReleaseRef();
 		
 				// PL6
 				return None
 			}
 			
 			// PL7
-			next = node.next.DeRefLink();
+			next = node.next_link_atomic().DeRefLink();
 		
 			// PL8
-			if next.d_is_true()
+			if next.has_delete_tag()
 			{
 				// PL9
-				node.prev.SetMark();
+				node.previous_link_atomic().SetMark();
 		
 				// PL10
-				prev.next.CASRef(node, next.p().without_delete_mark());
+				prev.next_link_atomic().CASRef(node.to_link_stack(), next.without_delete_tag_link_stack());
 		
 				// PL11
-				next.p().ReleaseRef2(node);
+				next.ReleaseRef();
+				node.ReleaseRef();
 		
 				// PL12
 				continue
 			}
 			
 			// PL13
-			if node.next.CASRef(next, next.p().with_delete_mark())
+			if node.next_link_atomic().CASRef(next.to_link_stack(), next.with_delete_tag_link_stack())
 			{
 				// PL14
 				prev = prev.CorrectPrev(next);
@@ -228,14 +257,16 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			}
 			
 			// PL18
-			next.ReleaseRef2(node);
+			next.ReleaseRef();
+			node.ReleaseRef();
 		
 			// PL19
 			Back_Off()
 		}
 		
 		// PL20
-		next.ReleaseRef2(node);
+		next.ReleaseRef();
+		node.ReleaseRef();
 		
 		// PL21
 		value
@@ -248,16 +279,16 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		let value;
 		
 		// PR1
-		let next = self.tail().DeRefLink();
+		let next: DereferencedLink<T> = self.tail().DeRefLink();
 		
 		// PR2
-		let mut node = next.prev.DeRefLink();
+		let mut node: DereferencedLink<T> = next.previous_link_atomic().DeRefLink();
 		
 		// PR3
 		loop
 		{
 			// PR4
-			if node.next != next.without_delete_mark()
+			if node.next_link_stack() != next.without_delete_tag_link_stack()
 			{
 				// PR5
 				node = node.CorrectPrev(next);
@@ -267,26 +298,28 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 			}
 			
 			// PR7
-			if node == self.head()
+			if node.to_link_stack() == self.head().without_lock_dereference_tag_but_with_delete_tag_if_set()
 			{
 				// PR8
-				node.ReleaseRef2(next);
+				node.ReleaseRef();
+				next.ReleaseRef();
 		
 				// PR10
 				return None
 			}
 			
 			// PR11
-			if node.next.CASRef(next.without_delete_mark(), next.with_delete_mark())
+			if node.next_link_atomic().CASRef(next.without_delete_tag_link_stack(), next.with_delete_tag_link_stack())
 			{
 				// PR13
-				let prev = node.prev.DeRefLink();
+				let prev = node.previous_link_atomic().DeRefLink();
 		
 				// PR14
 				let prev = prev.CorrectPrev(next);
 		
 				// PR15
-				prev.ReleaseRef2(next);
+				prev.ReleaseRef();
+				next.ReleaseRef();
 		
 				// There is no PR16 in the algorithm
 				
@@ -310,25 +343,25 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn PushEnd(mut node: TaggedPointerToNode<T>, next: TaggedPointerToNode<T>)
+	fn PushEnd(mut node: DereferencedLink<T>, next: DereferencedLink<T>)
 	{
 		// P1
 		loop
 		{
 			// P2
-			let link1 = next.prev;
+			let link1: StackLink<T> = next.previous_link_stack();
 			
 			// P3
-			if link1.d_is_true() || node.next != next.without_delete_mark()
+			if link1.has_delete_tag() || node.next_link_stack() != next.without_delete_tag_link_stack()
 			{
 				break
 			}
 			
 			// P4
-			if next.prev.CASRef(link1, node.without_delete_mark())
+			if next.previous_link_atomic().CASRef(link1, node.without_delete_tag_link_stack())
 			{
 				// P5
-				if node.prev.d_is_true()
+				if node.previous_link_stack().has_delete_tag()
 				{
 					// P6
 					node = node.CorrectPrev(next);
@@ -343,20 +376,21 @@ impl<T> LockFreeDoublyLinkedListAndDeque<T>
 		}
 		
 		// P9
-		next.ReleaseRef2(node)
+		next.ReleaseRef();
+		node.ReleaseRef()
 	}
 	
 	/// The data structure is given an orientation by denoting the head side as being left and the tail side as being right, and we can consequently use this orientation to relate nodes as being to the left or right of each other.
 	#[inline(always)]
-	fn head(&self) -> TaggedPointerToNode<T>
+	fn head(&self) -> &AtomicLink<T>
 	{
-		TaggedPointerToNode::new(&self.dummy_head_node as *const Node<T> as usize)
+		&self.head
 	}
 	
 	/// The data structure is given an orientation by denoting the head side as being left and the tail side as being right, and we can consequently use this orientation to relate nodes as being to the left or right of each other.
 	#[inline(always)]
-	fn tail(&self) -> TaggedPointerToNode<T>
+	fn tail(&self) -> &AtomicLink<T>
 	{
-		TaggedPointerToNode::new(&self.dummy_tail_node as *const Node<T> as usize)
+		&self.tail
 	}
 }

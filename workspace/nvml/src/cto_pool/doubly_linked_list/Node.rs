@@ -5,11 +5,10 @@
 #[derive(Debug)]
 struct Node<T>
 {
-	value: Option<NonNull<T>>,
-	prev: TaggedPointerToNode<T>,
-	next: TaggedPointerToNode<T>,
-	
+	next: AtomicLink<T>,
+	previous: AtomicLink<T>,
 	reference_count: AtomicUsize,
+	value: Cell<Option<NonNull<T>>>,
 }
 
 impl<T> PartialEq for Node<T>
@@ -33,30 +32,30 @@ impl<T> Eq for Node<T>
 
 impl<T> Node<T>
 {
-	// FIXME: Is this actually 1?
-	// TODO: Is this actually 1?
-	const InitialReferenceCountToPreventEverBeingFreed: usize = 2;
+	#[inline(always)]
+	pub(crate) fn move_value(&self) -> Option<NonNull<T>>
+	{
+		// TODO: Should this be atomic?
+		let result = self.value.get();
+		self.value.set(None);
+		result
+	}
 	
-	// FIXME: Is this actually 0?
-	// TODO: Is this actually 0?
-	const InitialReferenceCountForRegularNodes: usize = 1;
+	#[inline(always)]
+	pub(crate) fn ref_value(&self) -> Option<NonNull<T>>
+	{
+		self.value.get()
+	}
+	
+	// By making this 1, a dummy node will never be freed.
+	const InitialReferenceCountToPreventHeadOrTailDummyNodeEverBeingFreed: usize = 1;
+	
+	const InitialReferenceCountForRegularNodes: usize = 0;
 	
 	#[inline(always)]
 	pub(crate) const fn head_or_tail_dummy_node() -> Self
 	{
-		Self::empty_node(Self::InitialReferenceCountToPreventEverBeingFreed)
-	}
-	
-	#[inline(always)]
-	pub(crate) fn move_value(&mut self) -> Option<NonNull<T>>
-	{
-		replace(&mut self.value, None)
-	}
-	
-	#[inline(always)]
-	pub(crate) fn clone_value(&mut self) -> Option<NonNull<T>>
-	{
-		replace(&mut self.value, None)
+		Self::empty_node(Self::InitialReferenceCountToPreventHeadOrTailDummyNodeEverBeingFreed)
 	}
 	
 	#[inline(always)]
@@ -64,53 +63,41 @@ impl<T> Node<T>
 	{
 		Self
 		{
-			value: None,
-			prev: TaggedPointerToNode::Null,
-			next: TaggedPointerToNode::Null,
+			value: Cell::new(None),
+			next: AtomicLink::Null,
+			previous: AtomicLink::Null,
 			reference_count: AtomicUsize::new(initial_reference_count),
 		}
 	}
 	
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn NewNode() -> NonNull<Self>
+	fn NewNode(value: NonNull<T>) -> DereferencedLink<T>
 	{
-		// TODO: Review if this is 1 or 0.
 		let malloc = Box::new(Self::empty_node(Self::InitialReferenceCountForRegularNodes));
-		Box::into_raw_non_null(malloc)
+		
+		malloc.value.set(Some(value));
+		
+		let node = Box::into_raw_non_null(malloc);
+		
+		// Ensures that node can then be later called with ReleaseRef()
+		let node = AtomicLink::from_raw_pointer(node.as_ptr());
+		node.DeRefLink()
 	}
 	
-	/// "New nodes are created dynamically with the CreateNode function which in turn makes use of the NewNode function for the actual memory allocation".
+	/// "New nodes are created dynamically with the `CreateNode` function which in turn makes use of the `NewNode` function for the actual memory allocation".
 	#[allow(non_snake_case)]
 	#[inline(always)]
-	fn CreateNode<'a>(value: NonNull<T>) -> TaggedPointerToNode<T>
+	fn CreateNode<'a>(value: NonNull<T>) -> DereferencedLink<T>
 	{
 		// CN1
-		let mut node = Self::NewNode();
+		let node = Self::NewNode(value);
 		
 		// CN2
-		unsafe { node.as_mut() }.value = Some(value);
+		// (logically done in NewNode)
 		
 		// CN3
-		TaggedPointerToNode
-		{
-			tagged_pointer: node.as_ptr() as usize,
-			phantom_data: PhantomData,
-		}
-	}
-	
-	/// The procedure `DeleteNode` should be called when a node has been logically removed from the data structure and its memory should eventually be reclaimed.
-	/// The user operation that called `DeleteNode` is responsible\* for removing all references to the deleted node from the active nodes in the data structure.
-	/// This is similar to what is required when calling a memory allocator directly in a sequential data structure.
-	/// However, independently of the state at the call of `DeleteNode` and of when concurrent operations eventually remove their (own or created) references to the deleted node, 'BEWARE&CLEANUP' will not reclaim the deleted node until it is safe to do so, ie, when there are no threads that could potentially access the node anymore, thus completely avoiding the possibility of dangling pointers.
-	/// \* After the call of `DeleteNode`, concurrent operations may still use references to the deleted node and might even temporary add links to it, although concurrent operations that observe a deleted node are supposed to eventually remove all references and links to it.
-	#[allow(non_snake_case)]
-	#[inline(always)]
-	fn DeleteNode(&self)
-	{
-		let _node = self;
-		
-		unimplemented!("External definition required")
+		node
 	}
 	
 	/// `TerminateNode` makes sure that none of the node’s contained links have any claim on any other node.
@@ -122,10 +109,10 @@ impl<T> Node<T>
 		let node = self;
 		
 		// TN1
-		node.prev.StoreRef(TaggedPointerToNode::Null);
+		node.previous.StoreRef(StackLink::Null);
 		
 		// TN2
-		node.next.StoreRef(TaggedPointerToNode::Null)
+		node.next.StoreRef(StackLink::Null)
 	}
 	
 	/// The procedure `CleanUpNode` makes sure that all references from the links in the given node point to active nodes, thus removing redundant reference chains passing through an arbitrary number of deleted nodes.
@@ -136,53 +123,56 @@ impl<T> Node<T>
 		let node = self;
 		
 		// CU1
-		let mut prev;
+		let mut prev: DereferencedLink<T>;
 		loop
 		{
 			// CU2
-			prev = node.prev.DeRefLink();
+			prev = node.previous.DeRefLink();
 			
 			// CU3
-			if prev.prev.d_is_false()
+			if prev.previous_link_stack().has_delete_tag()
 			{
 				break
 			}
 			
 			// CU4
-			let prev2 = prev.prev.DeRefLink();
+			let prev2 = prev.previous_link_atomic().DeRefLink();
 			
 			// CU5
-			node.prev.CASRef(prev.p().with_delete_mark(), prev2.p().with_delete_mark());
+			node.previous.CASRef(prev.with_delete_tag_link_stack(), prev2.with_delete_tag_link_stack());
 			
 			// CU6
-			prev2.ReleaseRef2(prev);
+			prev2.ReleaseRef();
+			prev.ReleaseRef()
 		}
 		
 		// CU7
-		let mut next;
+		let mut next: DereferencedLink<T>;
 		loop
 		{
 			// CU8
 			next = node.next.DeRefLink();
 			
 			// CU9
-			if next.next.d_is_false()
+			if next.next_link_stack().has_delete_tag()
 			{
 				break
 			}
 			
 			// CU10
-			let next2 = next.next.DeRefLink();
+			let next2 = next.next_link_atomic().DeRefLink();
 			
 			// CU11
-			node.next.CASRef(next.p().with_delete_mark(), next2.p().with_delete_mark());
+			node.next.CASRef(next.with_delete_tag_link_stack(), next2.with_delete_tag_link_stack());
 			
 			// CU12
-			next2.ReleaseRef2(next);
+			next2.ReleaseRef();
+			next.ReleaseRef()
 		}
 		
 		// CU13
-		prev.ReleaseRef2(next)
+		prev.ReleaseRef();
+		next.ReleaseRef()
 	}
 	
 	#[inline(always)]

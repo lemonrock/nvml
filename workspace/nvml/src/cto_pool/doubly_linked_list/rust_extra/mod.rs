@@ -2,26 +2,5 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-trait IsNotNull
-{
-	#[inline(always)]
-	fn is_not_null(self) -> bool;
-}
-
-impl<T> IsNotNull for *const T
-{
-	#[inline(always)]
-	fn is_not_null(self) -> bool
-	{
-		!self.is_null()
-	}
-}
-
-impl<T> IsNotNull for *mut T
-{
-	#[inline(always)]
-	fn is_not_null(self) -> bool
-	{
-		!self.is_null()
-	}
-}
+include!("hint_core_should_pause.rs");
+include!("IsNotNull.rs");

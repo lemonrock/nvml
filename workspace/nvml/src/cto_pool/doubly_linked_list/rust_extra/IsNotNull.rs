@@ -2,19 +2,26 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Provided as ::std::sync::atomic::hint_core_should_pause is very unstable.
-#[inline(always)]
-fn hint_core_should_pause()
+pub(crate) trait IsNotNull
 {
-	#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-	unsafe
+	#[inline(always)]
+	fn is_not_null(self) -> bool;
+}
+
+impl<T> IsNotNull for *const T
+{
+	#[inline(always)]
+	fn is_not_null(self) -> bool
 	{
-		asm!("pause" ::: "memory" : "volatile");
+		!self.is_null()
 	}
-	
-	#[cfg(target_arch = "aarch64")]
-	unsafe
+}
+
+impl<T> IsNotNull for *mut T
+{
+	#[inline(always)]
+	fn is_not_null(self) -> bool
 	{
-		asm!("yield" ::: "memory" : "volatile");
+		!self.is_null()
 	}
 }
