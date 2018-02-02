@@ -2,19 +2,5 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Provided as ::std::sync::atomic::hint_core_should_pause is very unstable.
-#[inline(always)]
-pub(crate) fn hint_core_should_pause()
-{
-	#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-	unsafe
-	{
-		asm!("pause" ::: "memory" : "volatile");
-	}
-	
-	#[cfg(target_arch = "aarch64")]
-	unsafe
-	{
-		asm!("yield" ::: "memory" : "volatile");
-	}
-}
+#[allow(non_camel_case_types)]
+type u10 = u16;

@@ -53,6 +53,8 @@ impl<T> DereferencedLink<T>
 		unimplemented!();
 	}
 	
+	BUG: ? Surely DeleteNode ? should be called after PopLeft / PopRight ?
+	
 	/// Weirdly, `DeleteNode` is only called from Cursor methods `InsertAfter` and `Delete`.
 	///
 	/// The procedure `DeleteNode` should be called when a node has been logically removed from the data structure and its memory should eventually be reclaimed.
@@ -64,9 +66,14 @@ impl<T> DereferencedLink<T>
 	#[inline(always)]
 	pub(crate) fn DeleteNode(&self)
 	{
-		let _node = self;
+		let node = self;
 		
-		unimplemented!("External definition required")
+		// DN1
+		// This ReleaseRef() is wrong, as it happens just before DeleteNode() is called.
+		// node.ReleaseRef();
+		
+		// DN2 - DN12
+		// CleanUpLocal / Scan / CleanUpAll
 	}
 	
 	#[inline(always)]

@@ -42,6 +42,8 @@ Notes on (2)
 		- Naive, array or linked list: would need a mutex per queue
 			- array is easy to grow - Mutex + CtoVec
 		- Bagpipe: Would need modification
+			- implements YangCrummeyQueue (see code at ?https://github.com/chaoran/fast-wait-free-queue?)
+			- implements FAAArrayQueue
 		- DPDK: Has a MP / MC ring structure
 			- would need modification
 			- has the advantage of switchable for multi-consumer (shared subns) or single-consumer (regular subns)

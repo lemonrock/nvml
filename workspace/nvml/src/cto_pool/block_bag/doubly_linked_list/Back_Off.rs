@@ -12,5 +12,5 @@
 fn Back_Off()
 {
 	// Issues a pause, yielding the thread to allow a spinlock to be fair on hyper-threaded architectures, so that we don't hog the cpu if we are spinning.
-	hint_core_should_pause();
+	spin_loop_hint();
 }

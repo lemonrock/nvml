@@ -60,6 +60,9 @@ pub mod arc;
 ///// A block_allocator
 //pub mod block_allocator;
 
+/// A block_bag
+pub mod block_bag;
+
 /// A Box like that in regular Rust's stdlib.
 pub mod boxed;
 
@@ -79,7 +82,7 @@ pub mod synchronisation;
 pub mod string;
 
 /// A doubly linked list implementation
-pub mod doubly_linked_list;
+//pub mod doubly_linked_list;
 
 
 

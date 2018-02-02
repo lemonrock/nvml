@@ -37,6 +37,35 @@ impl<T> AtomicTaggedPointer<Node<T>>
 	#[inline(always)]
 	pub(crate) fn DeRefLink(&self) -> DereferencedLink<T>
 	{
+		/*
+			let link = self;
+			
+			// D1 (choose index)
+			let index = xxxx;
+			
+			// D2
+			loop
+			{
+				// D3
+				// ie atomic load of value pointed to.
+				// let node = *link;
+				let node: StackLink<T> = link.deref_link();
+				
+				// assign hazard pointer
+				// D4
+				HP[threadId][index] = node;
+				
+				// D5
+				// atomic load of value pointed to still matches.
+				// if *link == node
+				if link.deref_link() == node
+				{
+					// D6
+					return node
+				}
+			}
+		
+		*/
 		let non_atomic_tagged_pointer_to_node = self.acquire_spinlock();
 		
 		{

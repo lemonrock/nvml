@@ -9,12 +9,13 @@ use ::std::marker::PhantomData;
 use ::std::mem::uninitialized;
 use ::std::ptr::NonNull;
 use ::std::ptr::write;
-use ::std::sync::atomic::fence;
 use ::std::sync::atomic::AtomicUsize;
+use ::std::sync::atomic::fence;
 use ::std::sync::atomic::Ordering::AcqRel;
 use ::std::sync::atomic::Ordering::Acquire;
 use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
+use ::std::sync::atomic::spin_loop_hint;
 
 
 mod rust_extra;

@@ -14,6 +14,7 @@
 #![feature(core_intrinsics)]
 #![feature(exact_size_is_empty)]
 #![feature(fused)]
+#![feature(i128_type)]
 #![feature(inclusive_range)]
 #![feature(integer_atomics)]
 #![feature(offset_to)]

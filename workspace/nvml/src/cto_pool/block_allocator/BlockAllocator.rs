@@ -93,7 +93,7 @@ impl<B: Block> BlockAllocator<B>
 		debug_assert_ne!(number_of_blocks, 0, "There can not be zero blocks in a chain");
 		debug_assert!(number_of_blocks <= MaximumNumberOfBlocksInAChain);
 		
-		// This loops attempts to repeatedly merge more chains onto this one.
+		// This loop attempts to repeatedly merge more chains onto this one.
 		// Longer chains are better.
 		// We could put a limit on this loop by using a constant such as MaximumNumberOfBlocksInAChain
 		loop
@@ -110,8 +110,6 @@ impl<B: Block> BlockAllocator<B>
 				
 				if subsequent_chain.try_to_take()
 				{
-					self.remove_from_free_list_already_taken_subsequent_chain_that_is_being_merged(subsequent_chain);
-					
 					solitary_chain.merge_subsequent_chain_onto_end(subsequent_chain);
 				}
 				else
@@ -135,16 +133,6 @@ impl<B: Block> BlockAllocator<B>
 		xxxx;
 	}
 	
-	#[inline(always)]
-	fn remove_from_free_list_already_taken_subsequent_chain_that_is_being_merged(&self, subsequent_chain: &mut Chain<B>)
-	{
-		debug_assert!(solitary_chain.memory_for_this_chain_is_in_use(), "This method should only be called with a chain that is in use");
-		
-		
-		
-		
-		xxxx;
-	}
 	
 	/// Allocate
 	// this: &CtoArc could be reduced to a Strong-only Arc, as there will never be weak references.
