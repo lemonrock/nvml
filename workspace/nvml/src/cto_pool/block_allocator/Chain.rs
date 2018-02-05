@@ -32,7 +32,7 @@ impl<B: Block> Chain<B>
 	#[inline(always)]
 	pub(crate) fn capacity(&self) -> usize
 	{
-		self.block_meta_data().capacity()
+		self.chain_length().as_capacity::<B>()
 	}
 	
 	#[inline(always)]

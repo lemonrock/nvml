@@ -54,12 +54,6 @@ impl ChainLength
 	}
 	
 	#[inline(always)]
-	pub(crate) fn add(self, other: ChainLength) -> Self
-	{
-		Self::from_length(self.as_length() + other.as_length())
-	}
-	
-	#[inline(always)]
 	pub(crate) fn add_if_maximum_length_not_exceeded(self, other: ChainLength) -> Option<Self>
 	{
 		let combined_length = self.as_length() + other.as_length();

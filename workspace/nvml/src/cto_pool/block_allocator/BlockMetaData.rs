@@ -95,13 +95,6 @@ impl<B: Block> BlockMetaData<B>
 	
 	// Valid only if not in a bag.
 	#[inline(always)]
-	fn capacity(&self) -> usize
-	{
-		self.chain_length().as_length()
-	}
-	
-	// Valid only if not in a bag.
-	#[inline(always)]
 	fn chain_length(&self) -> ChainLength
 	{
 		let chain_length_and_bag_stripe_index = self.chain_length_and_bag_stripe_index();

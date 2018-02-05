@@ -196,29 +196,35 @@ impl<B: Block> BlockAllocator<B>
 		let capped_chain_length = min(ideal_number_of_blocks, InclusiveMaximumChainLength);
 		
 		// (1) Try to get an exactly right chain or a longer chain.
-		let mut longer_chain_length = capped_chain_length;
-		while longer_chain_length <= InclusiveMaximumChainLength
+		//     If the chain is longer, then 'snap off' the right hand side.
+		let mut search_for_chain_length = capped_chain_length;
+		while search_for_chain_length <= InclusiveMaximumChainLength
 		{
-			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from_length(capped_chain_length));
+			let our_shorter_chain_length = ChainLength::from_length(search_for_chain_length);
+			let chain = self.bags.remove(&self.block_meta_data_items, our_shorter_chain_length);
 			if chain.is_not_null()
 			{
-				return (chain, longer_chain_length)
+				if search_for_chain_length != capped_chain_length
+				{
+					chain.expand_to_pointer_to_meta_data_unchecked(&self.block_meta_data_items).snap_off_back_if_longer_than_required_capacity_and_recycle_into_block_allocator(chain, self.memory_base_pointer, our_shorter_chain_length, self);
+				}
+				return (chain, search_for_chain_length)
 			}
 			
-			longer_chain_length += 1;
+			search_for_chain_length += 1;
 		}
 		
 		// (2) Try to get a smaller exactly right chain or a smaller chain.
-		let mut smaller_chain_length = capped_chain_length;
-		while smaller_chain_length > 0
+		let mut search_for_chain_length = capped_chain_length;
+		while search_for_chain_length > 0
 		{
-			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from_length(capped_chain_length));
+			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from_length(search_for_chain_length));
 			if chain.is_not_null()
 			{
-				return (chain, smaller_chain_length)
+				return (chain, search_for_chain_length)
 			}
 			
-			smaller_chain_length -=1;
+			search_for_chain_length -=1;
 		}
 		
 		(BlockPointer::Null, 0)
