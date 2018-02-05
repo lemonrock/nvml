@@ -96,7 +96,7 @@ impl<B: Block> BlockAllocator<B>
 		let mut solitary_chain_length = solitary_chain_block_meta_data.chain_length();
 		while solitary_chain_length.is_less_than_inclusive_maximum()
 		{
-			let subsequent_chain_start_address = solitary_chain_block_meta_data.subsequent_chain_start_address(self.memory_base_pointer, solitary_chain_length);
+			let subsequent_chain_start_address = solitary_chain_block_pointer.subsequent_chain_start_address(self.memory_base_pointer, solitary_chain_length);
 			
 			if subsequent_chain_start_address.as_ptr() == self.exclusive_end_address.as_ptr()
 			{
@@ -132,7 +132,7 @@ impl<B: Block> BlockAllocator<B>
 			}
 		}
 		
-		self.nothing_to_merge_with_so_add_to_free_list(solitary_chain_block_meta_data, solitary_chain_length);
+		self.nothing_to_merge_with_so_add_to_free_list(solitary_chain_block_pointer, solitary_chain_block_meta_data, solitary_chain_length);
 	}
 	
 	/// Allocate
@@ -184,10 +184,10 @@ impl<B: Block> BlockAllocator<B>
 	}
 	
 	#[inline(always)]
-	fn nothing_to_merge_with_so_add_to_free_list(&self, solitary_chain_block_meta_data: &BlockMetaData<B>, solitary_chain_length: ChainLength)
+	fn nothing_to_merge_with_so_add_to_free_list(&self, solitary_chain_block_pointer: BlockPointer<B>, solitary_chain_block_meta_data: &BlockMetaData<B>, solitary_chain_length: ChainLength)
 	{
 		solitary_chain_block_meta_data.reset_before_add_to_bag();
-		self.bags.add(&self.block_meta_data_items, solitary_chain_length, solitary_chain_block_meta_data)
+		self.bags.add(&self.block_meta_data_items, solitary_chain_length, solitary_chain_block_pointer)
 	}
 	
 	#[inline(always)]

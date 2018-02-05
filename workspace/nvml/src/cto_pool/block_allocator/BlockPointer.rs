@@ -46,24 +46,11 @@ impl<B: Block> BlockPointer<B>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn expand_to_pointer_to_memory(self, memory_base_pointer: NonNull<u8>) -> NonNull<u8>
-	{
-		if self.is_null()
-		{
-			null_mut()
-		}
-		else
-		{
-			self.expand_to_pointer_to_memory_unchecked(memory_base_pointer)
-		}
-	}
-	
-	#[inline(always)]
 	pub(crate) fn expand_to_pointer_to_memory_unchecked(self, memory_base_pointer: NonNull<u8>) -> NonNull<u8>
 	{
 		debug_assert!(self.is_not_null(), "this pointer is null");
 		
-		memory_base_pointer.offset(B::BlockSizeInBytes * self.0)
+		memory_base_pointer.offset(B::BlockSizeInBytes * (self.0 as usize))
 	}
 	
 	#[inline(always)]

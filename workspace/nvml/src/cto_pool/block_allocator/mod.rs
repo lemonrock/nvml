@@ -11,7 +11,6 @@ use ::std::mem::size_of;
 use ::std::ptr::copy_nonoverlapping;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::NonNull;
-use ::std::ptr::null_mut;
 use ::std::ptr::write;
 use ::std::sync::atomic::*;
 use ::std::sync::atomic::Ordering::*;

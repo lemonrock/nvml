@@ -54,8 +54,7 @@ impl<B: Block> BlockMetaData<B>
 	{
 		let our_chain_length = self.chain_length();
 		
-		debug_assert!(self.block_meta_data.is_some(), "This is not a valid chain");
-		debug_assert!(&our_chain_length > &our_shorter_chain_length, "our_shorter_chain_length '{}' is equal to or greater than self.chain_length() '{}'", our_shorter_chain_length, our_chain_length);
+		debug_assert!(&our_chain_length > &our_shorter_chain_length, "our_shorter_chain_length '{:?}' is equal to or greater than self.chain_length() '{:?}'", our_shorter_chain_length, our_chain_length);
 		
 		let snapped_off_chain_length = our_chain_length.subtract(our_shorter_chain_length);
 		self.acquire(our_shorter_chain_length);
@@ -71,9 +70,9 @@ impl<B: Block> BlockMetaData<B>
 	{
 		debug_assert!(self.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "can not ask for reset_before_add_to_bag when in a bag");
 		
-		self.next.set_relaxed(AtomicBlockPointer::Null);
-		self.previous.set_relaxed(AtomicBlockPointer::Null);
-		self.next_chain.set_relaxed(AtomicBlockPointer::Null);
+		self.next.set_relaxed(BlockPointer::Null);
+		self.previous.set_relaxed(BlockPointer::Null);
+		self.next_chain.set_relaxed(BlockPointer::Null);
 	}
 	
 	// Valid only if not in a bag.
