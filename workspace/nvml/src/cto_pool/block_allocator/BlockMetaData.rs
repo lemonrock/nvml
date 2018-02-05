@@ -72,7 +72,7 @@ impl<B: Block> BlockMetaData<B>
 		
 		self.next.set_relaxed(BlockPointer::Null);
 		self.previous.set_relaxed(BlockPointer::Null);
-		self.next_chain.set_relaxed(BlockPointer::Null);
+		self.next_chain = BlockPointer::Null;
 	}
 	
 	// Valid only if not in a bag.

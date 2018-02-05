@@ -36,6 +36,6 @@ impl<B: Block> BlockMetaDataItems<B>
 	#[inline(always)]
 	unsafe fn get(&self, block_pointer: usize) -> NonNull<BlockMetaData<B>>
 	{
-		NonNull::new_unchecked(self as *const Self as *const u8 as *mut u8).offset(block_pointer * size_of::<BlockMetaData<B>>)
+		NonNull::new_unchecked(self as *const Self as *const u8 as *mut u8 as *mut BlockMetaData<B>).offset(block_pointer)
 	}
 }

@@ -37,7 +37,7 @@ impl<B: Block> BlockPointer<B>
 		let difference = memory_base_pointer.difference(block_address);
 		debug_assert_eq!(difference % B::BlockSizeInBytes, 0, "difference must be a multiple of BlockSizeInBytes");
 		
-		debug_assert_ne!(difference, Self::NullSentinel, "difference can not be the NullSentinel");
+		debug_assert_ne!(difference, Self::NullSentinel as usize, "difference can not be the NullSentinel");
 		
 		let index = difference / B::BlockSizeInBytes;
 		debug_assert!(index < Self::ExclusiveMaximumBlockPointer, "index must be less than the ExclusiveMaximumBlockPointer, {}", Self::ExclusiveMaximumBlockPointer);
