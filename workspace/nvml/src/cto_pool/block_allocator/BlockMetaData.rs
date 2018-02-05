@@ -90,7 +90,8 @@ impl<B: Block> BlockMetaData<B>
 	fn set_next_chain(&self, new_next_chain: BlockPointer<B>)
 	{
 		debug_assert!(self.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "can not ask for next_chain when in a bag");
-		self.next_chain.set(new_next_chain)
+		self.next_chain.set(new_next_chain);
+		self.persist()
 	}
 	
 	// Valid only if not in a bag.
@@ -113,13 +114,15 @@ impl<B: Block> BlockMetaData<B>
 	#[inline(always)]
 	fn release(&self, chain_length: ChainLength, next_bag_stripe_index: BagStripeIndex)
 	{
-		self.chain_length_and_bag_stripe_index.set(ChainLengthAndBagStripeIndex::new(chain_length, Some(next_bag_stripe_index)))
+		self.chain_length_and_bag_stripe_index.set(ChainLengthAndBagStripeIndex::new(chain_length, Some(next_bag_stripe_index)));
+		self.persist()
 	}
 	
 	#[inline(always)]
 	fn acquire(&self, chain_length: ChainLength)
 	{
-		self.chain_length_and_bag_stripe_index.set(ChainLengthAndBagStripeIndex::new(chain_length, None))
+		self.chain_length_and_bag_stripe_index.set(ChainLengthAndBagStripeIndex::new(chain_length, None));
+		self.persist()
 	}
 	
 	#[inline(always)]
@@ -131,7 +134,7 @@ impl<B: Block> BlockMetaData<B>
 	#[inline(always)]
 	fn set_next(&self, new_next: BlockPointer<B>)
 	{
-		self.next.set(new_next)
+		self.next.set(new_next);
 	}
 	
 	#[inline(always)]
@@ -143,6 +146,12 @@ impl<B: Block> BlockMetaData<B>
 	#[inline(always)]
 	fn set_previous(&self, new_previous: BlockPointer<B>)
 	{
-		self.previous.set(new_previous)
+		self.previous.set(new_previous);
+	}
+	
+	#[inline(always)]
+	fn persist(&self)
+	{
+		B::P::flush_struct(self);
 	}
 }

@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+use persistent_memory::persistence::Persistence;
 use super::AtomicBlockPointer;
 use super::Block;
 use super::BlockMetaData;

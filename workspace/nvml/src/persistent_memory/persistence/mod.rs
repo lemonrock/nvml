@@ -3,6 +3,8 @@
 
 
 use super::*;
+use ::std::mem::size_of;
+use ::std::ptr::NonNull;
 
 
 include!("MMapMemoryPersistence.rs");

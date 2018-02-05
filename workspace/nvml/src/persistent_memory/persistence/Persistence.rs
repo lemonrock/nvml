@@ -5,6 +5,20 @@
 /// A trait for persistence operations.
 pub trait Persistence
 {
+	/// flush struct.
+	#[inline(always)]
+	fn flush_struct<T>(address: &T)
+	{
+		Self::flush_memory(address as *const T as *mut T as *mut c_void, size_of::<T>())
+	}
+	
+	/// flush NonNull.
+	#[inline(always)]
+	fn flush_non_null<T>(address: NonNull<T>)
+	{
+		Self::flush_memory(address.as_ptr() as *mut c_void, size_of::<T>())
+	}
+	
 	/// flush memory.
 	#[inline(always)]
 	fn flush_memory(address: *mut c_void, length: usize);

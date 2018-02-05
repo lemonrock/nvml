@@ -48,7 +48,10 @@ impl<B: Block> BagStripe<B>
 				add_block_meta_data.set_previous(old_head);
 				old_head_block_meta_data.set_next(add_block);
 			}
+			
+			B::P::flush_struct(self);
 		}
+		
 		self.unlock_spin_lock();
 		
 		add_block_meta_data.release(chain_length, next_bag_stripe_index)
@@ -76,6 +79,9 @@ impl<B: Block> BagStripe<B>
 				self.set_head_relaxed(old_head_block_meta_data.get_previous());
 				
 				old_head_block_meta_data.acquire(chain_length);
+				
+				B::P::flush_struct(self);
+				
 				old_head
 			}
 		};
@@ -107,6 +113,7 @@ impl<B: Block> BagStripe<B>
 				self.set_head_relaxed(cut_block_meta_data.get_previous());
 				
 				cut_block_meta_data.acquire(chain_length);
+				B::P::flush_struct(self);
 				true
 			}
 			else
@@ -122,6 +129,7 @@ impl<B: Block> BagStripe<B>
 				after_block_meta_data.set_previous(before_block);
 				
 				cut_block_meta_data.acquire(chain_length);
+				B::P::flush_struct(self);
 				true
 			}
 		};

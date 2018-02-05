@@ -180,6 +180,8 @@ impl<B: Block> BlockAllocator<B>
 		
 		block_allocator.block_meta_data_unchecked(previous_chain).set_next_chain(BlockPointer::Null);
 		
+		B::P::flush_non_null(chains);
+		
 		Ok(chains)
 	}
 	
