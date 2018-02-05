@@ -58,14 +58,14 @@ impl<B: Block> Chains<B>
 	
 	/// Stored in Volatile Memory
 	#[inline(always)]
-	pub fn copy_bytes_into_chains_start<'block_meta_data>(&self) -> RestartCopyIntoAt<'block_meta_data, B>
+	pub fn copy_bytes_into_chains_start<'block_meta_data>(&'block_meta_data self) -> RestartCopyIntoAt<'block_meta_data, B>
 	{
 		RestartCopyIntoAt::new(self.block_allocator.memory_base_pointer, self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}
 	
 	/// Stored in Volatile Memory
 	#[inline(always)]
-	pub fn copy_bytes_from_chains_start<'block_meta_data>(&self) -> RestartCopyFromAt<'block_meta_data, B>
+	pub fn copy_bytes_from_chains_start<'block_meta_data>(&'block_meta_data self) -> RestartCopyFromAt<'block_meta_data, B>
 	{
 		RestartCopyFromAt::new(self.block_allocator.memory_base_pointer, self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}

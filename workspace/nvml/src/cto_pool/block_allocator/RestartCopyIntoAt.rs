@@ -76,7 +76,7 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 			B::P::flush_memory(copy_into_chain_address.as_ptr() as *mut c_void, capacity);
 		}
 		
-		copy_and_flush_persistent_memory(copy_from_address, copy_into_chain_address, copy_from_capacity);
+		copy_and_flush_persistent_memory::<B>(copy_from_address, copy_into_chain_address, copy_from_capacity);
 		
 		if copy_from_capacity <= remaining_capacity
 		{
