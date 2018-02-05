@@ -97,7 +97,7 @@ impl<B: Block> BlockMetaData<B>
 	#[inline(always)]
 	fn capacity(&self) -> usize
 	{
-		self.chain_length().as_capacity()
+		self.chain_length().as_length()
 	}
 	
 	// Valid only if not in a bag.

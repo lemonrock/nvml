@@ -40,7 +40,7 @@ impl<B: Block> CtoSafe for BlockAllocator<B>
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		cto_pool_arc.replace(&mut self.cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
 	}
 }
 
@@ -56,13 +56,13 @@ impl<B: Block> BlockAllocator<B>
 		assert_ne!(number_of_blocks, 0, "number_of_blocks must not be zero");
 		
 		let maximum_block_pointer_index = number_of_blocks - 1;
-		assert!(maximum_block_pointer_index < BlockPointer::ExclusiveMaximumBlockPointer, "maximum_block_pointer_index must be less than ExclusiveMaximumBlockPointer '{}'", BlockPointer::ExclusiveMaximumBlockPointer);
+		assert!(maximum_block_pointer_index < BlockPointer::<B>::ExclusiveMaximumBlockPointer, "maximum_block_pointer_index must be less than ExclusiveMaximumBlockPointer '{}'", BlockPointer::<B>::ExclusiveMaximumBlockPointer);
 		
 		let capacity = number_of_blocks * B::BlockSizeInBytes;
 		
 		let memory_base_pointer = cto_pool_arc.aligned_allocate_or_panic(B::BlockSizeInBytes, capacity);
 		
-		let mut this = unsafe { NonNull::new_unchecked(cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::size_of(number_of_blocks)).as_ptr() as *mut Self) };
+		let mut this = unsafe { NonNull::new_unchecked(cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::<B>::size_of(number_of_blocks)).as_ptr() as *mut Self) };
 		
 		unsafe
 		{
