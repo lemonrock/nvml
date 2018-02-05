@@ -3,7 +3,7 @@
 
 
 #[derive(Debug)]
-struct Bag<B: Block>
+pub(crate) struct Bag<B: Block>
 {
 	bag_stripe_index_counter: BagStripeIndexCounter,
 	removal_counter: RemovalCounter,
@@ -38,14 +38,14 @@ impl<B: Block> Bag<B>
 {
 	// add tries to ensure a round-robin, uniform distribution amongst stripes.
 	#[inline(always)]
-	fn add(&self, chain_length: ChainLength, add_block: BlockPointer<B>, block_meta_data_items: &[BlockMetaData<B>])
+	pub(crate) fn add(&self, chain_length: ChainLength, add_block: BlockPointer<B>, block_meta_data_items: &BlockMetaDataItems<B>)
 	{
 		debug_assert!(add_block.is_not_null(), "add_block can not be null");
 		
 		let add_block_meta_data = add_block.expand_to_pointer_to_meta_data_unchecked(block_meta_data_items);
 		
-		debug_assert!(add_block_meta_data.get_next().is_null(), "add_block `next` can not be null");
-		debug_assert!(add_block_meta_data.get_previous().is_null(), "add_block `previous` can not be null");
+		debug_assert!(add_block_meta_data.get_next().is_null(), "add_block `next` can not be non-null");
+		debug_assert!(add_block_meta_data.get_previous().is_null(), "add_block `previous` can not be non-null");
 		debug_assert!(add_block_meta_data.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "add_block should not be in a bag already");
 		
 		let next_bag_stripe_index = self.obtain_next_bag_stripe_index();
@@ -56,7 +56,7 @@ impl<B: Block> Bag<B>
 	
 	// remove tries to ensure a round-robin, uniform distribution amongst stripes by always trying to remove from the oldest added to stripe.
 	#[inline(always)]
-	fn remove(&self, chain_length: ChainLength, block_meta_data_items: &[BlockMetaData<B>]) -> BlockPointer<B>
+	pub(crate) fn remove(&self, chain_length: ChainLength, block_meta_data_items: &BlockMetaDataItems<B>) -> BlockPointer<B>
 	{
 		let mut added_count = self.number_of_blocks_added_over_all_time();
 		let mut removed_count = self.number_of_blocks_removed_over_all_time();
@@ -103,34 +103,30 @@ impl<B: Block> Bag<B>
 	}
 	
 	#[inline(always)]
-	fn try_to_cut(&self, chain_length: ChainLength, probably_in_bag_block: BlockPointer<B>, probably_in_bag_block_meta_data: &BlockMetaData<B>, block_meta_data_items: &[BlockMetaData<B>], bag_stripe_index: BagStripeIndex) -> bool
+	pub(crate) fn try_to_cut(&self, chain_length: ChainLength, probably_in_bag_block: BlockPointer<B>, probably_in_bag_block_meta_data: &BlockMetaData<B>, block_meta_data_items: &BlockMetaDataItems<B>, bag_stripe_index: BagStripeIndex) -> bool
 	{
 		let bag_stripe = bag_stripe_index.get_bag_stripe(&self.bag_stripe_array);
 		bag_stripe.try_to_cut(chain_length, probably_in_bag_block, probably_in_bag_block_meta_data, block_meta_data_items)
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn number_of_blocks_added_over_all_time(&self) -> u64
 	{
 		self.bag_stripe_index_counter.current_count()
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn obtain_next_bag_stripe_index(&self) -> BagStripeIndex
 	{
 		self.bag_stripe_index_counter.next()
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn number_of_blocks_removed_over_all_time(&self) -> u64
 	{
 		self.removal_counter.current_count()
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn increment_number_of_blocks_removed_over_all_time(&self)
 	{

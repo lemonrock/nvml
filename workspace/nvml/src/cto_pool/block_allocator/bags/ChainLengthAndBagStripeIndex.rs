@@ -3,7 +3,16 @@
 
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-struct ChainLengthAndBagStripeIndex(u16);
+pub(crate) struct ChainLengthAndBagStripeIndex(u16);
+
+impl ChainLengthAndBagStripeIndex
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		ChainLengthAndBagStripeIndex::new(ChainLength::from_length(1), None)
+	}
+}
 
 impl ChainLengthAndBagStripeIndex
 {
@@ -12,7 +21,7 @@ impl ChainLengthAndBagStripeIndex
 	const BagStripeIndexShift: u16 = 10;
 	
 	#[inline(always)]
-	fn new(chain_length: ChainLength, bag_stripe_index: Option<BagStripeIndex>) -> Self
+	pub(crate) fn new(chain_length: ChainLength, bag_stripe_index: Option<BagStripeIndex>) -> Self
 	{
 		let mut value = chain_length.0;
 		if let Some(bag_stripe_index) = bag_stripe_index
@@ -23,14 +32,14 @@ impl ChainLengthAndBagStripeIndex
 	}
 	
 	#[inline(always)]
-	fn chain_length(self) -> ChainLength
+	pub(crate) fn chain_length(self) -> ChainLength
 	{
 		const Bits0To9Mask: u16 = 0x03FF;
 		ChainLength(self.0 & Bits0To9Mask)
 	}
 	
 	#[inline(always)]
-	fn bag_stripe_index(self) -> Option<BagStripeIndex>
+	pub(crate) fn bag_stripe_index(self) -> Option<BagStripeIndex>
 	{
 		const Bits14To10Mask: u16 = 0x7C00;
 		if self.0 & Self::Bit15 == Self::Bit15

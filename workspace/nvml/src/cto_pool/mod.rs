@@ -58,10 +58,7 @@ use ::std::sync::atomic::Ordering::SeqCst;
 pub mod arc;
 
 ///// A block_allocator
-//pub mod block_allocator;
-
-/// A block_bag
-pub mod block_bag;
+pub mod block_allocator;
 
 /// A Box like that in regular Rust's stdlib.
 pub mod boxed;

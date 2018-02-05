@@ -4,29 +4,31 @@
 
 use super::*;
 use super::super::persistent_memory::persistence::Persistence;
-use ::libc::c_void;
-use ::std::collections::BTreeMap;
+use self::bags::*;
 use ::std::marker::PhantomData;
-use ::std::mem::transmute;
+use ::std::mem::size_of;
 use ::std::ptr::copy_nonoverlapping;
+use ::std::ptr::drop_in_place;
+use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
 use ::std::ptr::write;
-use ::std::ptr::write_bytes;
-use ::std::slice::from_raw_parts;
-use ::std::slice::from_raw_parts_mut;
-use ::std::sync::atomic::AtomicPtr;
-use ::std::sync::atomic::AtomicU8;
-use ::std::sync::atomic::Ordering;
-use ::std::sync::atomic::Ordering::Relaxed;
-use ::std::sync::atomic::Ordering::Acquire;
+use ::std::sync::atomic::*;
+use ::std::sync::atomic::Ordering::*;
 
 
+mod bags;
+
+
+include!("AtomicBlockPointer.rs");
 include!("Block.rs");
 include!("BlockAllocator.rs");
+include!("BlockMetaData.rs");
+include!("BlockMetaDataItems.rs");
+include!("BlockPointer.rs");
 include!("Chain.rs");
-include!("ChainMetadata.rs");
+include!("ChainLength.rs");
 include!("Chains.rs");
-include!("Chain.rs");
-include!("PointerToNextChainOrLock.rs");
-include!("RestartCopyAt.rs");
-include!("VariableLengthArray.rs");
+include!("NonNullExt.rs");
+include!("PowerOfTwo.rs");
+include!("RestartCopyFromAt.rs");
+include!("RestartCopyIntoAt.rs");

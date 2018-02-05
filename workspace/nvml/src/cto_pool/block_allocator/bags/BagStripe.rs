@@ -29,11 +29,11 @@ impl<B: Block> Default for BagStripe<B>
 impl<B: Block> BagStripe<B>
 {
 	#[inline(always)]
-	fn add(&self, chain_length: ChainLength, add_block: BlockPointer<B>, block_meta_data_items: &[BlockMetaData<B>], add_block_meta_data: &BlockMetaData<B>, next_bag_stripe_index: BagStripeIndex)
+	fn add(&self, chain_length: ChainLength, add_block: BlockPointer<B>, block_meta_data_items: &BlockMetaDataItems<B>, add_block_meta_data: &BlockMetaData<B>, next_bag_stripe_index: BagStripeIndex)
 	{
 		debug_assert!(add_block.is_not_null(), "add_block can not be null");
-		debug_assert!(add_block_meta_data.get_next().is_null(), "add_block `next` can not be null");
-		debug_assert!(add_block_meta_data.get_previous().is_null(), "add_block `previous` can not be null");
+		debug_assert!(add_block_meta_data.get_next().is_null(), "add_block `next` can not be non-null");
+		debug_assert!(add_block_meta_data.get_previous().is_null(), "add_block `previous` can not be non-null");
 		debug_assert!(add_block_meta_data.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "add_block should not be in a bag already");
 		
 		self.acquire_spin_lock();
@@ -55,7 +55,7 @@ impl<B: Block> BagStripe<B>
 	}
 	
 	#[inline(always)]
-	fn remove(&self, chain_length: ChainLength, block_meta_data_items: &[BlockMetaData<B>]) -> BlockPointer<B>
+	fn remove(&self, chain_length: ChainLength, block_meta_data_items: &BlockMetaDataItems<B>) -> BlockPointer<B>
 	{
 		if !self.try_to_acquire_spin_lock()
 		{
@@ -86,7 +86,7 @@ impl<B: Block> BagStripe<B>
 	}
 	
 	#[inline(always)]
-	fn try_to_cut(&self, chain_length: ChainLength, cut_block: BlockPointer<B>, cut_block_meta_data: &BlockMetaData<B>, block_meta_data_items: &[BlockMetaData<B>]) -> bool
+	fn try_to_cut(&self, chain_length: ChainLength, cut_block: BlockPointer<B>, cut_block_meta_data: &BlockMetaData<B>, block_meta_data_items: &BlockMetaDataItems<B>) -> bool
 	{
 		if !self.try_to_acquire_spin_lock()
 		{

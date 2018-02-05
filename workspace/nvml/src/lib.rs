@@ -21,6 +21,7 @@
 #![feature(optin_builtin_traits)]
 #![feature(pattern)]
 #![feature(placement_new_protocol)]
+#![feature(pointer_methods)]
 #![feature(shared)]
 #![feature(specialization)]
 #![feature(str_internals)]

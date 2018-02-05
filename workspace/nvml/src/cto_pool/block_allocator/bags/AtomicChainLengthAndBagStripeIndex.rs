@@ -2,4 +2,29 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-include!("IsNotNull.rs");
+#[derive(Debug)]
+pub(crate) struct AtomicChainLengthAndBagStripeIndex(AtomicU16);
+
+impl AtomicChainLengthAndBagStripeIndex
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		AtomicChainLengthAndBagStripeIndex(ChainLengthAndBagStripeIndex::default().0)
+	}
+}
+
+impl AtomicChainLengthAndBagStripeIndex
+{
+	#[inline(always)]
+	pub(crate) fn get(&self) -> ChainLengthAndBagStripeIndex
+	{
+		ChainLengthAndBagStripeIndex(self.0.load(Acquire))
+	}
+	
+	#[inline(always)]
+	pub(crate) fn set(&self, new_value: ChainLengthAndBagStripeIndex)
+	{
+		self.0.store(new_value.0, Release)
+	}
+}

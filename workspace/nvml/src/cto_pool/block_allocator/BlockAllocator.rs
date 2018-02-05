@@ -2,27 +2,27 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-pub const MaximumNumberOfBlocksInAChain: usize = 2048;
-
-/// Build a single-threaded, non-persistent example first.
+/// Stored in Persistent Memory.
+#[derive(Debug)]
 pub struct BlockAllocator<B: Block>
 {
-	address: *mut u8,
-	number_of_blocks: usize,
-	capacity: usize,
-	exclusive_end_address: *mut u8,
+	memory_base_pointer: NonNull<u8>,
+	exclusive_end_address: NonNull<u8>,
 	cto_pool_arc: CtoPoolArc,
 	
-	// Each of those 2048 entries can have a locking, or similar, structure, eg a simplified mutex (set bit to lock, unset bit to unlock, use spinlocks as critical section is very small).
-	// We can walk up or down if we don't find a chain that matches. Probably better to walk up, and 'snap-off' what we don't need. It is probably better to 'snap-off' from the front, not the end, and then look to return these to the allocator by finding ends that match them, ie the bit we don't take is from the front. When returned to the pool, this is more likely to attach to an end.
-	// index in array free_list is equivalent to number of blocks
-	// RcuLock allows us to read() to see if there's actually a chain. If so, try to take the RcuLock.write() (takes a mutex).
-	// There are some lock-free set algorithms.
-		// We need remove_any() (or remove_first())
-		// And we need remove_specific() - use by the single thread that merges chains together
-			// Since remove_specific() needs the Set behaviour, it can handle bad set states, potentially.
-			// It's worth nothing that a Chain entry currently can fit in 128-bits - the size of an AtomicU128.
-	free_list: [(Set<Chain>, RcuLock); MaximumNumberOfBlocksInAChain],
+	// A free list.
+	bags: Bags<B>,
+	
+	// MUST be last item as it is variable-length.
+	block_meta_data_items: BlockMetaDataItems<B>,
+}
+
+unsafe impl<B: Block> Send for BlockAllocator<B>
+{
+}
+
+unsafe impl<B: Block> Sync for BlockAllocator<B>
+{
 }
 
 impl<B: Block> Drop for BlockAllocator<B>
@@ -30,7 +30,9 @@ impl<B: Block> Drop for BlockAllocator<B>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		self.cto_pool_arc.pool_pointer().free(self.address);
+		self.cto_pool_arc.pool_pointer().free(self.memory_base_pointer.as_ptr());
+		
+		self.cto_pool_arc.pool_pointer().free(self);
 	}
 }
 
@@ -47,230 +49,180 @@ impl<B: Block> BlockAllocator<B>
 {
 	const CacheLineSize: usize = 64;
 	
-	// The 'space' referred to is in the value of the address pointer. With blocks of size 256 bytes (or a power of two greater), there are 8 least significant bits of the pointer that are always 0 (unused).
-	const MinimumBlockSizeInBytesToCreateSpaceForAOneByteLock: usize = 256;
-	
-	/// New instance
-	/// block_size is a minimum of 256 and should be 512 for systems with AVX512 CPU instructions.
-	pub fn new(number_of_blocks: usize, cto_pool_arc: &CtoPoolArc) -> Self
+	/// block_size is a minimum of 256 and could be 512 for systems with AVX512 CPU instructions.
+	pub fn new(number_of_blocks: usize, cto_pool_arc: &CtoPoolArc) -> NonNull<Self>
 	{
-		#[inline(always)]
-		fn is_power_of_two(value: usize) -> bool
-		{
-			(value != 0) && ((value & (value - 1)) == 0)
-		}
-		
-		assert!(is_power_of_two(B::BlockSize), "block_size must be a power of two");
+		assert!(B::BlockSize.is_power_of_two(), "block_size must be a power of two");
 		assert!(B::BlockSize >= Self::CacheLineSize, "block_size must be be equal to or greater than cache-line size");
-		assert!(B::BlockSize >= Self::MinimumBlockSizeInBytesToCreateSpaceForAOneByteLock, "block_size must be be equal to or greater than MinimumBlockSizeInBytesToCreateSpaceForAOneByteLock, {}", MinimumBlockSizeInBytesToCreateSpaceForAOneByteLock);
-		assert!(is_power_of_two(number_of_blocks), "number_of_blocks must be a power of two");
+		assert_ne!(number_of_blocks, 0, "number_of_blocks must not be zero");
+		
+		let maximum_block_pointer_index = number_of_blocks - 1;
+		assert!(maximum_block_pointer_index < BlockPointer::ExclusiveMaximumBlockPointer, "maximum_block_pointer_index must be less than ExclusiveMaximumBlockPointer '{}'", BlockPointer::ExclusiveMaximumBlockPointer);
 		
 		let capacity = number_of_blocks * B::BlockSize;
-		assert!(capacity <= ::std::isize::MAX as usize, "capacity exceeds isize::MAX, making it impossible to use pointer offsets");
 		
-		let address = cto_pool_arc.pool_pointer().aligned_alloc(B::BlockSize, capacity).unwrap();
+		let memory_base_pointer = cto_pool_arc.aligned_allocate_or_panic(B::BlockSize, capacity);
 		
-		Self
+		let mut this = cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::size_of());
+		
+		unsafe
 		{
-			address,
-			number_of_blocks,
-			capacity,
-			exclusive_end_address: unsafe { address.offset(capacity as isize) },
-			cto_pool_arc: cto_pool_arc.clone(),
-			free_list: XXXXX,
+			write(&mut this.as_mut().memory_base_pointer, memory_base_pointer);
+			write(&mut this.as_mut().exclusive_end_address, memory_base_pointer.offset(capacity));
+			write(&mut this.as_mut().cto_pool_arc, cto_pool_arc.clone());
+			write(&mut this.as_mut().bags, Bags::default());
+			
+			this.as_mut().block_meta_data_items.initialize(number_of_blocks);
 		}
+		
+		// TODO: add blocks to bags and bag stripes.
+		
+		this
 	}
 	
 	#[inline(always)]
-	pub(crate) fn receive_solitary_chain_back(&self, solitary_chain: *mut Chain<B>)
+	fn block_meta_data_unchecked(&self, block_pointer: BlockPointer<B>) -> &BlockMetaData<B>
 	{
-		let solitary_chain = unsafe { &mut * solitary_chain };
+		block_pointer.expand_to_pointer_to_meta_data_unchecked(&self.block_meta_data_items)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn receive_solitary_chain_back(&self, solitary_chain_block_pointer: BlockPointer<B>)
+	{
+		debug_assert!(solitary_chain_block_pointer.is_not_null(), "solitary_chain_block_pointer should not be null");
+		let solitary_chain_block_meta_data = self.block_meta_data_unchecked(solitary_chain_block_pointer);
 		
-		debug_assert!(solitary_chain.next_chain_pointer_is_null(), "solitary chain has chains");
-		solitary_chain.make_available();
-		
-		let number_of_blocks = solitary_chain.number_of_blocks();
-		debug_assert_ne!(number_of_blocks, 0, "There can not be zero blocks in a chain");
-		debug_assert!(number_of_blocks <= MaximumNumberOfBlocksInAChain);
-		
-		// This loop attempts to repeatedly merge more chains onto this one.
+		// This loop attempts to repeatedly merge more chains onto the end of solitary_chain_block_pointer.
 		// Longer chains are better.
-		// We could put a limit on this loop by using a constant such as MaximumNumberOfBlocksInAChain
-		loop
+		let mut solitary_chain_length = solitary_chain_block_meta_data.chain_length();
+		while solitary_chain_length.is_less_than_inclusive_maximum()
 		{
-			let subsequent_chain_start_address = solitary_chain.subsequent_chain_start_address();
+			let subsequent_chain_start_address = solitary_chain_block_meta_data.subsequent_chain_start_address(self.memory_base_pointer, solitary_chain_length);
+			
 			if subsequent_chain_start_address == self.exclusive_end_address
 			{
-				self.nothing_to_merge_with_so_add_to_free_list(solitary_chain);
-				return;
+				break
+			}
+			
+			let cut_chain_block_pointer = BlockPointer::block_address_to_block_pointer(self.memory_base_pointer, subsequent_chain_start_address);
+			if self.bags.try_to_cut(&self.block_meta_data_items, cut_chain_block_pointer)
+			{
+				let cut_chain_block_meta_data = self.block_meta_data_unchecked(cut_chain_block_pointer);
+				
+				let cut_chain_length = cut_chain_block_meta_data.chain_length();
+				match solitary_chain_length.add_if_maximum_length_not_exceeded(cut_chain_length)
+				{
+					// The newly merged combined chain length may too long.
+					// Add the now unwanted cut_chain back to the bags free list.
+					None =>
+					{
+						cut_chain_block_meta_data.reset_before_add_to_bag();
+						self.bags.add(&self.block_meta_data_items, cut_chain_length, cut_chain_block_pointer);
+						break
+					},
+					
+					Some(combined_chain_length) => solitary_chain_length = combined_chain_length,
+				}
+				
+				solitary_chain_block_meta_data.acquire(solitary_chain_length);
 			}
 			else
 			{
-				let subsequent_chain = unsafe { &mut * (subsequent_chain_start_address as *mut Chain<B>) };
-				
-				if subsequent_chain.try_to_take()
-				{
-					solitary_chain.merge_subsequent_chain_onto_end(subsequent_chain);
-				}
-				else
-				{
-					// Happens because either it is already taken, or it was available and is now taken by another thread.
-					self.nothing_to_merge_with_so_add_to_free_list(solitary_chain);
-					return;
-				}
+				// Wasn't in the bag, or was stolen by another thread; give up trying to merge chains.
+				break
 			}
 		}
+		
+		self.nothing_to_merge_with_so_add_to_free_list(solitary_chain_block_meta_data, solitary_chain_length);
+	}
+	
+	/// Allocate
+	pub fn allocate(block_allocator: &CtoArc<Self>, requested_size: usize) -> Result<NonNull<Chains<B>>, ()>
+	{
+		let mut chains = Chains::new(block_allocator)?;
+		
+		let (number_of_blocks_required, _capacity_in_use_of_last_chain) = B::number_of_blocks_required_and_capacity_in_use_of_last_chain(requested_size);
+		if number_of_blocks_required == 0
+		{
+			return Ok(chains)
+		}
+		
+		// TODO: Estimate if there is enough memory left before allocating, as it makes failure faster.
+		
+		let mut number_of_blocks_remaining_to_find = number_of_blocks_required;
+		
+		let (mut head_of_chains_linked_list, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
+		if head_of_chains_linked_list.is_null()
+		{
+			drop_in_place(chains.as_ptr());
+			return Err(())
+		}
+		
+		let chains = unsafe { chains.as_mut().head_of_chains_linked_list = head_of_chains_linked_list };
+		
+		let mut previous_chain = head_of_chains_linked_list;
+		number_of_blocks_remaining_to_find -= chain_length;
+		while number_of_blocks_remaining_to_find != 0
+		{
+			let (mut next_chain, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
+			let mut previous_chain_block_meta_data = block_allocator.block_meta_data_unchecked(previous_chain);
+			if next_chain.is_null()
+			{
+				// If this isn't done, then who knows what we might free in `drop()`.
+				previous_chain_block_meta_data.set_next_chain(BlockPointer::Null);
+				drop_in_place(chains.as_ptr());
+				
+				return Err(())
+			}
+			previous_chain_block_meta_data.set_next_chain(next_chain);
+			
+			previous_chain = next_chain;
+			number_of_blocks_remaining_to_find -= chain_length;
+		}
+		
+		block_allocator.block_meta_data_unchecked(previous_chain).set_next_chain(BlockPointer::Null);
+		
+		Ok(chains)
 	}
 	
 	#[inline(always)]
-	fn nothing_to_merge_with_so_add_to_free_list(&self, solitary_chain: &mut Chain<B>)
+	fn nothing_to_merge_with_so_add_to_free_list(&self, solitary_chain_block_meta_data: &BlockMetaData<B>, solitary_chain_length: ChainLength)
 	{
-		debug_assert!(solitary_chain.memory_for_this_chain_is_available(), "This method should only be called with a chain that is available");
-		
-		
-		
-		
-		xxxx;
+		solitary_chain_block_meta_data.reset_before_add_to_bag();
+		self.bags.add(&self.block_meta_data_items, solitary_chain_length, solitary_chain_block_meta_data)
 	}
 	
-	
-	/// Allocate
-	// this: &CtoArc could be reduced to a Strong-only Arc, as there will never be weak references.
-	pub fn allocate<'chains>(this: &CtoArc<Self>, requested_size: usize) -> Chains<'chains, B>
+	#[inline(always)]
+	fn grab_a_chain(&self, ideal_number_of_blocks: usize) -> (BlockPointer<B>, usize)
 	{
-		struct FreeList([SomeChains; MaximumNumberOfBlocksInAChain]);
+		let capped_chain_length = min(ideal_number_of_blocks, InclusiveMaximumChainLength);
 		
-		impl FreeList
+		// (1) Try to get an exactly right chain or a longer chain.
+		let mut longer_chain_length = capped_chain_length;
+		while longer_chain_length <= InclusiveMaximumChainLength
 		{
-			#[inline(always)]
-			fn entry(&self, number_of_blocks_required: usize)
+			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from(capped_chain_length));
+			if chain.is_not_null()
 			{
-				debug_assert_ne!(number_of_blocks_required, 0, "can not ask for zero blocks");
-				debug_assert!(number_of_blocks_required <= MaximumNumberOfBlocksInAChain, "can not ask for more than MaximumNumberOfBlocksInAChain");
-				
-				let free_list_index = number_of_blocks_required - 1;
-				
-				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
-				let (number_of_chains, always_increasing_sentinel) = self.0[number_of_blocks_required];
-				
-				// Let's say we've locked this entry somehow.
-				if yep_ok
-				{
-					// Get the first chain in the queue of chains.
-					let locked_chain;
-					
-				}
+				return (chain, longer_chain_length)
 			}
+			
+			longer_chain_length += 1;
 		}
 		
-		
-		
-		let required_size = size_of::<ChainMetadata<B>> + requested_size;
-		let remainder = required_size % this.block_size;
-		
-		let (number_of_blocks_required, capacity_in_use_of_last_chain) = if remainder == 0
+		// (2) Try to get a smaller exactly right chain or a smaller chain.
+		let mut smaller_chain_length = capped_chain_length;
+		while smaller_chain_length > 0
 		{
-			(required_size / B::BlockSize, B::BlockSize)
+			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from(capped_chain_length));
+			if chain.is_not_null()
+			{
+				return (chain, smaller_chain_length)
+			}
+			
+			smaller_chain_length -=1;
 		}
-		else
-		{
-			((required_size / B::BlockSize) + 1, remainder)
-		};
 		
-		let mut linked_list_of_chains: *mut Chain<B> = null_mut();
-		
-		let free_list = &this.free_list;
-		
-		// TODO: We have to cap number_of_blocks to find to the size of the free_list
-		// TODO: When out of memory this will loop forever!
-		let mut number_of_blocks_remaining_to_find = number_of_blocks_required;
-		while number_of_blocks_remaining_to_find != 0
-		{
-			let free_list_index = number_of_blocks_remaining_to_find - 1;
-			
-			if number_of_blocks_remaining_to_find > MaximumNumberOfBlocksInAChain
-			{
-				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
-				let (number_of_chains, always_increasing_sentinel) = free_list[MaximumNumberOfBlocksInAChain - 1];
-				
-				// Let's say we've locked this entry somehow.
-				if yep_ok
-				{
-				
-				}
-			}
-			else
-			{
-			
-			}
-			
-			
-			
-			let mut incrementing_free_list_index = free_list_index;
-			while incrementing_free_list_index < free_list.len()
-			{
-				// An alternative to an always_increasing_sentinel is probably a spin-lock 0x00 / 0x1, or even-odd counts.
-				let (number_of_chains, always_increasing_sentinel) = free_list[incrementing_free_list_index];
-				
-				// Let's say we've locked this entry somehow.
-				if yep_ok
-				{
-					// Get the first chain in the queue of chains.
-					let locked_chain;
-					
-					let excess_blocks = incrementing_free_list_index - free_list_index;
-					if excess_blocks != 0
-					{
-						let number_of_blocks_to_retain = number_of_blocks_remaining_to_find;
-						// FIXME: potential problem: We have a lock (above) on this entry, and we need to re-enter the lock on this entry with the snapped off chain (if the snapped off chain no of blocks == number_of_blocks_to_retain, ie exactly double the size required), ie we may need to relinquish this lock.
-						locked_chain.snap_off_back_if_longer_than_required_capacity_and_recycle_into_block_allocator(number_of_blocks_to_retain, self);
-					}
-					
-					if linked_list_of_chains.is_null()
-					{
-						return Chains::new(this, locked_chain);
-					}
-					else
-					{
-						unsafe { &*linked_list_of_chains }.add_chain(locked_chain);
-						linked_list_of_chains =	locked_chain;
-						
-						// TODO: Something we should consider doing at this point is sorting the chains by address and seeing if we can merge them at all.
-						
-						
-						return Chains::new(this, unsafe { &*linked_list_of_chains });
-					}
-				}
-				
-				incrementing_free_list_index += 1;
-			}
-			
-			let mut decrementing_free_list_index = free_list_index;
-			while decrementing_free_list_index >= 0
-			{
-				let (number_of_chains, always_increasing_sentinel) = self.free_list[decrementing_free_list_index];
-				
-				// Let's say we've locked this entry somehow.
-				if yep_ok
-				{
-					// Get the first chain in the queue of chains.
-					let locked_chain;
-					
-					if linked_list_of_chains.is_null()
-					{
-						linked_list_of_chains = locked_chain;
-					}
-					else
-					{
-						unsafe { &*linked_list_of_chains }.add_chain(locked_chain);
-						linked_list_of_chains =	locked_chain;
-					}
-					
-					break;
-				}
-				
-				decrementing_free_list_index -= 1;
-			}
-		}
+		(BlockPointer::Null, 0)
 	}
 }

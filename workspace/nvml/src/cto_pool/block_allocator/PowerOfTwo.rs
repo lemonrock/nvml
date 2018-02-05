@@ -2,9 +2,17 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-use super::*;
+trait PowerOfTwo
+{
+	#[inline(always)]
+	fn is_power_of_two(self) -> bool;
+}
 
-
-include!("AtomicTaggedPointer.rs");
-include!("NonAtomicTaggedPointer.rs");
-include!("TaggedPointer.rs");
+impl PowerOfTwo for usize
+{
+	#[inline(always)]
+	fn is_power_of_two(self) -> bool
+	{
+		(self != 0) && ((self & (self - 1)) == 0)
+	}
+}

@@ -2,5 +2,4 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[allow(non_camel_case_types)]
-type u10 = u16;
+pub(crate) const InclusiveMaximumChainLength: usize = 1024;

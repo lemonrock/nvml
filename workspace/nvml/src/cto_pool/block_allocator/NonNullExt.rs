@@ -2,12 +2,28 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// A block
-pub trait Block: Copy
+trait NonNullExt
 {
-	/// How are blocks persisted?
-	type P: Persistence;
+	#[inline(always)]
+	fn offset(self, offset: usize) -> Self;
 	
-	/// Must be a power of two.
-	const BlockSizeInBytes: usize;
+	#[inline(always)]
+	fn difference(self, larger_pointer: Self) -> usize;
+}
+
+impl<T> NonNullExt for NonNull<T>
+{
+	#[inline(always)]
+	fn offset(self, offset: usize) -> Self
+	{
+		unsafe { NonNull::new_unchecked(self.as_ptr().offset(offset)) }
+	}
+	
+	#[inline(always)]
+	fn difference(self, larger_pointer: Self) -> usize
+	{
+		debug_assert!(larger_pointer >= self, "larger_pointer can not be less than self");
+		
+		let offset = (larger_pointer.as_ptr() as usize) - (self.as_ptr() as usize);
+	}
 }

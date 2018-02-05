@@ -2,51 +2,72 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+/// Stored in Persistent Memory
 #[derive(Debug)]
-pub struct Chains<'chains, B: 'chains + Block>
+pub struct Chains<B: Block>
 {
-	block_allocator: CtoArc<BlockAllocator>,
-	linked_list_of_chains: &'chains mut Chain<B>,
+	block_allocator: CtoArc<BlockAllocator<B>>,
+	head_of_chains_linked_list: BlockPointer<B>,
 }
 
-impl<'chains, B: Block> Drop for Chains<'chains, B>
+impl<B: Block> Drop for Chains<B>
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		self.linked_list_of_chains.recycle_chains_into_block_allocator(self.block_allocator.as_ref());
-	}
-}
-
-impl<'chains, B: Block> CtoSafe for Chains<'chains, B>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
-	{
-	}
-}
-
-impl<'chains, B: Block> Chains<'chains, B>
-{
-	#[inline(always)]
-	fn new(block_allocator: &CtoArc<BlockAllocator>, linked_list_of_chains: &'chains Chain<B>) -> Self
-	{
-		Self
+		if self.head_of_chains_linked_list.is_not_null()
 		{
-			block_allocator: block_allocator.clone(),
-			linked_list_of_chains,
+			let head = self.block_allocator.block_meta_data_unchecked(self.head_of_chains_linked_list);
+			head.recycle_chains_into_block_allocator(self.block_allocator.as_ref(), self.head_of_chains_linked_list);
+		}
+		
+		self.block_allocator.cto_pool_arc.free(self)
+	}
+}
+
+impl<B: Block> CtoSafe for Chains<B>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.block_allocator.cto_pool_opened(cto_pool_arc)
+	}
+}
+
+impl<B: Block> Chains<B>
+{
+	#[inline(always)]
+	fn new(block_allocator: &CtoArc<BlockAllocator<B>>) -> Result<NonNull<Self>, ()>
+	{
+		match block_allocator.cto_pool_arc.pool_pointer().aligned_alloc(size_of::<Self>(), size_of::<Self>())
+		{
+			Err(_) => Err(()),
+			Ok(void_pointer) =>
+			{
+				let mut this = unsafe { NonNull::new_unchecked(void_pointer as *mut u8) };
+				
+				unsafe
+				{
+					write(&mut this.as_mut().block_allocator, block_allocator.clone());
+					write(&mut this.as_mut().head_of_chains_linked_list, BlockPointer::Null);
+				}
+				
+				Ok(this)
+			}
 		}
 	}
 	
+	/// Stored in Volatile Memory
 	#[inline(always)]
-	pub fn copy_bytes_into_chains_start(&mut self, copy_from_address: *mut u8, copy_from_length: usize) -> RestartCopyAt<'chains, B>
+	pub fn copy_bytes_into_chains_start<'block_meta_data>(&self) -> RestartCopyIntoAt<'block_meta_data, B>
 	{
-		RestartCopyAt::copy_bytes_into_chains_start(self.linked_list_of_chains, copy_from_address, copy_from_length)
+		RestartCopyIntoAt::new(self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}
 	
+	/// Stored in Volatile Memory
 	#[inline(always)]
-	pub fn copy_bytes_from_chains_start(&mut self, copy_into_address: *mut c_void, copy_into_length: usize) -> RestartCopyAt<'chains, B>
+	pub fn copy_bytes_from_chains_start<'block_meta_data>(&self) -> RestartCopyFromAt<'block_meta_data, B>
 	{
-		RestartCopyAt::copy_bytes_from_chains_start(self.linked_list_of_chains, copy_into_address, copy_into_length)
+		RestartCopyFromAt::new(self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}
 }

@@ -2,4 +2,20 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-type StackLink<T> = NonAtomicTaggedPointer<Node<T>>;
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub(crate) struct BagStripeIndex(u5);
+
+impl BagStripeIndex
+{
+	#[inline(always)]
+	pub(crate) fn get_bag_stripe<'bag_stripe, B: Block>(&self, bag_stripe_array: &'bag_stripe [BagStripe<B>; BagStripeArrayLength]) -> &'bag_stripe BagStripe<B>
+	{
+		unsafe { bag_stripe_array.get_unchecked(self.as_index()) }
+	}
+	
+	#[inline(always)]
+	pub(crate) fn as_index(self) -> usize
+	{
+		self.0 as usize
+	}
+}

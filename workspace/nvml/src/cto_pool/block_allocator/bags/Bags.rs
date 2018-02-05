@@ -2,40 +2,58 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-/// Bags
-pub struct Bags<B: Block>
+#[derive(Debug)]
+pub(crate) struct Bags<B: Block>
 {
 	bags: [Bag<B>; InclusiveMaximumChainLength],
-	block_meta_data_items: [BlockMetaData<B>],
+}
+
+impl<B: Block> Default for Bags<B>
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self
+		{
+			bags:
+			{
+				let mut array: [Bag<B>; InclusiveMaximumChainLength] = unsafe { uninitialized() };
+				
+				for bag in array.iter_mut()
+				{
+					unsafe { write(array, Bag::default()) }
+				}
+				
+				array
+			},
+		}
+	}
 }
 
 impl<B: Block> Bags<B>
 {
-	/// add
 	#[inline(always)]
-	pub fn add(&self, chain_length: ChainLength, add_block: BlockPointer<B>)
+	pub(crate) fn add(&self, block_meta_data_items: &BlockMetaDataItems<B>, chain_length: ChainLength, add_block: BlockPointer<B>)
 	{
 		debug_assert!(add_block.is_not_null(), "add_block should not be null");
 		
 		let bag = chain_length.get_bag(&self.bags);
-		bag.add(chain_length, add_block, &self.block_meta_data_items)
+		bag.add(chain_length, add_block, block_meta_data_items)
 	}
 	
-	/// remove
 	#[inline(always)]
-	pub fn remove(&self, chain_length: ChainLength) -> BlockPointer<B>
+	pub(crate) fn remove(&self, block_meta_data_items: &BlockMetaDataItems<B>, chain_length: ChainLength) -> BlockPointer<B>
 	{
 		let bag = chain_length.get_bag(&self.bags);
-		bag.remove(chain_length, &self.block_meta_data_items)
+		bag.remove(chain_length, block_meta_data_items)
 	}
 	
-	/// try_to_cut
 	#[inline(always)]
-	pub fn try_to_cut(&self, might_not_be_in_bag_block: BlockPointer<B>) -> bool
+	pub(crate) fn try_to_cut(&self, block_meta_data_items: &BlockMetaDataItems<B>, might_not_be_in_bag_block: BlockPointer<B>) -> bool
 	{
 		debug_assert!(might_not_be_in_bag_block.is_not_null(), "might_not_be_in_bag_block should not be null");
 		
-		let might_not_be_in_bag_block_meta_data = might_not_be_in_bag_block.expand_to_pointer_to_meta_data_unchecked(&self.block_meta_data_items);
+		let might_not_be_in_bag_block_meta_data = might_not_be_in_bag_block.expand_to_pointer_to_meta_data_unchecked(block_meta_data_items);
 		
 		let mut chain_length_and_bag_stripe_index = might_not_be_in_bag_block_meta_data.chain_length_and_bag_stripe_index();
 		while let Some(bag_stripe_index) = chain_length_and_bag_stripe_index.bag_stripe_index()
@@ -43,7 +61,7 @@ impl<B: Block> Bags<B>
 			let chain_length = chain_length_and_bag_stripe_index.chain_length();
 			let bag: &Bag<B> = chain_length.get_bag(&self.bags);
 			
-			if bag.try_to_cut(chain_length, might_not_be_in_bag_block, might_not_be_in_bag_block_meta_data, &self.block_meta_data_items, bag_stripe_index)
+			if bag.try_to_cut(chain_length, might_not_be_in_bag_block, might_not_be_in_bag_block_meta_data, block_meta_data_items, bag_stripe_index)
 			{
 				return true
 			}

@@ -173,6 +173,12 @@ impl CtoPoolArc
 	}
 	
 	#[inline(always)]
+	fn aligned_allocate_or_panic(&self, alignment: usize, size: usize) -> NonNull<u8>
+	{
+		unsafe { NonNull::new_unchecked(self.pool_pointer().aligned_alloc(alignment, size).unwrap() as *mut u8) }
+	}
+	
+	#[inline(always)]
 	fn alloc(&self) -> CtoPoolAlloc
 	{
 		CtoPoolAlloc(self.clone())

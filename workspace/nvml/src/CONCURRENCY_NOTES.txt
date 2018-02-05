@@ -102,3 +102,85 @@ LibTM seems to be here: https://github.com/mikedw/synquake_tsx/tree/master/src/l
 
 
 
+(1) Persistent, Thread-safe Block Allocator for Messages
+
+A message's size is known in advance. We ask the allocator for a size. The allocator rounds this up to align to a multiple of block size, and supplies the rounded up number of blocks.
+Wherever possible, the allocator tries to provide blocks that are contiguous in memory. We can call these 'chains'.
+In practice, a particular request for a size may be satisfied with one or more chains. The maximum number of chains is equal to the maximum number of blocks for the size (ie each chain is of one block).
+Ideally, the allocator needs to supply the fewest possible chains, with each chain being as long as possible.
+
+The allocator will be handed back all the blocks (ie all the chains) in a request all at once, and should have a free list that lets it identify 'best-fit' chains.
+
+Some ideas:-
+	- the free list could consist of 'chains', sorted from longest to shortest;
+	- a particular request could try to find exactly the right length, then navigate up if it is not available, and 'split' the chain
+	- this navigation is similar to range requests against a BTreeMap.
+
+
+Implement https://crates.io/crates/seqlock which is very similar to a RCULock, but uses Copy and a sequence number (epoch number). Design looks more sane, and does not need a CtoArc.
+
+
+
+(2) Persistent, Thread-Safe Subscription Queue
+
+	(2.1) Multi-Producer, Single Consumer
+
+	(2.2) Multi-Producer, Multi Consumer for Shared Subscriptions
+
+
+(3) Persistent Map, Thread-safe, Unsorted
+
+	To find subscriptions
+
+	State associated with a long-lived connection
+
+	Etc
+
+Notes on (2)
+	- It would be nice if it was array based but it can be linked (although there's a much higher malloc cost).
+	- It would be nice if it had a queue-depth.
+	- It will have multiple producers.
+	- Shared subscriptions would have multiple readers.
+	- So we need a MP-SC queue and a MP-MC queue.
+	- Possibilities:
+		- Naive, array or linked list: would need a mutex per queue
+			- array is easy to grow - Mutex + CtoVec
+		- Bagpipe: Would need modification
+			- implements YangCrummeyQueue (see code at ?https://github.com/chaoran/fast-wait-free-queue?)
+			- implements FAAArrayQueue
+		- DPDK: Has a MP / MC ring structure
+			- would need modification
+			- has the advantage of switchable for multi-consumer (shared subns) or single-consumer (regular subns)
+		- https://crates.io/crates/multiqueue
+
+Notes on (3)
+
+	Options:-
+		(a) See https://github.com/pmem/pcj/blob/master/src/main/java/lib/xpersistent/PersistentConcurrentHashMapInternal.java
+			- based on libobj
+		(b) evmap made persistent
+			See https://docs.rs/evmap/2.0.1/evmap/struct.WriteHandle.html
+			- based on HashMap
+			- keys need clone (ok, use CtoArc)
+			- values need a shallow copy, probably achievable using a CtoArc (hmm: https://docs.rs/evmap/2.0.1/evmap/trait.ShallowCopy.html ).
+			- also supports a multi-map
+			- multiple writers need a Mutex, however
+			- has a natural persist point and potential recovery when the maps as swapped
+		(c) Regular hashmap, made persistent, hosted in a RCU-Lock
+			- Similar to (b) in that a mutex is used to protect writes
+			- clone of hashmap occurs for write, which could be expensive for lots of entries
+		(d) Modifided bisetmap (https://crates.io/crates/bisetmap), is thread-safe.
+		(e) https://crates.io/crates/chashmap - uses a striped hashmap (stripes are per bucket), also wraps all access to the inner structure in a per-hashtable RwLock.
+			- might not need the per-hashtable RwLock - might be sufficient to use an RcuLock / SeqLock (https://crates.io/crates/seqlock) which would optimise read access.
+			- pub fn reserve() may be problematic, as it is used frequently.
+
+
+
+Managing timeouts: https://github.com/GGist/pendulum-rs or DPDK.
+
+
+A new coroutine library: https://crates.io/crates/may
+
+
+See also: https://github.com/jfuentes/concurrent-data-structures
+and libcds: https://github.com/khizmax/libcds
