@@ -4,7 +4,7 @@
 
 // Effectively operates like a stack.
 #[derive(Debug)]
-struct BagStripe<B: Block>
+pub(crate) struct BagStripe<B: Block>
 {
 	head: AtomicBlockPointer<B>,
 	

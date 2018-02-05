@@ -15,7 +15,7 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 {
 	/// head_of_chains_linked_list can be null; any copy must then only be for zero bytes.
 	#[inline(always)]
-	pub fn new(memory_base_pointer: NonNull<u8>, head_of_chains_linked_list: BlockPointer<B>, block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>) -> Self
+	fn new(memory_base_pointer: NonNull<u8>, head_of_chains_linked_list: BlockPointer<B>, block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>) -> Self
 	{
 		Self
 		{

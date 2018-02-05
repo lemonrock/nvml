@@ -3,7 +3,7 @@
 
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-struct BlockMetaDataItems<B: Block>(PhantomData<B>);
+pub(crate) struct BlockMetaDataItems<B: Block>(PhantomData<B>);
 
 impl<B: Block> BlockMetaDataItems<B>
 {
