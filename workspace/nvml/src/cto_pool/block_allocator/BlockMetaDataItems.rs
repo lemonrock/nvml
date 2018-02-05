@@ -19,7 +19,8 @@ impl<B: Block> BlockMetaDataItems<B>
 		let mut index = 0;
 		while index < number_of_blocks
 		{
-			let block_meta_data = self.get(index).as_mut();
+			let mut block_meta_data_borrow_check_hack = self.get(index);
+			let block_meta_data = block_meta_data_borrow_check_hack.as_mut();
 			
 			write(block_meta_data, BlockMetaData::default());
 			
@@ -30,7 +31,7 @@ impl<B: Block> BlockMetaDataItems<B>
 	#[inline(always)]
 	fn get_unchecked(&self, block_pointer: usize) -> &BlockMetaData<B>
 	{
-		unsafe { self.get(block_pointer).as_ref() }
+		unsafe { self.get(block_pointer) }.longer_as_ref()
 	}
 	
 	#[inline(always)]

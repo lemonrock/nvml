@@ -57,7 +57,7 @@ use ::std::sync::atomic::Ordering::SeqCst;
 /// An Arc like that in regular Rust's stdlib.
 pub mod arc;
 
-///// A block_allocator
+/// A block_allocator
 pub mod block_allocator;
 
 /// A Box like that in regular Rust's stdlib.

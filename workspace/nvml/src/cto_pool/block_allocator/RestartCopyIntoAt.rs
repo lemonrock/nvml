@@ -30,6 +30,7 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 		}
 	}
 	
+	/// Copy bytes into chains from a source, `copy_from_address`.
 	#[inline(always)]
 	pub fn copy_bytes_into_chains(&mut self, copy_from_address: NonNull<u8>, copy_from_length: usize)
 	{

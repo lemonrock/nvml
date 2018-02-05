@@ -66,6 +66,6 @@ impl<B: Block> Chain<B>
 	fn block_meta_data(&self) -> &BlockMetaData<B>
 	{
 		let block_meta_data = self.block_meta_data.expect("No block meta data implies a null BlockPointer for this chain, which means we've exceeded the available memory");
-		unsafe { block_meta_data.as_ref() }
+		block_meta_data.longer_as_ref()
 	}
 }

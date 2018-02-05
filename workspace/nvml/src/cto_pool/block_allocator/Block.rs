@@ -11,6 +11,7 @@ pub trait Block: Copy
 	/// Must be a power of two.
 	const BlockSizeInBytes: usize;
 	
+	#[doc(hidden)]
 	#[inline(always)]
 	fn number_of_blocks_required_and_capacity_in_use_of_last_chain(requested_size: usize) -> (usize, usize)
 	{
