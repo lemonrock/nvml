@@ -16,13 +16,13 @@ pub trait Block: Copy
 	{
 		let remainder = requested_size % Self::BlockSizeInBytes;
 		
-		let (number_of_blocks_required, capacity_in_use_of_last_chain) = if remainder == 0
+		if remainder == 0
 		{
 			(requested_size / Self::BlockSizeInBytes, Self::BlockSizeInBytes)
 		}
 		else
 		{
 			((requested_size / Self::BlockSizeInBytes) + 1, remainder)
-		};
+		}
 	}
 }

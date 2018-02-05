@@ -13,22 +13,18 @@ pub struct RestartCopyFromAt<'block_meta_data, B: 'block_meta_data + Block>
 
 impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_meta_data, B>
 {
+	/// head_of_chains_linked_list can be null; any copy must then only be for zero bytes.
 	#[inline(always)]
 	pub fn new(memory_base_pointer: NonNull<u8>, head_of_chains_linked_list: BlockPointer<B>, block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>) -> Self
 	{
-		debug_assert!(head_of_chains_linked_list.is_not_null(), "head_of_chains_linked_list is null");
-		
 		Self
 		{
-			chain: Some
-			(
-				Chain
-				{
-					memory_base_pointer,
-					block_pointer: head_of_chains_linked_list,
-					block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data(block_meta_data_items),
-				}
-			),
+			chain: Chain
+			{
+				memory_base_pointer,
+				block_pointer: head_of_chains_linked_list,
+				block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data(block_meta_data_items),
+			},
 			offset: 0,
 			block_meta_data_items,
 		}
@@ -37,8 +33,6 @@ impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_met
 	#[inline(always)]
 	pub fn copy_bytes_from_chains(&mut self, copy_into_address: NonNull<u8>, copy_into_length: usize)
 	{
-		debug_assert_ne!(self.offset, self.chain.unwrap().capacity(), "offset should never be the chain length");
-		
 		if copy_into_length == 0
 		{
 			return;
@@ -57,8 +51,8 @@ impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_met
 	#[inline(always)]
 	fn copy_bytes_from_chains_offset(&mut self, copy_into_address: NonNull<u8>, copy_into_capacity: usize, offset: usize)
 	{
-		let copy_from_chain_address = self.data_ptr_offset(offset);
-		let remaining_capacity = self.remaining_capacity(offset);
+		let copy_from_chain_address = self.chain.data_ptr_offset(offset);
+		let remaining_capacity = self.chain.remaining_capacity(offset);
 		
 		self._copy_bytes_from_chains_inner(copy_into_address, copy_into_capacity, copy_from_chain_address, remaining_capacity, offset)
 	}
@@ -66,8 +60,8 @@ impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_met
 	#[inline(always)]
 	fn copy_bytes_from_chains_offset_is_zero(&mut self, copy_into_address: NonNull<u8>, copy_into_capacity: usize)
 	{
-		let copy_from_chain_address = self.data_ptr();
-		let remaining_capacity = self.capacity();
+		let copy_from_chain_address = self.chain.data_ptr();
+		let remaining_capacity = self.chain.capacity();
 		
 		self._copy_bytes_from_chains_inner(copy_into_address, copy_into_capacity, copy_from_chain_address, remaining_capacity, 0)
 	}

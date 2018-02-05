@@ -54,7 +54,7 @@ impl ChainLength
 	}
 	
 	#[inline(always)]
-	pub(crate) fn add(self, other: ChainLength)
+	pub(crate) fn add(self, other: ChainLength) -> Self
 	{
 		Self::from_length(self.as_length() + other.as_length())
 	}

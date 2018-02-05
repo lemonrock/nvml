@@ -5,12 +5,12 @@
 #[derive(Debug)]
 pub(crate) struct AtomicChainLengthAndBagStripeIndex(AtomicU16);
 
-impl AtomicChainLengthAndBagStripeIndex
+impl Default for AtomicChainLengthAndBagStripeIndex
 {
 	#[inline(always)]
 	fn default() -> Self
 	{
-		AtomicChainLengthAndBagStripeIndex(ChainLengthAndBagStripeIndex::default().0)
+		AtomicChainLengthAndBagStripeIndex(AtomicU16::new(ChainLengthAndBagStripeIndex::default().0))
 	}
 }
 

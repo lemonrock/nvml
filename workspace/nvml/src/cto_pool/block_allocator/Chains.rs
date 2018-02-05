@@ -3,7 +3,6 @@
 
 
 /// Stored in Persistent Memory
-#[derive(Debug)]
 pub struct Chains<B: Block>
 {
 	block_allocator: CtoArc<BlockAllocator<B>>,
@@ -21,7 +20,7 @@ impl<B: Block> Drop for Chains<B>
 			head.recycle_chains_into_block_allocator(self.block_allocator.as_ref(), self.head_of_chains_linked_list);
 		}
 		
-		self.block_allocator.cto_pool_arc.free(self)
+		self.block_allocator.cto_pool_arc.pool_pointer().free(self)
 	}
 }
 
@@ -44,7 +43,7 @@ impl<B: Block> Chains<B>
 			Err(_) => Err(()),
 			Ok(void_pointer) =>
 			{
-				let mut this = unsafe { NonNull::new_unchecked(void_pointer as *mut u8) };
+				let mut this = unsafe { NonNull::new_unchecked(void_pointer as *mut Self) };
 				
 				unsafe
 				{
@@ -61,13 +60,13 @@ impl<B: Block> Chains<B>
 	#[inline(always)]
 	pub fn copy_bytes_into_chains_start<'block_meta_data>(&self) -> RestartCopyIntoAt<'block_meta_data, B>
 	{
-		RestartCopyIntoAt::new(self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
+		RestartCopyIntoAt::new(self.block_allocator.memory_base_pointer, self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}
 	
 	/// Stored in Volatile Memory
 	#[inline(always)]
 	pub fn copy_bytes_from_chains_start<'block_meta_data>(&self) -> RestartCopyFromAt<'block_meta_data, B>
 	{
-		RestartCopyFromAt::new(self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
+		RestartCopyFromAt::new(self.block_allocator.memory_base_pointer, self.head_of_chains_linked_list, &self.block_allocator.block_meta_data_items)
 	}
 }

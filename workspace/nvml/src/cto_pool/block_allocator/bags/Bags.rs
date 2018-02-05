@@ -2,7 +2,6 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-#[derive(Debug)]
 pub(crate) struct Bags<B: Block>
 {
 	bags: [Bag<B>; InclusiveMaximumChainLength],
@@ -21,7 +20,7 @@ impl<B: Block> Default for Bags<B>
 				
 				for bag in array.iter_mut()
 				{
-					unsafe { write(array, Bag::default()) }
+					unsafe { write(bag, Bag::default()) }
 				}
 				
 				array

@@ -38,7 +38,7 @@ impl<B: Block> BlockMetaData<B>
 		if next_chain.is_not_null()
 		{
 			let next_chain_block_meta_data = block_allocator.block_meta_data_unchecked(next_chain);
-			next_chain.recycle_chains_into_block_allocator(block_allocator, next_chain);
+			next_chain_block_meta_data.recycle_chains_into_block_allocator(block_allocator, next_chain);
 		}
 		block_allocator.receive_solitary_chain_back(our_block_pointer)
 	}

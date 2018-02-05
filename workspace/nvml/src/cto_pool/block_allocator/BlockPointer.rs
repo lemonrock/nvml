@@ -32,7 +32,7 @@ impl<B: Block> BlockPointer<B>
 	#[inline(always)]
 	pub(crate) fn block_address_to_block_pointer(memory_base_pointer: NonNull<u8>, block_address: NonNull<u8>) -> Self
 	{
-		debug_assert!(block_address >= memory_base_pointer, "block_address can not be less than memory_base_pointer");
+		debug_assert!(block_address.as_ptr() >= memory_base_pointer.as_ptr(), "block_address can not be less than memory_base_pointer");
 		
 		let difference = memory_base_pointer.difference(block_address);
 		debug_assert_eq!(difference % B::BlockSizeInBytes, 0, "difference must be a multiple of BlockSizeInBytes");
@@ -61,10 +61,9 @@ impl<B: Block> BlockPointer<B>
 	#[inline(always)]
 	pub(crate) fn expand_to_pointer_to_memory_unchecked(self, memory_base_pointer: NonNull<u8>) -> NonNull<u8>
 	{
-		debug_assert_eq!((memory_base_pointer.as_ptr() as usize) % B::BlockSizeInBytes, 0, "memory_base_pointer must be a multiple of BlockSizeInBytes");
 		debug_assert!(self.is_not_null(), "this pointer is null");
 		
-		memory_base_pointer.offset(B::BlockSizeInBytes as isize * self.0 as isize)
+		memory_base_pointer.offset(B::BlockSizeInBytes * self.0)
 	}
 	
 	#[inline(always)]

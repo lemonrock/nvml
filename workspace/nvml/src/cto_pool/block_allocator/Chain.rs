@@ -47,7 +47,7 @@ impl<'block_meta_data, B: Block> Chain<'block_meta_data, B>
 	#[inline(always)]
 	pub(crate) fn data_ptr(&self) -> NonNull<u8>
 	{
-		self.block_pointer.expand_to_pointer_to_memory_unchecked(self.block_meta_data())
+		self.block_pointer.expand_to_pointer_to_memory_unchecked(self.memory_base_pointer)
 	}
 	
 	// Used by BlockAllocator

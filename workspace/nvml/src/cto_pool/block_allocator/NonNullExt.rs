@@ -16,14 +16,19 @@ impl<T> NonNullExt for NonNull<T>
 	#[inline(always)]
 	fn offset(self, offset: usize) -> Self
 	{
-		unsafe { NonNull::new_unchecked(self.as_ptr().offset(offset)) }
+		debug_assert!(offset <= (::std::isize::MAX as usize), "offset exceeds isize::MAX");
+		
+		unsafe { NonNull::new_unchecked(self.as_ptr().offset(offset as isize)) }
 	}
 	
 	#[inline(always)]
 	fn difference(self, larger_pointer: Self) -> usize
 	{
-		debug_assert!(larger_pointer >= self, "larger_pointer can not be less than self");
+		let larger_pointer = larger_pointer.as_ptr() as usize;
+		let self_pointer = self.as_ptr() as usize;
 		
-		let offset = (larger_pointer.as_ptr() as usize) - (self.as_ptr() as usize);
+		debug_assert!(larger_pointer >= self_pointer, "larger_pointer can not be less than self");
+		
+		larger_pointer - self_pointer
 	}
 }

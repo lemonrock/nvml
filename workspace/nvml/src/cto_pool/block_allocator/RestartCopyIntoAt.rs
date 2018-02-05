@@ -13,22 +13,18 @@ pub struct RestartCopyIntoAt<'block_meta_data, B: 'block_meta_data + Block>
 
 impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 {
+	/// head_of_chains_linked_list can be null; any copy must then only be for zero bytes.
 	#[inline(always)]
 	pub fn new(memory_base_pointer: NonNull<u8>, head_of_chains_linked_list: BlockPointer<B>, block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>) -> Self
 	{
-		debug_assert!(head_of_chains_linked_list.is_not_null(), "head_of_chains_linked_list is null");
-		
 		Self
 		{
-			chain: Some
-			(
-				Chain
-				{
-					memory_base_pointer,
-					block_pointer: head_of_chains_linked_list,
-					block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data(block_meta_data_items),
-				}
-			),
+			chain: Chain
+			{
+				memory_base_pointer,
+				block_pointer: head_of_chains_linked_list,
+				block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data(block_meta_data_items),
+			},
 			offset: 0,
 			block_meta_data_items,
 		}
@@ -37,8 +33,6 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 	#[inline(always)]
 	pub fn copy_bytes_into_chains(&mut self, copy_from_address: NonNull<u8>, copy_from_length: usize)
 	{
-		debug_assert_ne!(self.offset, self.chain.unwrap().capacity(), "offset should never be the chain length");
-		
 		if copy_from_length == 0
 		{
 			return;
@@ -79,7 +73,7 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 		fn copy_and_flush_persistent_memory<B: Block>(copy_from_address: NonNull<u8>, copy_into_chain_address: NonNull<u8>, capacity: usize)
 		{
 			unsafe { copy_nonoverlapping(copy_from_address.as_ptr() as *const _, copy_into_chain_address.as_ptr(), capacity) };
-			B::P::flush(copy_into_chain_address.as_ptr(), capacity);
+			B::P::flush_memory(copy_into_chain_address.as_ptr() as *mut c_void, capacity);
 		}
 		
 		copy_and_flush_persistent_memory(copy_from_address, copy_into_chain_address, copy_from_capacity);
@@ -124,7 +118,7 @@ impl<'block_meta_data, B: Block> RestartCopyIntoAt<'block_meta_data, B>
 	#[inline(always)]
 	fn next_chain(&mut self)
 	{
-		self.chain.next_chain();
+		self.chain.next_chain(self.block_meta_data_items);
 		self.offset = 0;
 	}
 }

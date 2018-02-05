@@ -3,7 +3,6 @@
 
 
 /// Stored in Persistent Memory.
-#[derive(Debug)]
 pub struct BlockAllocator<B: Block>
 {
 	memory_base_pointer: NonNull<u8>,
@@ -52,18 +51,18 @@ impl<B: Block> BlockAllocator<B>
 	/// block_size is a minimum of 256 and could be 512 for systems with AVX512 CPU instructions.
 	pub fn new(number_of_blocks: usize, cto_pool_arc: &CtoPoolArc) -> NonNull<Self>
 	{
-		assert!(B::BlockSize.is_power_of_two(), "block_size must be a power of two");
-		assert!(B::BlockSize >= Self::CacheLineSize, "block_size must be be equal to or greater than cache-line size");
+		assert!(B::BlockSizeInBytes.is_power_of_two(), "BlockSizeInBytes must be a power of two");
+		assert!(B::BlockSizeInBytes >= Self::CacheLineSize, "BlockSizeInBytes must be be equal to or greater than cache-line size");
 		assert_ne!(number_of_blocks, 0, "number_of_blocks must not be zero");
 		
 		let maximum_block_pointer_index = number_of_blocks - 1;
 		assert!(maximum_block_pointer_index < BlockPointer::ExclusiveMaximumBlockPointer, "maximum_block_pointer_index must be less than ExclusiveMaximumBlockPointer '{}'", BlockPointer::ExclusiveMaximumBlockPointer);
 		
-		let capacity = number_of_blocks * B::BlockSize;
+		let capacity = number_of_blocks * B::BlockSizeInBytes;
 		
-		let memory_base_pointer = cto_pool_arc.aligned_allocate_or_panic(B::BlockSize, capacity);
+		let memory_base_pointer = cto_pool_arc.aligned_allocate_or_panic(B::BlockSizeInBytes, capacity);
 		
-		let mut this = cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::size_of());
+		let mut this = unsafe { NonNull::new_unchecked(cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::size_of(number_of_blocks)).as_ptr() as *mut Self) };
 		
 		unsafe
 		{
@@ -99,7 +98,7 @@ impl<B: Block> BlockAllocator<B>
 		{
 			let subsequent_chain_start_address = solitary_chain_block_meta_data.subsequent_chain_start_address(self.memory_base_pointer, solitary_chain_length);
 			
-			if subsequent_chain_start_address == self.exclusive_end_address
+			if subsequent_chain_start_address.as_ptr() == self.exclusive_end_address.as_ptr()
 			{
 				break
 			}
@@ -157,8 +156,7 @@ impl<B: Block> BlockAllocator<B>
 			drop_in_place(chains.as_ptr());
 			return Err(())
 		}
-		
-		let chains = unsafe { chains.as_mut().head_of_chains_linked_list = head_of_chains_linked_list };
+		unsafe { chains.as_mut().head_of_chains_linked_list = head_of_chains_linked_list };
 		
 		let mut previous_chain = head_of_chains_linked_list;
 		number_of_blocks_remaining_to_find -= chain_length;
@@ -201,7 +199,7 @@ impl<B: Block> BlockAllocator<B>
 		let mut longer_chain_length = capped_chain_length;
 		while longer_chain_length <= InclusiveMaximumChainLength
 		{
-			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from(capped_chain_length));
+			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from_length(capped_chain_length));
 			if chain.is_not_null()
 			{
 				return (chain, longer_chain_length)
@@ -214,7 +212,7 @@ impl<B: Block> BlockAllocator<B>
 		let mut smaller_chain_length = capped_chain_length;
 		while smaller_chain_length > 0
 		{
-			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from(capped_chain_length));
+			let chain = self.bags.remove(&self.block_meta_data_items, ChainLength::from_length(capped_chain_length));
 			if chain.is_not_null()
 			{
 				return (chain, smaller_chain_length)
