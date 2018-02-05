@@ -4,21 +4,21 @@
 
 /// Stored in Volatile Memory
 #[derive(Debug)]
-pub(crate) struct Chain<'block_meta_data, B: 'block_meta_data + Block>
+pub(crate) struct Chain<B: Block>
 {
 	memory_base_pointer: NonNull<u8>,
 	block_pointer: BlockPointer<B>,
-	block_meta_data: Option<&'block_meta_data BlockMetaData<B>>,
+	block_meta_data: Option<NonNull<BlockMetaData<B>>>,
 }
 
-impl<'block_meta_data, B: Block> Chain<'block_meta_data, B>
+impl<B: Block> Chain<B>
 {
 	#[inline(always)]
-	pub(crate) fn next_chain(&mut self, block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>)
+	pub(crate) fn next_chain(&mut self, block_meta_data_items: &BlockMetaDataItems<B>)
 	{
 		let next_chain = self.get_next_chain();
 		self.block_pointer = next_chain;
-		self.block_meta_data = next_chain.expand_to_pointer_to_meta_data(block_meta_data_items);
+		self.block_meta_data = next_chain.expand_to_pointer_to_meta_data_raw(block_meta_data_items);
 	}
 	
 	#[inline(always)]
@@ -50,31 +50,22 @@ impl<'block_meta_data, B: Block> Chain<'block_meta_data, B>
 		self.block_pointer.expand_to_pointer_to_memory_unchecked(self.memory_base_pointer)
 	}
 	
-	// Used by BlockAllocator
-	#[inline(always)]
-	pub(crate) fn next_chain_pointer_is_null(&self) -> bool
-	{
-		self.get_next_chain().is_null()
-	}
-	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn get_next_chain(&self) -> BlockPointer<B>
 	{
 		self.block_meta_data().get_next_chain()
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
 	fn chain_length(&self) -> ChainLength
 	{
 		self.block_meta_data().chain_length()
 	}
 	
-	#[doc(hidden)]
 	#[inline(always)]
-	fn block_meta_data(&self) -> &'block_meta_data BlockMetaData<B>
+	fn block_meta_data(&self) -> &BlockMetaData<B>
 	{
-		self.block_meta_data.as_ref().expect("No block meta data implies a null BlockPointer for this chain, which means we've exceeded the available memory")
+		let block_meta_data = self.block_meta_data.expect("No block meta data implies a null BlockPointer for this chain, which means we've exceeded the available memory");
+		unsafe { block_meta_data.as_ref() }
 	}
 }

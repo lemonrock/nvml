@@ -6,7 +6,7 @@
 #[derive(Debug)]
 pub struct RestartCopyFromAt<'block_meta_data, B: 'block_meta_data + Block>
 {
-	chain: Chain<'block_meta_data, B>,
+	chain: Chain<B>,
 	offset: usize,
 	block_meta_data_items: &'block_meta_data BlockMetaDataItems<B>,
 }
@@ -23,7 +23,7 @@ impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_met
 			{
 				memory_base_pointer,
 				block_pointer: head_of_chains_linked_list,
-				block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data(block_meta_data_items),
+				block_meta_data: head_of_chains_linked_list.expand_to_pointer_to_meta_data_raw(block_meta_data_items),
 			},
 			offset: 0,
 			block_meta_data_items,

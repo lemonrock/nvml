@@ -75,6 +75,27 @@ impl<B: Block> BlockPointer<B>
 	}
 	
 	#[inline(always)]
+	pub(crate) fn expand_to_pointer_to_meta_data_raw(self, block_meta_data_items: &BlockMetaDataItems<B>) -> Option<NonNull<BlockMetaData<B>>>
+	{
+		if self.is_null()
+		{
+			None
+		}
+		else
+		{
+			Some(self.expand_to_pointer_to_meta_data_raw_unchecked(block_meta_data_items))
+		}
+	}
+	
+	#[inline(always)]
+	pub(crate) fn expand_to_pointer_to_meta_data_raw_unchecked(self, block_meta_data_items: &BlockMetaDataItems<B>) -> NonNull<BlockMetaData<B>>
+	{
+		debug_assert!(self.is_not_null(), "this pointer is null");
+		
+		block_meta_data_items.get_unchecked_raw(self.0 as usize)
+	}
+	
+	#[inline(always)]
 	pub(crate) fn equals(self, other: Self) -> bool
 	{
 		self.0 == other.0
