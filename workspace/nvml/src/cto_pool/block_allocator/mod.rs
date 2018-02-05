@@ -6,6 +6,7 @@ use super::*;
 use super::super::persistent_memory::persistence::Persistence;
 use self::bags::*;
 use ::libc::c_void;
+use ::std::cell::Cell;
 use ::std::marker::PhantomData;
 use ::std::mem::size_of;
 use ::std::ptr::copy_nonoverlapping;

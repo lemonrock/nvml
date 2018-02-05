@@ -9,7 +9,7 @@ pub(crate) struct BlockMetaData<B: Block>
 	next: AtomicBlockPointer<B>,
 	previous: AtomicBlockPointer<B>,
 	
-	next_chain: BlockPointer<B>,
+	next_chain: Cell<BlockPointer<B>>,
 }
 
 impl<B: Block> BlockMetaData<B>
@@ -23,7 +23,7 @@ impl<B: Block> BlockMetaData<B>
 			next: AtomicBlockPointer::default(),
 			previous: AtomicBlockPointer::default(),
 			
-			next_chain: BlockPointer::default(),
+			next_chain: Cell::new(BlockPointer::default()),
 		}
 	}
 }
@@ -72,7 +72,7 @@ impl<B: Block> BlockMetaData<B>
 		
 		self.next.set_relaxed(BlockPointer::Null);
 		self.previous.set_relaxed(BlockPointer::Null);
-		self.next_chain = BlockPointer::Null;
+		self.next_chain.set(BlockPointer::Null);
 	}
 	
 	// Valid only if not in a bag.
@@ -81,7 +81,7 @@ impl<B: Block> BlockMetaData<B>
 	fn get_next_chain(&self) -> BlockPointer<B>
 	{
 		debug_assert!(self.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "can not ask for next_chain when in a bag");
-		self.next_chain
+		self.next_chain.get()
 	}
 	
 	// Valid only if not in a bag.
@@ -90,7 +90,7 @@ impl<B: Block> BlockMetaData<B>
 	fn set_next_chain(&self, new_next_chain: BlockPointer<B>)
 	{
 		debug_assert!(self.chain_length_and_bag_stripe_index().bag_stripe_index().is_none(), "can not ask for next_chain when in a bag");
-		self.next_chain = new_next_chain
+		self.next_chain.set(new_next_chain)
 	}
 	
 	// Valid only if not in a bag.

@@ -38,13 +38,14 @@ impl<'block_meta_data, B: 'block_meta_data + Block> RestartCopyFromAt<'block_met
 			return;
 		}
 		
-		if self.offset == 0
+		let offset = self.offset;
+		if offset == 0
 		{
 			self.copy_bytes_from_chains_offset_is_zero(copy_into_address, copy_into_length)
 		}
 		else
 		{
-			self.copy_bytes_from_chains_offset(copy_into_address, copy_into_length, self.offset)
+			self.copy_bytes_from_chains_offset(copy_into_address, copy_into_length, offset)
 		}
 	}
 	

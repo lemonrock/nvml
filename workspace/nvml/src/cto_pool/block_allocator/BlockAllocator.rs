@@ -150,10 +150,10 @@ impl<B: Block> BlockAllocator<B>
 		
 		let mut number_of_blocks_remaining_to_find = number_of_blocks_required;
 		
-		let (mut head_of_chains_linked_list, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
+		let (head_of_chains_linked_list, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
 		if head_of_chains_linked_list.is_null()
 		{
-			drop_in_place(chains.as_ptr());
+			unsafe { drop_in_place(chains.as_ptr()) };
 			return Err(())
 		}
 		unsafe { chains.as_mut().head_of_chains_linked_list = head_of_chains_linked_list };
@@ -162,13 +162,13 @@ impl<B: Block> BlockAllocator<B>
 		number_of_blocks_remaining_to_find -= chain_length;
 		while number_of_blocks_remaining_to_find != 0
 		{
-			let (mut next_chain, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
-			let mut previous_chain_block_meta_data = block_allocator.block_meta_data_unchecked(previous_chain);
+			let (next_chain, chain_length) = block_allocator.grab_a_chain(number_of_blocks_remaining_to_find);
+			let previous_chain_block_meta_data = block_allocator.block_meta_data_unchecked(previous_chain);
 			if next_chain.is_null()
 			{
 				// If this isn't done, then who knows what we might free in `drop()`.
 				previous_chain_block_meta_data.set_next_chain(BlockPointer::Null);
-				drop_in_place(chains.as_ptr());
+				unsafe { drop_in_place(chains.as_ptr()) };
 				
 				return Err(())
 			}
