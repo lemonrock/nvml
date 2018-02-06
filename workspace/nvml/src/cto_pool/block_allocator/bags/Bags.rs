@@ -29,6 +29,18 @@ impl<B: Block> Default for Bags<B>
 	}
 }
 
+impl<B: Block> CtoSafe for Bags<B>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		for bag in self.bags.iter_mut()
+		{
+			bag.cto_pool_opened(cto_pool_arc)
+		}
+	}
+}
+
 impl<B: Block> Bags<B>
 {
 	#[inline(always)]

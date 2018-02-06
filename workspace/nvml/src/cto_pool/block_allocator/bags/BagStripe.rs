@@ -7,10 +7,7 @@
 pub(crate) struct BagStripe<B: Block>
 {
 	head: AtomicBlockPointer<B>,
-	
-	// We can probably avoid this spinlock when using HTM
-	// TODO: We can, if we want, pack this into head using 1-bit.
-	mutex_exclusion_spin_lock: AtomicBool,
+	spin_lock: BestSpinLockForCompilationTarget,
 }
 
 impl<B: Block> Default for BagStripe<B>
@@ -21,8 +18,17 @@ impl<B: Block> Default for BagStripe<B>
 		Self
 		{
 			head: AtomicBlockPointer::default(),
-			mutex_exclusion_spin_lock: AtomicBool::new(false),
+			spin_lock: BestSpinLockForCompilationTarget::default(),
 		}
+	}
+}
+
+impl<B: Block> CtoSafe for BagStripe<B>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+		self.spin_lock.forcibly_unlock_spin_lock()
 	}
 }
 
@@ -158,10 +164,7 @@ impl<B: Block> BagStripe<B>
 	#[inline(always)]
 	fn acquire_spin_lock(&self)
 	{
-		while !self.try_to_acquire_spin_lock()
-		{
-			spin_loop_hint()
-		}
+		self.spin_lock.acquire_spin_lock()
 	}
 	
 	// Returns true if acquired spin lock
@@ -169,15 +172,13 @@ impl<B: Block> BagStripe<B>
 	#[inline(always)]
 	fn try_to_acquire_spin_lock(&self) -> bool
 	{
-		self.mutex_exclusion_spin_lock.fetch_xor(true, Acquire)
+		self.spin_lock.try_to_acquire_spin_lock()
 	}
 	
 	#[inline(always)]
 	#[doc(hidden)]
 	fn unlock_spin_lock(&self)
 	{
-		debug_assert!(self.mutex_exclusion_spin_lock.load(Relaxed), "Does not have spin lock");
-		
-		self.mutex_exclusion_spin_lock.store(true, Release)
+		self.spin_lock.unlock_spin_lock()
 	}
 }

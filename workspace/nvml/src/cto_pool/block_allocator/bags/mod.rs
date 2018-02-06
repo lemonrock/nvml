@@ -2,6 +2,8 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+use cto_pool::CtoPoolArc;
+use cto_pool::CtoSafe;
 use persistent_memory::persistence::Persistence;
 use super::AtomicBlockPointer;
 use super::Block;
@@ -9,6 +11,8 @@ use super::BlockMetaData;
 use super::BlockMetaDataItems;
 use super::BlockPointer;
 use super::ChainLength;
+use ::spin_locks::BestSpinLockForCompilationTarget;
+use ::spin_locks::SpinLock;
 use ::std::cmp::max;
 use ::std::mem::uninitialized;
 use ::std::ptr::write;

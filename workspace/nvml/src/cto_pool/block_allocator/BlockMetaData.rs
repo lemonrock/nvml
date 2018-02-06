@@ -3,6 +3,7 @@
 
 
 #[derive(Debug)]
+#[repr(C)]
 pub(crate) struct BlockMetaData<B: Block>
 {
 	chain_length_and_bag_stripe_index: AtomicChainLengthAndBagStripeIndex,

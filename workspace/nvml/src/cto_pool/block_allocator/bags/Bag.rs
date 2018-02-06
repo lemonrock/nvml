@@ -34,6 +34,18 @@ impl<B: Block> Default for Bag<B>
 	}
 }
 
+impl<B: Block> CtoSafe for Bag<B>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		for bag_stripe in self.bag_stripe_array.iter_mut()
+		{
+			bag_stripe.cto_pool_opened(cto_pool_arc)
+		}
+	}
+}
+
 impl<B: Block> Bag<B>
 {
 	// add tries to ensure a round-robin, uniform distribution amongst stripes.

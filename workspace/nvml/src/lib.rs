@@ -57,6 +57,7 @@ pub extern crate parking_lot;
 extern crate rust_extra;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+extern crate spin_locks;
 extern crate std_unicode;
 extern crate syscall_alt;
 
@@ -84,7 +85,6 @@ pub mod object_pool;
 /// Basic abstractions supporting the use of persistent memory.
 /// Essential if building alternatives to the block, cto, log or object pools.
 pub mod persistent_memory;
-
 
 use ::block_pool::BlockPool;
 use ::block_pool::BlockPoolsConfiguration;

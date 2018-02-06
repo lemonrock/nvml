@@ -41,6 +41,8 @@ impl<B: Block> CtoSafe for BlockAllocator<B>
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
 		cto_pool_arc.write(&mut self.cto_pool_arc);
+		
+		self.bags.cto_pool_opened(cto_pool_arc)
 	}
 }
 
