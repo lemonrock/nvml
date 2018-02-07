@@ -6,31 +6,16 @@
 	// <https://nahratzah.wordpress.com/2012/10/11/lock-free-programming-and-formal-proofs/>
 	// Code is close to impenetrable but could be converted... just.
 
-// Option : Hardware Transactional Memory
-	// Definitely do-able
-	// A software implementation is maybe possible via `picotm`, but this uses `setjmp` / `longjmp` and a thread-lock
-		// Indeed, most hybrid transactional memory solutions do use a thread-lock
-		// We don't need to if we know which memory values we're touching
-	// libitm for a composite?
-
 // Investigate: http://drops.dagstuhl.de/opus/volltexte/2016/6678/pdf/LIPIcs-OPODIS-2015-35.pdf
 	// Non-Blocking Doubly-Linked Lists with Good Amortized Complexity
 	// ? https://github.com/mynameisfiber/jackslinks ?
 	// ? https://github.com/Kronuz/Xapiand/commit/e26274777cab99971250fd0ffd736996bff51f6c ?
-
-// Not-So-Keen Option: Adapt Java's variation of MSQueue (ConcurrentLinkedQueue) so can delete OR adapt Java's ConcurrentDeque
-	// Relies on Java GC, so might be hard to tease out.
 
 // Lesser Option: Michael Scott (https://www.cs.rochester.edu/~scott/#personal) has a C++ deque. Need to find how to get the source.
 
 // PicoTM Blog: http://transactionblog.org/2017/12/15/porting-picotm-to-mac-os-windows-and-freebsd/
 	- useful ideas
 
-
-
-
-
-// NOTE: A working deque using a lock: https://github.com/cksystemsgroup/scalloc/blob/master/src/deque.h
 
 // NOTE: A skiplist (priority queue) from Facebook in C++: https://github.com/facebook/folly/blob/master/folly/ConcurrentSkipList.h
 
@@ -58,6 +43,8 @@
 
 // WOW: https://dl.acm.org/citation.cfm?id=3079519 - a wait-free hashtable in C++. Now where is the code for it?..
 
+// Interesting information on Bw-Trees, a Rust lock-free skip-list, etc: https://internals.rust-lang.org/t/crossbeam-request-for-help/4933/22
+
 // TSX: Poor quality implementation, single linked list C++, HTM / libitm single linked list: https://github.com/nmldiegues/proteustm/blob/master/benchmarks/datastructures-gcc/linkedlist/linkedlist.cpp (walks the list)
 
 // TSX: Poor quality implementation, skip list, but Intel TSX based skiplist / leaplist: https://www.cs.tau.ac.il/~multi/2015a/Leaplist.htm
@@ -82,9 +69,13 @@
 	// https://dl.acm.org/citation.cfm?id=2676963
 		//
 // Branchless UTF-8 decoding: http://nullprogram.com/blog/2017/10/06/ and, potentially similar: http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
-// An efficient mutex that doesn't use pthreads and is simpler (in some ways) to parking_lot: https://docs.rs/mcs/0.1.1/mcs/struct.Mutex.html
+// An efficient mutex MCS that doesn't use pthreads and is simpler (in some ways) to parking_lot: https://docs.rs/mcs/0.1.1/mcs/struct.Mutex.html
 	// Needs a `Slot`, which is a thread-local handle.
 	// Uses a spinlock with a queue of waiting threads
+// Sequence Lock: https://crates.io/crates/seqlock which is very similar to a RCULock, but uses Copy and a sequence number (epoch number). Design looks more sane, and does not need a CtoArc.
+
+// Bagpipe: Rust implementation of wf_queue / Yang + Crummey queue
+
 
 Using HTM
 
@@ -117,7 +108,6 @@ Some ideas:-
 	- this navigation is similar to range requests against a BTreeMap.
 
 
-Implement https://crates.io/crates/seqlock which is very similar to a RCULock, but uses Copy and a sequence number (epoch number). Design looks more sane, and does not need a CtoArc.
 
 
 

@@ -71,6 +71,9 @@
       <w>poolsize</w>
       <w>prefault</w>
       <w>pthread</w>
+      <w>rdrand</w>
+      <w>rdrnd</w>
+      <w>rdseed</w>
       <w>recurses</w>
       <w>repr</w>
       <w>rpmem</w>

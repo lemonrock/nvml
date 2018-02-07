@@ -8,6 +8,7 @@
 #![feature(alloc)]
 #![feature(allocator_api)]
 #![feature(asm)]
+#![feature(attr_literals)]
 #![feature(box_into_raw_non_null)]
 #![feature(collections_range)]
 #![feature(const_fn)]
@@ -21,10 +22,14 @@
 #![feature(optin_builtin_traits)]
 #![feature(pattern)]
 #![feature(placement_new_protocol)]
+#![feature(platform_intrinsics)]
 #![feature(pointer_methods)]
+#![feature(repr_align)]
 #![feature(shared)]
 #![feature(specialization)]
+#![feature(stmt_expr_attributes)]
 #![feature(str_internals)]
+#![feature(target_feature)]
 #![feature(thread_local)]
 #![feature(trusted_len)]
 #![feature(unicode)]
@@ -54,6 +59,7 @@ extern crate libc;
 extern crate nvml_sys;
 pub extern crate parking_lot;
 #[macro_use] extern crate quick_error;
+#[cfg(any(not(feature = "rdrand"), not(any(target_arch = "x86", target_arch = "x86_64"))))] extern crate rand;
 extern crate rust_extra;
 extern crate serde;
 #[macro_use] extern crate serde_derive;

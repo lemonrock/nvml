@@ -78,11 +78,8 @@ pub mod synchronisation;
 /// A String like that in regular Rust's stdlib.
 pub mod string;
 
-/// A doubly linked list implementation
-//pub mod doubly_linked_list;
-
-
-
+/// A non-blocking free list that is persistent.
+pub mod free_list;
 
 include!("Allocator.rs");
 include!("CtoPool.rs");

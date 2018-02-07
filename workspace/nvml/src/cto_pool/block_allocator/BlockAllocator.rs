@@ -3,6 +3,8 @@
 
 
 /// Stored in Persistent Memory.
+/// Uses `#[repr(C)]` to prevent reordering of fields.
+#[repr(C)]
 pub struct BlockAllocator<B: Block>
 {
 	memory_base_pointer: NonNull<u8>,
@@ -68,12 +70,13 @@ impl<B: Block> BlockAllocator<B>
 		
 		unsafe
 		{
-			write(&mut this.as_mut().memory_base_pointer, memory_base_pointer);
-			write(&mut this.as_mut().exclusive_end_address, memory_base_pointer.offset(capacity));
-			write(&mut this.as_mut().cto_pool_arc, cto_pool_arc.clone());
-			write(&mut this.as_mut().bags, Bags::default());
+			let this = this.as_mut();
+			write(&mut this.memory_base_pointer, memory_base_pointer);
+			write(&mut this.exclusive_end_address, memory_base_pointer.offset(capacity));
+			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
+			write(&mut this.bags, Bags::default());
 			
-			this.as_mut().block_meta_data_items.initialize(number_of_blocks);
+			this.block_meta_data_items.initialize(number_of_blocks);
 		}
 		
 		// TODO: add blocks to bags and bag stripes.
