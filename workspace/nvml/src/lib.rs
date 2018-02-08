@@ -10,6 +10,7 @@
 #![feature(asm)]
 #![feature(attr_literals)]
 #![feature(box_into_raw_non_null)]
+#![feature(cfg_target_feature)]
 #![feature(collections_range)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]
@@ -59,7 +60,7 @@ extern crate libc;
 extern crate nvml_sys;
 pub extern crate parking_lot;
 #[macro_use] extern crate quick_error;
-#[cfg(any(not(feature = "rdrand"), not(any(target_arch = "x86", target_arch = "x86_64"))))] extern crate rand;
+#[cfg(not(all(target_feature = "rdrnd", any(target_arch = "x86", target_arch = "x86_64"))))] extern crate rand;
 extern crate rust_extra;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
