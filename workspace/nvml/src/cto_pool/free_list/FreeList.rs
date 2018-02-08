@@ -2,15 +2,93 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+/// Provides a strong atomically referenced counted ('Arc') wrapper around a FreeList.
+/// When the last instance of `CtoFreeListArc` is dropped, the FreeList is dropped and all FreeListElements in the list are dropped.
+pub struct CtoFreeListArc<T>(NonNull<FreeList<T>>);
+
+unsafe impl<T> Send for CtoFreeListArc<T>
+{
+}
+
+unsafe impl<T> Sync for CtoFreeListArc<T>
+{
+}
+
+impl<T> CtoSafe for CtoFreeListArc<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.deref_mut().cto_pool_opened(cto_pool_arc)
+	}
+}
+
+impl<T> Drop for CtoFreeListArc<T>
+{
+	#[inline(always)]
+	fn drop(&mut self)
+	{
+		if self.deref().release_reference()
+		{
+			unsafe { drop_in_place(self.deref_mut()) }
+		}
+	}
+}
+
+impl<T> Clone for CtoFreeListArc<T>
+{
+	#[inline(always)]
+	fn clone(&self) -> Self
+	{
+		self.deref().acquire_reference();
+		CtoFreeListArc(self.0)
+	}
+}
+
+impl<T> Deref for CtoFreeListArc<T>
+{
+	type Target = FreeList<T>;
+	
+	#[inline(always)]
+	fn deref(&self) -> &Self::Target
+	{
+		unsafe { self.0.as_ref() }
+	}
+}
+
+impl<T> DerefMut for CtoFreeListArc<T>
+{
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut Self::Target
+	{
+		unsafe { self.0.as_mut() }
+	}
+}
+
+impl<T> CtoFreeListArc<T>
+{
+	/// Create a new instance.
+	/// Supply a `free_list_element_provider` if you want to make sure the elimination array is initially populated.
+	/// This can return `None` if it no longer can provide free list elements.
+	/// `elimination_array_length` should be equivalent to the number of threads.
+	#[inline(always)]
+	pub fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(allocator: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> Self
+	{
+		CtoFreeListArc(FreeList::new(allocator, elimination_array_length, free_list_element_provider))
+	}
+}
+
 /// To be useful, needs to be held in a CtoArc or similar structure.
 /// Uses `#[repr(C)]` to prevent re-ordering of fields.
 /// Uses align of AtomicIsolationSize.
+/// NOTE: Can not be placed inside `CtoArc` without using double indirection, which is inefficient.
 #[cfg_attr(any(target_arch = "x86", target_arch = "mips", target_arch = "sparc", target_arch = "nvptx", target_arch = "wasm32", target_arch = "hexagon"), repr(C, align(32)))]
 #[cfg_attr(any(target_arch = "mips64", target_arch = "sparc64", target_arch = "s390x"), repr(C, align(64)))]
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "powerpc", target_arch = "powerpc64"), repr(C, align(128)))]
 #[cfg_attr(any(target_arch = "arm", target_arch = "aarch64"), repr(C, align(2048)))]
 pub struct FreeList<T>
 {
+	reference_counter: AtomicUsize,
 	cto_pool_arc: CtoPoolArc,
 	pop_back_off_state: BackOffState,
 	push_back_off_state: BackOffState,
@@ -25,6 +103,7 @@ impl<T> CtoSafe for FreeList<T>
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
+		// self.reference_counter is left as-is
 		cto_pool_arc.write(&mut self.cto_pool_arc);
 		self.pop_back_off_state.cto_pool_opened(cto_pool_arc);
 		self.push_back_off_state.cto_pool_opened(cto_pool_arc);
@@ -54,6 +133,21 @@ impl<T> Drop for FreeList<T>
 
 impl<T> FreeList<T>
 {
+	const MinimumReference: usize = 1;
+	
+	#[inline(always)]
+	fn acquire_reference(&self)
+	{
+		self.reference_counter.fetch_add(1, SeqCst);
+	}
+	
+	// Returns 'true' if the caller was the last reference.
+	#[inline(always)]
+	fn release_reference(&self) -> bool
+	{
+		self.reference_counter.fetch_sub(1, SeqCst) == Self::MinimumReference
+	}
+	
 	/// `initial_value` is written into this `FreeListElement`: it is ***not dropped***.
 	/// `trailing_additional_size_in_value_in_bytes` is used when `T` is a variably-sized type, for example, it represents a block of memory to be allocated inline in a `FreeListElement`.
 	/// An `InitializedFreeListElement` can still be dropped.
@@ -74,21 +168,7 @@ impl<T> FreeList<T>
 		fence(Acquire);
 	}
 	
-	
-	
-	/*
-	
-	Consider populating the elimination array before first pop()
-	
-	Consider a wrapper structure to manage access via deref()
-	
-	*/
-	
-	
-	/// Create a new instance.
-	/// Supply a `free_list_element_provider` if you want to make sure the elimination array is initially populated.
-	/// This can return `None` if it no longer can provide free list elements.
-	pub fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> NonNull<Self>
+	fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> NonNull<Self>
 	{
 		let allocate_aligned_size = size_of::<Self>() + EliminationArray::<T>::variable_size_of_elimination_array_data(elimination_array_length);
 		
@@ -98,6 +178,7 @@ impl<T> FreeList<T>
 		{
 			let this = this.as_mut();
 			
+			write(&mut this.reference_counter, AtomicUsize::new(Self::MinimumReference));
 			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
 			write(&mut this.pop_back_off_state, BackOffState::default());
 			write(&mut this.push_back_off_state, BackOffState::default());

@@ -29,6 +29,7 @@ use ::std::sync::atomic::fence;
 use ::std::sync::atomic::Ordering::Acquire;
 use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
+use ::std::sync::atomic::Ordering::SeqCst;
 
 
 include!("AlignedVariableLengthArray.rs");

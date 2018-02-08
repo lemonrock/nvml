@@ -10,12 +10,20 @@ pub struct CtoPoolArc
 	cto_pool_arc_inner: NonNull<CtoPoolArcInner>,
 }
 
+unsafe impl Send for CtoPoolArc
+{
+}
+
+unsafe impl Sync for CtoPoolArc
+{
+}
+
 impl Drop for CtoPoolArc
 {
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		if unsafe { self.cto_pool_arc_inner.as_mut() }.release()
+		if unsafe { self.cto_pool_arc_inner.as_ref() }.release_reference()
 		{
 			drop(unsafe { Box::from_raw(self.cto_pool_arc_inner.as_ptr()) });
 		}
@@ -27,9 +35,9 @@ impl Clone for CtoPoolArc
 	#[inline(always)]
 	fn clone(&self) -> Self
 	{
-		let mut guard = self.cto_pool_arc_inner;
+		let guard = self.cto_pool_arc_inner;
 		
-		unsafe { guard.as_mut() }.acquire();
+		unsafe { guard.as_ref() }.acquire_reference();
 		
 		Self
 		{
@@ -193,14 +201,7 @@ impl CtoPoolArc
 	#[inline(always)]
 	fn new(pool_pointer: *mut PMEMctopool) -> Self
 	{
-		let cto_pool_alloc_arc = Box::new
-		(
-			CtoPoolArcInner
-			{
-				pool_pointer,
-				counter: AtomicUsize::new(1),
-			}
-		);
+		let cto_pool_alloc_arc = Box::new(CtoPoolArcInner::new(pool_pointer));
 		
 		Self
 		{

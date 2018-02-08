@@ -72,7 +72,7 @@ impl Allocator for *mut PMEMctopool
 		debug_assert!(self.is_not_null(), "self is null");
 		
 		let alignment = align_of::<T>();
-		let size = size_of::<T>() as size_t;
+		let size = size_of::<T>();
 		self.aligned_alloc(alignment, size).map(|pointer| pointer as *mut T)
 	}
 	

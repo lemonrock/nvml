@@ -5,23 +5,35 @@
 #[derive(Debug)]
 struct CtoPoolArcInner
 {
+	reference_counter: AtomicUsize,
 	pool_pointer: *mut PMEMctopool,
-	counter: AtomicUsize,
 }
 
 impl CtoPoolArcInner
 {
+	const MinimumReference: usize = 1;
+	
 	#[inline(always)]
-	fn acquire(&mut self)
+	fn new(pool_pointer: *mut PMEMctopool) -> Self
 	{
-		self.counter.fetch_add(1, SeqCst);
+		Self
+		{
+			pool_pointer,
+			reference_counter: AtomicUsize::new(Self::MinimumReference),
+		}
+	}
+	
+	#[inline(always)]
+	fn acquire_reference(&self)
+	{
+		self.reference_counter.fetch_add(1, SeqCst);
 	}
 	
 	/// Returns 'true' if the caller was the last reference.
 	#[inline(always)]
-	fn release(&mut self) -> bool
+	fn release_reference(&self) -> bool
 	{
-		if self.counter.fetch_sub(1, SeqCst) == 1
+		if self.reference_counter.fetch_sub(1, SeqCst) == Self::MinimumReference
 		{
 			self.pool_pointer.close();
 			true
