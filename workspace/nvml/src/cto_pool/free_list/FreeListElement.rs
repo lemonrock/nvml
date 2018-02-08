@@ -3,7 +3,10 @@
 
 
 /// A free list element, once `push()'d`, can never be freed until the FreeList is dropped.
-/// It is recommended that `T` is `Option<SomeValue>`, to make it easier to take the value.
+/// Wraps a value of type `T` that is being pushed and popped.
+/// It is recommended that the value `T` is `Option<SomeValue>`, to make it easier to take the value.
+/// Dropping this FreeListElement ***will not drop*** the value it contains and ***will not free*** the heap memory used by it.
+/// `T` can be a variable-length array.
 #[derive(Debug)]
 pub struct FreeListElement<T>
 {
@@ -52,10 +55,24 @@ impl<V> FreeListElement<Option<V>>
 	}
 }
 
-
-
 impl<T> FreeListElement<T>
 {
+	/// Read-only reference to value.
+	/// Useful if value represents an `UnsafeCell` or `RefCell`.
+	#[inline(always)]
+	pub fn value(&mut self) -> &T
+	{
+		&self.value
+	}
+	
+	/// Mutable reference to value for in-place modification.
+	/// Useful if initializing an initial value representing a variable-length array.
+	#[inline(always)]
+	pub fn value_mut(&mut self) -> &mut T
+	{
+		&mut self.value
+	}
+	
 	/// Returns the value held by this FreeListElement, replacing it with the `replacement` and dropping neither.
 	/// The replacement value will not be dropped until the FreeList itself is dropped, once this FreeListElement has been `push()'d`.
 	#[inline(always)]
@@ -71,21 +88,20 @@ impl<T> FreeListElement<T>
 		
 		cto_pool_arc.pool_pointer().free(self);
 	}
+	
+	#[inline(always)]
+	fn new(cto_pool_arc: &CtoPoolArc, initial_value: T, trailing_additional_size_in_value_in_bytes: usize) -> NonNull<Self>
+	{
+		let mut this: NonNull<Self> = cto_pool_arc.aligned_allocate_or_panic_of_type(AtomicIsolationSize, size_of::<Self>() + trailing_additional_size_in_value_in_bytes);
+		unsafe
+		{
+			let this = this.as_mut();
+			
+			// Not required, as always overwritten on push.
+			// write(&mut this.next, null_mut());
+			
+			write(&mut this.value, initial_value)
+		}
+		this
+	}
 }
-//	#[inline(always)]
-//	fn new(value: T, cto_pool_arc: &CtoPoolArc) -> NonNull<Self>
-//	{
-//
-//	}
-
-/*
-The state and element structures are both public, present in the lfds711_freelist.h header file, so that users can embed them in their own structures (and where necessary pass them to sizeof). Expected use is that user structures which are to enter freelists contain within themselves a struct lfds711_freelist_element, and this is used when calling lfds711_freelist_push, and the value set in the freelist element is a pointer to the user structure entering the freelist. This approach permits zero run-time allocation of store and also ensures the freelist element is normally in the same memory page as the user data it refers to.
-
-
-Once a freelist element structure has been pushed to the stack, it cannot be deallocated (free, or stack allocation lifetimes ending due to say a thread ending, etc) until lfds711_freelist_cleanup has returned
-
-
-
-Consider populating the elimination array before first pop()
-
-*/

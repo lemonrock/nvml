@@ -10,8 +10,11 @@ use ::spin_locks::BestSpinLockForCompilationTarget;
 use ::spin_locks::SpinLock;
 use ::std::cell::UnsafeCell;
 use ::std::marker::PhantomData;
+use ::std::mem::forget;
 use ::std::mem::size_of;
 use ::std::mem::transmute;
+use ::std::ops::Deref;
+use ::std::ops::DerefMut;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
@@ -26,6 +29,7 @@ use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
 
 
+include!("AtomicIsolationSize.rs");
 include!("AtomicPointerAndCounter.rs");
 include!("AtomicU64Pair.rs");
 include!("BackOffState.rs");
@@ -37,12 +41,7 @@ include!("ExponentialBackOffState.rs");
 include!("FreeList.rs");
 include!("FreeListElement.rs");
 include!("generate_thread_safe_random_usize.rs");
+include!("InitializedFreeListElement.rs");
+include!("MaximumNumberOfFreeListElementPointersThatFitInACacheLine.rs");
+include!("OwnedFreeListElement.rs");
 include!("PointerAndCounter.rs");
-
-#[cfg(target_arch = "x86")] const AtomicIsolationSize: usize = 64;
-#[cfg(target_arch = "x86_64")] const AtomicIsolationSize: usize = 128;
-
-//Should be `size_of::<EliminationArrayEntry<T>>()` but not constant.
-const SizeOfAtomicPtr: usize = size_of::<*mut ()>();
-
-const MaximumNumberOfFreeListElementPointersThatFitInACacheLine: usize = AtomicIsolationSize / SizeOfAtomicPtr;

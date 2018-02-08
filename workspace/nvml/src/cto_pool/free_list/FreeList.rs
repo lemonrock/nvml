@@ -5,10 +5,9 @@
 /// Uses `#[repr(C)]` to prevent re-ordering of fields.
 /// Uses align of AtomicIsolationSize.
 #[repr(C, align(128))]
-pub struct FreeList<T, UserState>
+pub struct FreeList<T>
 {
 	cto_pool_arc: CtoPoolArc,
-	user_state: Option<UserState>,
 	pop_back_off_state: BackOffState,
 	push_back_off_state: BackOffState,
 	top: AtomicPointerAndCounter<FreeListElement<T>>,
@@ -17,7 +16,7 @@ pub struct FreeList<T, UserState>
 	elimination_array: EliminationArray<T>,
 }
 
-impl<T, UserState> Drop for FreeList<T, UserState>
+impl<T> Drop for FreeList<T>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -36,8 +35,22 @@ impl<T, UserState> Drop for FreeList<T, UserState>
 	}
 }
 
-impl<T, UserState> FreeList<T, UserState>
+impl<T> FreeList<T>
 {
+	/// `initial_value` is written into this `FreeListElement`: it is ***not dropped***.
+	/// `trailing_additional_size_in_value_in_bytes` is used when `T` is a variably-sized type, for example, it represents a block of memory to be allocated inline in a `FreeListElement`.
+	/// An `InitializedFreeListElement` can still be dropped.
+	/// Call `push` on it, and it will no longer be possible to drop it.
+	#[inline(always)]
+	pub fn new_free_list_element<'free_list>(&'free_list self, initial_value: T, trailing_additional_size_in_value_in_bytes: usize) -> InitializedFreeListElement<'free_list, T>
+	{
+		InitializedFreeListElement
+		{
+			inner: OwnedFreeListElement::new(&self.cto_pool_arc, initial_value, trailing_additional_size_in_value_in_bytes),
+			free_list: self
+		}
+	}
+	
 	/// Call this on any other thread after `new()` before using the free list for the first time
 	pub fn make_free_list_safe_to_use_on_this_thread()
 	{
@@ -45,17 +58,17 @@ impl<T, UserState> FreeList<T, UserState>
 	}
 	
 	/// Create a new instance.
-	pub fn new(cto_pool_arc: &CtoPoolArc, user_state: Option<UserState>, elimination_array_length: EliminationArrayLength) -> NonNull<Self>
+	pub fn new(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength) -> NonNull<Self>
 	{
 		let allocate_aligned_size = size_of::<Self>() + EliminationArray::<T>::variable_size_of_elimination_array_data(elimination_array_length);
-		let mut this: NonNull<Self> = unsafe { NonNull::new_unchecked(cto_pool_arc.aligned_allocate_or_panic(AtomicIsolationSize, allocate_aligned_size).as_ptr() as *mut Self) };
+		
+		let mut this = cto_pool_arc.aligned_allocate_or_panic_of_type::<Self>(AtomicIsolationSize, allocate_aligned_size);
 		
 		unsafe
 		{
 			let this = this.as_mut();
 			
 			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
-			write(&mut this.user_state, user_state);
 			write(&mut this.pop_back_off_state, BackOffState::default());
 			write(&mut this.push_back_off_state, BackOffState::default());
 			write(&mut this.top, AtomicPointerAndCounter::default());
@@ -77,9 +90,10 @@ impl<T, UserState> FreeList<T, UserState>
 	}
 	
 	/// Push a free list element.
-	/// The pushed free list element must be exclusively owned by the caller, and should not be freed after push.
-	pub fn push(&self, free_list_element: NonNull<FreeListElement<T>>)
+	pub fn push(&self, free_list_element: OwnedFreeListElement<T>)
 	{
+		let free_list_element = free_list_element.into_inner();
+		
 		fence(Acquire);
 		
 		// (1) Try elimination array
@@ -157,7 +171,7 @@ impl<T, UserState> FreeList<T, UserState>
 	/// Pop a free list element.
 	/// The popped free list element will be exclusively owned by the caller, and should not be freed after pop but recycled.
 	/// It is possible for a nearly-empty or newly created queue to produce false negatives due to under population of the elimination array.
-	pub fn pop(&self) -> Option<NonNull<FreeListElement<T>>>
+	pub fn pop(&self) -> Option<OwnedFreeListElement<T>>
 	{
 		fence(Acquire);
 		
@@ -172,7 +186,7 @@ impl<T, UserState> FreeList<T, UserState>
 	}
 	
 	#[inline(always)]
-	fn pop_with_elimination_array(&self) -> Option<NonNull<FreeListElement<T>>>
+	fn pop_with_elimination_array(&self) -> Option<OwnedFreeListElement<T>>
 	{
 		let random_cache_line = self.elimination_array.random_cache_line();
 		
@@ -186,7 +200,7 @@ impl<T, UserState> FreeList<T, UserState>
 				let free_list_element = entry.swap(null_mut());
 				if free_list_element.is_not_null()
 				{
-					return Some(unsafe { NonNull::new_unchecked(free_list_element) })
+					return Some(OwnedFreeListElement::from_non_null_pointer(free_list_element))
 				}
 			}
 			
@@ -197,7 +211,7 @@ impl<T, UserState> FreeList<T, UserState>
 	}
 	
 	#[inline(always)]
-	fn pop_without_elimination_array(&self) -> Option<NonNull<FreeListElement<T>>>
+	fn pop_without_elimination_array(&self) -> Option<OwnedFreeListElement<T>>
 	{
 		let mut back_off = ExponentialBackOffState::new(&self.pop_back_off_state);
 		
@@ -216,7 +230,7 @@ impl<T, UserState> FreeList<T, UserState>
 			if self.top.compare_and_swap_weak(&mut original_top, new_top)
 			{
 				back_off.auto_tune();
-				return Some(unsafe { NonNull::new_unchecked(original_top_pointer) });
+				return Some(OwnedFreeListElement::from_non_null_pointer(original_top_pointer))
 			}
 			else
 			{

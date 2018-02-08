@@ -66,7 +66,7 @@ impl<B: Block> BlockAllocator<B>
 		
 		let memory_base_pointer = cto_pool_arc.aligned_allocate_or_panic(B::BlockSizeInBytes, capacity);
 		
-		let mut this = unsafe { NonNull::new_unchecked(cto_pool_arc.aligned_allocate_or_panic(8, size_of::<Self>() + BlockMetaDataItems::<B>::size_of(number_of_blocks)).as_ptr() as *mut Self) };
+		let mut this: NonNull<Self> = cto_pool_arc.aligned_allocate_or_panic_of_type(8, size_of::<Self>() + BlockMetaDataItems::<B>::size_of(number_of_blocks));
 		
 		unsafe
 		{
