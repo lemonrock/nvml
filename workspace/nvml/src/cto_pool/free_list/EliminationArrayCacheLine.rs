@@ -8,6 +8,21 @@ struct EliminationArrayCacheLine<T>
 	cache_line: [EliminationArrayEntry<T>; MaximumNumberOfFreeListElementPointersThatFitInACacheLine]
 }
 
+impl<T> CtoSafe for EliminationArrayCacheLine<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let mut entry_index = 0;
+		while entry_index < MaximumNumberOfFreeListElementPointersThatFitInACacheLine
+		{
+			self.entry_mut(entry_index).cto_pool_opened(cto_pool_arc);
+			
+			entry_index += 1;
+		}
+	}
+}
+
 impl<T> EliminationArrayCacheLine<T>
 {
 	#[inline(always)]
@@ -24,6 +39,16 @@ impl<T> EliminationArrayCacheLine<T>
 	#[inline(always)]
 	fn entry(&self, entry_index: usize) -> &EliminationArrayEntry<T>
 	{
+		debug_assert!(entry_index < MaximumNumberOfFreeListElementPointersThatFitInACacheLine, "entry_index is not less than MaximumNumberOfFreeListElementPointersThatFitInACacheLine '{}'", MaximumNumberOfFreeListElementPointersThatFitInACacheLine);
+		
 		unsafe { self.cache_line.get_unchecked(entry_index) }
+	}
+	
+	#[inline(always)]
+	fn entry_mut(&mut self, entry_index: usize) -> &mut EliminationArrayEntry<T>
+	{
+		debug_assert!(entry_index < MaximumNumberOfFreeListElementPointersThatFitInACacheLine, "entry_index is not less than MaximumNumberOfFreeListElementPointersThatFitInACacheLine '{}'", MaximumNumberOfFreeListElementPointersThatFitInACacheLine);
+		
+		unsafe { self.cache_line.get_unchecked_mut(entry_index) }
 	}
 }

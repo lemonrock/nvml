@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+/// To be useful, needs to be held in a CtoArc or similar structure.
 /// Uses `#[repr(C)]` to prevent re-ordering of fields.
 /// Uses align of AtomicIsolationSize.
 #[repr(C, align(128))]
@@ -14,6 +15,19 @@ pub struct FreeList<T>
 	
 	// MUST be last item as it is variable-length.
 	elimination_array: EliminationArray<T>,
+}
+
+impl<T> CtoSafe for FreeList<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		cto_pool_arc.write(&mut self.cto_pool_arc);
+		self.pop_back_off_state.cto_pool_opened(cto_pool_arc);
+		self.push_back_off_state.cto_pool_opened(cto_pool_arc);
+		self.top.cto_pool_opened(cto_pool_arc);
+		self.elimination_array.cto_pool_opened(cto_pool_arc);
+	}
 }
 
 impl<T> Drop for FreeList<T>
@@ -57,6 +71,13 @@ impl<T> FreeList<T>
 		fence(Acquire);
 	}
 	
+	/*
+	
+	Consider populating the elimination array before first pop()
+	
+	*/
+	
+	
 	/// Create a new instance.
 	pub fn new(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength) -> NonNull<Self>
 	{
@@ -92,6 +113,8 @@ impl<T> FreeList<T>
 	/// Push a free list element.
 	pub fn push(&self, free_list_element: OwnedFreeListElement<T>)
 	{
+		debug_assert!(free_list_element.next_is_null(), "free_list_element.next should be null");
+		
 		let free_list_element = free_list_element.into_inner();
 		
 		fence(Acquire);
@@ -171,6 +194,7 @@ impl<T> FreeList<T>
 	/// Pop a free list element.
 	/// The popped free list element will be exclusively owned by the caller, and should not be freed after pop but recycled.
 	/// It is possible for a nearly-empty or newly created queue to produce false negatives due to under population of the elimination array.
+	/// Be careful; the popped free list element is in persistent memory, but it is rootless and can not be reset with `cto_pool_opened()`.
 	pub fn pop(&self) -> Option<OwnedFreeListElement<T>>
 	{
 		fence(Acquire);
@@ -178,11 +202,18 @@ impl<T> FreeList<T>
 		// (1) Try elimination array
 		if let Some(free_list_element) = self.pop_with_elimination_array()
 		{
+			debug_assert!(free_list_element.next_is_null(), "free_list_element.next should be null, because items in the elimination array should be placed in it with next null");
 			return Some(free_list_element)
 		}
 		
 		// (2) Fallback to hammering on self.top
-		self.pop_without_elimination_array()
+		if let Some(mut free_list_element) = self.pop_without_elimination_array()
+		{
+			free_list_element.reset_next_to_null_so_cto_pool_opened_can_not_read_junk();
+			return Some(free_list_element)
+		}
+		
+		None
 	}
 	
 	#[inline(always)]

@@ -5,6 +5,19 @@
 #[derive(Debug)]
 struct EliminationArrayEntry<T>(AtomicPtr<FreeListElement<T>>);
 
+impl<T> CtoSafe for EliminationArrayEntry<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let value = self.value();
+		if value.is_not_null()
+		{
+			unsafe { &mut * value }.cto_pool_opened(cto_pool_arc)
+		}
+	}
+}
+
 impl<T> EliminationArrayEntry<T>
 {
 	#[inline(always)]

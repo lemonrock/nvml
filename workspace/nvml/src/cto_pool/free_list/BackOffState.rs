@@ -11,6 +11,19 @@ struct BackOffState
 	total_operations: AtomicUsize,
 }
 
+impl CtoSafe for BackOffState
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+		self.spin_lock.forcibly_unlock_spin_lock();
+		self.reset_back_off_iteration_frequency_counter(0);
+		self.reset_back_off_iteration_frequency_counter(1);
+		self.reset_metric();
+		self.reset_total_operations();
+	}
+}
+
 impl Default for BackOffState
 {
 	#[inline(always)]
@@ -19,15 +32,25 @@ impl Default for BackOffState
 		Self
 		{
 			spin_lock: BestSpinLockForCompilationTarget::default(),
-			back_off_iteration_frequency_counters: [AtomicUsize::new(0), AtomicUsize::new(0)],
-			metric: AtomicUsize::new(1),
-			total_operations: AtomicUsize::new(0),
+			back_off_iteration_frequency_counters:
+			[
+				AtomicUsize::new(Self::InitialBackOffIterationFrequencyCounter),
+				AtomicUsize::new(Self::InitialBackOffIterationFrequencyCounter)
+			],
+			metric: AtomicUsize::new(Self::InitialMetric),
+			total_operations: AtomicUsize::new(Self::InitialTotalOperations),
 		}
 	}
 }
 
 impl BackOffState
 {
+	const InitialMetric: usize = 1;
+	
+	const InitialBackOffIterationFrequencyCounter: usize = 0;
+	
+	const InitialTotalOperations: usize = 0;
+	
 	const BACK_OFF_ITERATION_INITIAL_VALUE: usize = 0;
 	
 	const BACK_OFF_ITERATION_LIMIT: usize = 10;
@@ -96,6 +119,12 @@ impl BackOffState
 	}
 	
 	#[inline(always)]
+	fn reset_metric(&self)
+	{
+		self.metric.store(Self::InitialMetric, Relaxed)
+	}
+	
+	#[inline(always)]
 	fn increment_total_operations(&self) -> usize
 	{
 		self.total_operations.fetch_add(1, Relaxed)
@@ -104,7 +133,7 @@ impl BackOffState
 	#[inline(always)]
 	fn reset_total_operations(&self)
 	{
-		self.total_operations.store(0, Relaxed)
+		self.total_operations.store(Self::InitialTotalOperations, Relaxed)
 	}
 	
 	#[inline(always)]
@@ -128,6 +157,6 @@ impl BackOffState
 	#[inline(always)]
 	fn reset_back_off_iteration_frequency_counter(&self, index: usize)
 	{
-		self.back_off_iteration_frequency_counter(index).store(0, Relaxed)
+		self.back_off_iteration_frequency_counter(index).store(Self::InitialBackOffIterationFrequencyCounter, Relaxed)
 	}
 }

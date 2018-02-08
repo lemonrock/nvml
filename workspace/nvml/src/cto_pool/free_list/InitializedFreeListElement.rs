@@ -58,9 +58,3 @@ impl<'free_list, T> InitializedFreeListElement<'free_list, T>
 		inner
 	}
 }
-
-/*
-
-Consider populating the elimination array before first pop()
-
-*/

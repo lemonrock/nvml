@@ -14,6 +14,27 @@ impl<T> Default for AtomicPointerAndCounter<T>
 	}
 }
 
+impl<T> CtoSafe for AtomicPointerAndCounter<T>
+{
+	#[inline(always)]
+	default fn cto_pool_opened(&mut self, _cto_pool_arc: &CtoPoolArc)
+	{
+	}
+}
+
+impl<T: CtoSafe> CtoSafe for AtomicPointerAndCounter<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let pointer = self.get_pointer();
+		if pointer.is_not_null()
+		{
+			unsafe { &mut * pointer }.cto_pool_opened(cto_pool_arc)
+		}
+	}
+}
+
 impl<T> AtomicPointerAndCounter<T>
 {
 	// Pointers are limited to 2^48 - 1

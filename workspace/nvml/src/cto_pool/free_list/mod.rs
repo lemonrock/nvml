@@ -4,6 +4,7 @@
 
 use IsNotNull;
 use super::CtoPoolArc;
+use super::CtoSafe;
 use super::PMEMctopoolExt;
 #[cfg(not(feature = "rdrand"))] use ::rand::thread_rng;
 use ::spin_locks::BestSpinLockForCompilationTarget;
@@ -29,6 +30,7 @@ use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
 
 
+include!("AlignedVariableLengthArray.rs");
 include!("AtomicIsolationSize.rs");
 include!("AtomicPointerAndCounter.rs");
 include!("AtomicU64Pair.rs");

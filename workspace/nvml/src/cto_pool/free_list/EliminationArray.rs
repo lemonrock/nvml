@@ -6,13 +6,23 @@
 struct EliminationArray<T>
 {
 	length: EliminationArrayLength,
-	array: AlignedArray<T>,
+	array: AlignedVariableLengthArray<T>,
 }
 
-// Uses align of AtomicIsolationSize.
-#[repr(C, align(128))]
-#[derive(Debug)]
-struct AlignedArray<T>(PhantomData<EliminationArrayCacheLine<T>>);
+impl<T> CtoSafe for EliminationArray<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let mut cache_line_index = 0;
+		while cache_line_index < self.length.as_usize()
+		{
+			self.elimination_array_cache_line_unchecked_mut(cache_line_index).cto_pool_opened(cto_pool_arc);
+			
+			cache_line_index += 1;
+		}
+	}
+}
 
 impl<T> EliminationArray<T>
 {
@@ -68,8 +78,18 @@ impl<T> EliminationArray<T>
 	{
 		debug_assert!(cache_line_index <= self.maximum_inclusive_index(), "cache_line_index '{}' exceeds self.maximum_inclusive_index() '{}'", cache_line_index, self.maximum_inclusive_index());
 		
-		let cache_line_base_pointer = &self.array as *const AlignedArray<T> as *const EliminationArrayCacheLine<T>;
+		let cache_line_base_pointer = &self.array as *const AlignedVariableLengthArray<T> as *const EliminationArrayCacheLine<T>;
 		let cache_line_pointer = unsafe { cache_line_base_pointer.offset(cache_line_index as isize) };
 		unsafe { & * cache_line_pointer }
+	}
+	
+	#[inline(always)]
+	fn elimination_array_cache_line_unchecked_mut(&mut self, cache_line_index: usize) -> &mut EliminationArrayCacheLine<T>
+	{
+		debug_assert!(cache_line_index <= self.maximum_inclusive_index(), "cache_line_index '{}' exceeds self.maximum_inclusive_index() '{}'", cache_line_index, self.maximum_inclusive_index());
+		
+		let cache_line_base_pointer = &mut self.array as *mut AlignedVariableLengthArray<T> as *mut EliminationArrayCacheLine<T>;
+		let cache_line_pointer = unsafe { cache_line_base_pointer.offset(cache_line_index as isize) };
+		unsafe { &mut * cache_line_pointer }
 	}
 }

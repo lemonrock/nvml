@@ -14,6 +14,25 @@ pub struct FreeListElement<T>
 	value: T,
 }
 
+impl<T> CtoSafe for FreeListElement<T>
+{
+	#[inline(always)]
+	default fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.cto_pool_opened_always(cto_pool_arc)
+	}
+}
+
+impl<T: CtoSafe> CtoSafe for FreeListElement<T>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		self.cto_pool_opened_always(cto_pool_arc);
+		self.value.cto_pool_opened(cto_pool_arc)
+	}
+}
+
 impl<T: Copy> FreeListElement<T>
 {
 	/// Returns a copy of the value.
@@ -97,11 +116,35 @@ impl<T> FreeListElement<T>
 		{
 			let this = this.as_mut();
 			
-			// Not required, as always overwritten on push.
-			// write(&mut this.next, null_mut());
+			this.reset_next_to_null_so_cto_pool_opened_can_not_read_junk();
 			
 			write(&mut this.value, initial_value)
 		}
 		this
+	}
+	
+	#[inline(always)]
+	fn next_is_null(&self) -> bool
+	{
+		self.next.is_null()
+	}
+	
+	// Always overwritten by `FreeList.push()`, but used by `cto_pool_opened()`.
+	// Affects any FreeListElement in the elimination array.
+	#[inline(always)]
+	fn reset_next_to_null_so_cto_pool_opened_can_not_read_junk(&mut self)
+	{
+		// Always overwritten by `FreeList.push()`, but used by `cto_pool_opened()`.
+		unsafe { write(&mut self.next, null_mut()) };
+	}
+	
+	#[inline(always)]
+	fn cto_pool_opened_always(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		let next = self.next;
+		if next.is_not_null()
+		{
+			unsafe { &mut * next }.cto_pool_opened(cto_pool_arc)
+		}
 	}
 }
