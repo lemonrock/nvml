@@ -2,18 +2,17 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-// See https://github.com/rust-lang/rust/tree/master/src/etc/platform-intrinsics/x86
-
 #[cfg(all(target_feature = "rdrnd", target_arch = "x86"))]
 #[inline(always)]
 fn generate_thread_safe_random_usize() -> usize
 {
+	// See https://github.com/rust-lang/rust/tree/master/src/etc/platform-intrinsics/x86
 	extern "platform-intrinsic"
 	{
 		#[inline(always)]
 		fn x86_rdrand32_step() -> (u32, i32);
 	}
-	
+
 	#[target_feature(enable = "rdrnd")]
 	unsafe fn generate_thread_safe_random_usize_target_feature() -> usize
 	{
@@ -26,7 +25,7 @@ fn generate_thread_safe_random_usize() -> usize
 			}
 		}
 	}
-	
+
 	unsafe { generate_thread_safe_random_usize_target_feature() }
 }
 
@@ -34,12 +33,13 @@ fn generate_thread_safe_random_usize() -> usize
 #[inline(always)]
 fn generate_thread_safe_random_usize() -> usize
 {
+	// See https://github.com/rust-lang/rust/tree/master/src/etc/platform-intrinsics/x86
 	extern "platform-intrinsic"
 	{
 		#[inline(always)]
 		fn x86_rdrand64_step() -> (u64, i32);
 	}
-	
+
 	#[target_feature(enable = "rdrnd")]
 	unsafe fn generate_thread_safe_random_usize_target_feature() -> usize
 	{
@@ -52,7 +52,7 @@ fn generate_thread_safe_random_usize() -> usize
 			}
 		}
 	}
-	
+
 	unsafe { generate_thread_safe_random_usize_target_feature() }
 }
 

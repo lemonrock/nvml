@@ -74,9 +74,13 @@ impl<T> FreeList<T>
 		fence(Acquire);
 	}
 	
+	
+	
 	/*
 	
 	Consider populating the elimination array before first pop()
+	
+	Consider a wrapper structure to manage access via deref()
 	
 	*/
 	

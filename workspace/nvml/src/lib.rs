@@ -51,6 +51,10 @@
 //!
 //! The struct `Configuration` can be used to create and manage several different pools of persistent memory.
 //!
+//! This crate also uses Intel's native `RDRAND` instructions for accelerated performance (specifically, using elimination arrays in a non-blocking free list).
+//!
+//! To ensure these instructions are used, build with `cargo rustc -- -C target-feature=+rdrnd`.
+//!
 
 
 extern crate alloc;
