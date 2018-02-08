@@ -37,6 +37,7 @@ include!("AtomicIsolationSize.rs");
 include!("AtomicPointerAndCounter.rs");
 include!("AtomicU64Pair.rs");
 include!("BackOffState.rs");
+include!("CtoFreeListArc.rs");
 include!("EliminationArray.rs");
 include!("EliminationArrayCacheLine.rs");
 include!("EliminationArrayEntry.rs");
