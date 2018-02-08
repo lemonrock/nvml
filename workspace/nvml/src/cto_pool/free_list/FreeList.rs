@@ -86,7 +86,9 @@ impl<T> FreeList<T>
 	
 	
 	/// Create a new instance.
-	pub fn new(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength) -> NonNull<Self>
+	/// Supply a `free_list_element_provider` if you want to make sure the elimination array is initially populated.
+	/// This can return `None` if it no longer can provide free list elements.
+	pub fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> NonNull<Self>
 	{
 		let allocate_aligned_size = size_of::<Self>() + EliminationArray::<T>::variable_size_of_elimination_array_data(elimination_array_length);
 		
@@ -100,7 +102,7 @@ impl<T> FreeList<T>
 			write(&mut this.pop_back_off_state, BackOffState::default());
 			write(&mut this.push_back_off_state, BackOffState::default());
 			write(&mut this.top, AtomicPointerAndCounter::default());
-			this.elimination_array.initialize(elimination_array_length)
+			this.elimination_array.initialize(elimination_array_length, cto_pool_arc, free_list_element_provider)
 		}
 		
 		fence(Release);

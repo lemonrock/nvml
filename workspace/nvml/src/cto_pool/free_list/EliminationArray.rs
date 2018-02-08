@@ -54,7 +54,7 @@ impl<T> EliminationArray<T>
 	}
 	
 	#[inline(always)]
-	fn initialize(&mut self, elimination_array_length: EliminationArrayLength)
+	fn initialize<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(&mut self, elimination_array_length: EliminationArrayLength, cto_pool_arc: &CtoPoolArc, free_list_element_provider: Option<FreeListElementProvider>)
 	{
 		unsafe
 		{
@@ -66,7 +66,7 @@ impl<T> EliminationArray<T>
 			while cache_line_index < length
 			{
 				let elimination_array_cache_line = self.elimination_array_cache_line_unchecked(cache_line_index);
-				elimination_array_cache_line.initialize();
+				elimination_array_cache_line.initialize(cto_pool_arc, free_list_element_provider.as_ref());
 				
 				cache_line_index += 1;
 			}

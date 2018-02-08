@@ -26,12 +26,12 @@ impl<T> CtoSafe for EliminationArrayCacheLine<T>
 impl<T> EliminationArrayCacheLine<T>
 {
 	#[inline(always)]
-	fn initialize(&self)
+	fn initialize<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(&self, cto_pool_arc: &CtoPoolArc, free_list_element_provider: Option<&FreeListElementProvider>)
 	{
 		let mut entry_index = 0;
 		while entry_index < MaximumNumberOfFreeListElementPointersThatFitInACacheLine
 		{
-			self.entry(entry_index).set_initial_value_to_null();
+			self.entry(entry_index).set_initial_value_to_null_or(cto_pool_arc, free_list_element_provider);
 			entry_index += 1;
 		}
 	}

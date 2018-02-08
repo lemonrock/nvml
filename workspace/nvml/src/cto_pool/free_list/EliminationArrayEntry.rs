@@ -45,8 +45,24 @@ impl<T> EliminationArrayEntry<T>
 	}
 	
 	#[inline(always)]
-	fn set_initial_value_to_null(&self)
+	fn set_initial_value_to_null_or<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(&self, cto_pool_arc: &CtoPoolArc, free_list_element_provider: Option<&FreeListElementProvider>)
 	{
-		self.0.store(null_mut(), Relaxed)
+		let free_list_element_pointer = if let Some(free_list_element_provider) = free_list_element_provider
+		{
+			if let Some(initialized_free_list_element) = free_list_element_provider(cto_pool_arc)
+			{
+				initialized_free_list_element.into_inner().into_inner().as_ptr()
+			}
+			else
+			{
+				null_mut()
+			}
+		}
+		else
+		{
+			null_mut()
+		};
+		
+		self.0.store(free_list_element_pointer, Relaxed)
 	}
 }
