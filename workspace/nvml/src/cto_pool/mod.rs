@@ -80,6 +80,7 @@ pub mod synchronisation;
 pub mod string;
 
 /// A non-blocking free list that is persistent.
+/// Start with `CtoFreeListArc`.
 pub mod free_list;
 
 include!("Allocator.rs");
