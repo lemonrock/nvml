@@ -25,17 +25,25 @@ impl<T, UserState> Drop for FreeList<T, UserState>
 		fence(Acquire);
 		
 		let mut free_list_element = self.top.get_pointer();
-		while !free_list_element.is_null()
+		while free_list_element.is_not_null()
 		{
 			let free_list_element_to_clean_up = free_list_element;
-			free_list_element = (unsafe { &*free_list_element }).next;
-			unsafe { drop_in_place(free_list_element_to_clean_up) }
+			free_list_element = unsafe { & * free_list_element }.next;
+			unsafe { &mut * free_list_element_to_clean_up }.free_list_is_being_dropped_or_was_never_pushed_ever_so_free(&self.cto_pool_arc);
 		}
+		
+		self.cto_pool_arc.pool_pointer().free(self);
 	}
 }
 
 impl<T, UserState> FreeList<T, UserState>
 {
+	/// Call this on any other thread after `new()` before using the free list for the first time
+	pub fn make_free_list_safe_to_use_on_this_thread()
+	{
+		fence(Acquire);
+	}
+	
 	/// Create a new instance.
 	pub fn new(cto_pool_arc: &CtoPoolArc, user_state: Option<UserState>, elimination_array_length: EliminationArrayLength) -> NonNull<Self>
 	{
@@ -176,7 +184,7 @@ impl<T, UserState> FreeList<T, UserState>
 			if entry.is_not_null()
 			{
 				let free_list_element = entry.swap(null_mut());
-				if !free_list_element.is_null()
+				if free_list_element.is_not_null()
 				{
 					return Some(unsafe { NonNull::new_unchecked(free_list_element) })
 				}

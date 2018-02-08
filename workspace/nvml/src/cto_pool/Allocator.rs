@@ -46,7 +46,7 @@ impl Allocator for *mut PMEMctopool
 	#[inline(always)]
 	fn allocate<P: PersistentMemoryWrapper, InitializationError, Initializer: FnOnce(*mut P::Value, &CtoPoolArc) -> Result<(), InitializationError>>(self, initializer: Initializer, cto_pool_arc: &CtoPoolArc) -> Result<P, CtoPoolAllocationError<InitializationError>>
 	{
-		debug_assert!(!self.is_null(), "self is null");
+		debug_assert!(self.is_not_null(), "self is null");
 		
 		match self.aligned_allocate::<P::PersistentMemory>()
 		{
@@ -69,7 +69,7 @@ impl Allocator for *mut PMEMctopool
 	#[inline(always)]
 	fn aligned_allocate<T>(self) -> Result<*mut T, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self is null");
+		debug_assert!(self.is_not_null(), "self is null");
 		
 		let alignment = align_of::<T>();
 		let size = size_of::<T>() as size_t;
@@ -79,7 +79,7 @@ impl Allocator for *mut PMEMctopool
 	#[inline(always)]
 	fn alloc_trait_allocate(self, layout: &Layout) -> Result<*mut u8, AllocErr>
 	{
-		debug_assert!(!self.is_null(), "self is null");
+		debug_assert!(self.is_not_null(), "self is null");
 		
 		Self::map_allocation_result(self.aligned_alloc(layout.align(), layout.size()), "PMDK libpmemcto.pmemcto_aligned_alloc failed", layout)
 	}
@@ -87,8 +87,8 @@ impl Allocator for *mut PMEMctopool
 	#[inline(always)]
 	fn alloc_trait_reallocate(self, old_pointer: *mut u8, old_layout: &Layout, new_layout: &Layout) -> Result<*mut u8, AllocErr>
 	{
-		debug_assert!(!self.is_null(), "self is null");
-		debug_assert!(!old_pointer.is_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null for size == 0");
+		debug_assert!(self.is_not_null(), "self is null");
+		debug_assert!(old_pointer.is_not_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null for size == 0");
 		
 		let old_size = old_layout.size();
 		let new_size = new_layout.size();
@@ -117,8 +117,8 @@ impl Allocator for *mut PMEMctopool
 	#[inline(always)]
 	fn alloc_trait_free(self, pointer_to_free: *mut u8)
 	{
-		debug_assert!(!self.is_null(), "self is null");
-		debug_assert!(!pointer_to_free.is_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null");
+		debug_assert!(self.is_not_null(), "self is null");
+		debug_assert!(pointer_to_free.is_not_null(), "jemalloc (the underlying allocator for libpmemobj) does not pass out null");
 		
 		self.free(pointer_to_free)
 	}

@@ -234,7 +234,7 @@ impl ObjectPool
 	#[inline(always)]
 	fn from_handle(handle: *mut PMEMobjpool) -> Self
 	{
-		debug_assert!(!handle.is_null(), "PMEMobjpool handle is null");
+		debug_assert!(handle.is_not_null(), "PMEMobjpool handle is null");
 		
 		ObjectPool(handle, ObjectPoolDropWrapper::new(handle))
 	}

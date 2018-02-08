@@ -15,8 +15,8 @@ impl<'a, T: Persistable> ReadWriteLock<'a, T>
 	#[inline(always)]
 	fn new(object_pool: *mut PMEMobjpool, read_write_lock: *mut PMEMrwlock, object: &'a mut T) -> Self
 	{
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
-		debug_assert!(!read_write_lock.is_null(), "read_write_lock is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
+		debug_assert!(read_write_lock.is_not_null(), "read_write_lock is null");
 		
 		Self
 		{

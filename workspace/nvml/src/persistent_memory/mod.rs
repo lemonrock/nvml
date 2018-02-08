@@ -2,6 +2,7 @@
 // Copyright © 2017 The developers of dpdk. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/dpdk/master/COPYRIGHT.
 
 
+use IsNotNull;
 use self::file_backed_memory::*;
 use ::errno::errno;
 use ::errors::PmdkError;

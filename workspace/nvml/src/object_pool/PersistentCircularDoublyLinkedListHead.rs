@@ -17,8 +17,8 @@ impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedLi
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.pe_first = PersistentObject::null();
@@ -59,7 +59,7 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 	#[inline(always)]
 	fn insert(&mut self, object_pool: &ObjectPool, element: PersistentObject<T>, index: PersistentObject<T>, direction_towards: c_int) -> Result<(), PmdkError>
 	{
-		debug_assert!(!element.is_null(), "element is null");
+		debug_assert!(element.is_not_null(), "element is null");
 		
 		let result = unsafe { pmemobj_list_insert(object_pool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, direction_towards, element.oid) };
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
@@ -114,9 +114,9 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 		{
 			let result = catch_unwind(AssertUnwindSafe(||
 			{
-				debug_assert!(!object_pool.is_null(), "object_pool is null");
-				debug_assert!(!ptr.is_null(), "ptr is null");
-				debug_assert!(!arg.is_null(), "arg is null");
+				debug_assert!(object_pool.is_not_null(), "object_pool is null");
+				debug_assert!(ptr.is_not_null(), "ptr is null");
+				debug_assert!(arg.is_not_null(), "arg is null");
 				
 				T::initialize(ptr as *mut T, object_pool, &mut *(arg as *mut T::Arguments))
 			}));
@@ -182,7 +182,7 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 	#[inline(always)]
 	fn remove_internal(&mut self, object_pool: &ObjectPool, index: PersistentObject<T>, free: c_int) -> Result<(), PmdkError>
 	{
-		debug_assert!(!index.is_null(), "index is null");
+		debug_assert!(index.is_not_null(), "index is null");
 		
 		let result = unsafe { pmemobj_list_remove(object_pool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, index.oid, free) };
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);
@@ -227,7 +227,7 @@ impl<T: ListEntryPersistable> PersistentCircularDoublyLinkedListHead<T>
 	#[inline(always)]
 	fn remove_from_this_list_and_insert_new_list(&mut self, object_pool: &ObjectPool, to: &mut Self, element: PersistentObject<T>, index: PersistentObject<T>, direction_toward: c_int) -> Result<(), PmdkError>
 	{
-		debug_assert!(!element.is_null(), "element is null");
+		debug_assert!(element.is_not_null(), "element is null");
 		
 		let result = unsafe { pmemobj_list_move(object_pool.0, T::PersistentCircularDoublyLinkedListEntryFieldOffset, self as *mut _ as *mut c_void, T::PersistentCircularDoublyLinkedListEntryFieldOffset, to as *mut _ as *mut c_void, index.oid, direction_toward, element.oid) };
 		debug_assert!(result == 0 || result == -1, "result was '{}'", result);

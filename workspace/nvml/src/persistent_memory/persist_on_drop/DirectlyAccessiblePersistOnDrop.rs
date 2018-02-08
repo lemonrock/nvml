@@ -45,7 +45,7 @@ impl<'memory> PersistOnDrop<'memory> for DirectlyAccessiblePersistOnDrop<'memory
 	#[inline(always)]
 	fn copy_then_flush(&self, length: usize, from: *const c_void)
 	{
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { pmem_memmove_nodrain(self.0, from, length) };
 	}
@@ -55,7 +55,7 @@ impl<'memory> PersistOnDrop<'memory> for DirectlyAccessiblePersistOnDrop<'memory
 	#[inline(always)]
 	fn copy_nonoverlapping_then_flush(&self, length: usize, from: *const c_void)
 	{
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { pmem_memcpy_nodrain(self.0, from, length) };
 	}

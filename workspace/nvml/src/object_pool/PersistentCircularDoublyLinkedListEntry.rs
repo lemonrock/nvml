@@ -16,8 +16,8 @@ impl<T: ListEntryPersistable> Initializable for PersistentCircularDoublyLinkedLi
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.pe_next = PersistentObject::null();
@@ -75,8 +75,8 @@ impl Persistable for fooListEntry
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		PersistentCircularDoublyLinkedListEntry::initialize(&mut instance.list_entry_field, object_pool);

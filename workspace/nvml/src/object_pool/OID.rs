@@ -10,6 +10,10 @@ pub trait OID
 	#[inline(always)]
 	fn is_null(&self) -> bool;
 	
+	/// Is this instance not equivalent to null?
+	#[inline(always)]
+	fn is_not_null(&self) -> bool;
+	
 	/// Comparision.
 	#[inline(always)]
 	fn equals(&self, other: &Self) -> bool;
@@ -37,6 +41,12 @@ impl OID for PMEMoid
 	fn is_null(&self) -> bool
 	{
 		OID_IS_NULL(self)
+	}
+	
+	#[inline(always)]
+	fn is_not_null(&self) -> bool
+	{
+		!self.is_null()
 	}
 	
 	#[inline(always)]

@@ -56,7 +56,7 @@ impl<'memory> FileBackedMemory<'memory> for MappedFileBackedMemory
 	fn copy_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
 	{
 		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { pmem_memmove_persist(self.offset(offset), from, length) };
 		self.persist_slowly_at_page_size_granularity(offset, length)
@@ -66,7 +66,7 @@ impl<'memory> FileBackedMemory<'memory> for MappedFileBackedMemory
 	fn copy_nonoverlapping_then_persist_at_alignment_granularity(&self, offset: usize, length: usize, from: *const c_void)
 	{
 		debug_assert!(offset + length <= self.mapped_length(), "offset '{}' + length '{}' is greater than mapped length '{}'", offset, length, self.mapped_length());
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { copy_nonoverlapping(from, self.offset(offset), length) }
 		self.persist_slowly_at_page_size_granularity(offset, length)

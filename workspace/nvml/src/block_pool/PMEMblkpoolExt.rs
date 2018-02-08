@@ -48,7 +48,7 @@ macro_rules! debug_assert_self_is_not_null
 {
 	($self: ident) =>
 	{
-		debug_assert!(!$self.is_null(), "PMEMblkpool (pbp) can not be null");
+		debug_assert!($self.is_not_null(), "PMEMblkpool (pbp) can not be null");
 	}
 }
 
@@ -82,7 +82,7 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	fn read_from(self, to: *mut c_void, zero_based_block_index: usize) -> bool
 	{
 		debug_assert_self_is_not_null!(self);
-		debug_assert!(!to.is_null(), "to can not be null");
+		debug_assert!(to.is_not_null(), "to can not be null");
 		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
 		let result = unsafe { pmemblk_read(self, to, zero_based_block_index as c_longlong)};
@@ -112,7 +112,7 @@ impl PMEMblkpoolExt for *mut PMEMblkpool
 	fn write_to(self, from: *const c_void, zero_based_block_index: usize)
 	{
 		debug_assert_self_is_not_null!(self);
-		debug_assert!(!from.is_null(), "from can not be null");
+		debug_assert!(from.is_not_null(), "from can not be null");
 		debug_assert!(zero_based_block_index < self.number_of_blocks_available_in_block_pool(), "zero_based_block_index '{}' exceeds number_of_blocks_available_in_block_pool '{}'", zero_based_block_index, self.number_of_blocks_available_in_block_pool());
 		
 		let result = unsafe { pmemblk_write(self, from, zero_based_block_index as c_longlong)};

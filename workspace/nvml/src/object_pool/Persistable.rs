@@ -35,7 +35,7 @@ pub trait Persistable: Sized
 	{
 		let pointer = self as *const _ as *const c_void;
 		let oid = unsafe { pmemobj_oid(pointer) };
-		debug_assert!(!oid.is_null(), "This object is not a Persistable");
+		debug_assert!(oid.is_not_null(), "This object is not a Persistable");
 		oid
 	}
 }
@@ -57,8 +57,8 @@ impl Persistable for root
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.node.allocate_uninitialized_and_construct_object(object_pool, &mut ()).expect("Allocation failed for node");
@@ -87,8 +87,8 @@ impl Persistable for node
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		
@@ -161,8 +161,8 @@ impl Persistable for foo
 	#[inline(always)]
 	unsafe fn initialize(pointer_to_uninitialized_memory_to_use_for_fields: *mut Self, object_pool: *mut PMEMobjpool, arguments: &mut Self::Arguments)
 	{
-		debug_assert!(!pointer_to_uninitialized_memory_to_use_for_fields.is_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(pointer_to_uninitialized_memory_to_use_for_fields.is_not_null(), "pointer_to_uninitialized_memory_to_use_for_fields is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		let instance = &mut *pointer_to_uninitialized_memory_to_use_for_fields;
 		instance.address = *arguments;

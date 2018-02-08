@@ -15,8 +15,8 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 	#[inline(always)]
 	fn new(object_pool: *mut PMEMobjpool, mutex: *mut PMEMmutex, object: &'a mut T) -> Self
 	{
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
-		debug_assert!(!mutex.is_null(), "mutex is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
+		debug_assert!(mutex.is_not_null(), "mutex is null");
 		
 		Self
 		{

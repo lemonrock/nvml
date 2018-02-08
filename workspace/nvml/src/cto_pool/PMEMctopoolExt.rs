@@ -84,7 +84,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn print_statistics(self)
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		unsafe { pmemcto_stats_print(self, null()) }
 	}
@@ -92,7 +92,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn close(self)
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		unsafe { pmemcto_close(self) }
 	}
@@ -100,7 +100,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn get_root<T>(self) -> *mut T
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		unsafe { pmemcto_get_root_pointer(self) as *mut T }
 	}
@@ -108,8 +108,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn set_root<T>(self, root: *mut T)
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
-		debug_assert!(!root.is_null(), "root can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
+		debug_assert!(root.is_not_null(), "root can not be null");
 		
 		unsafe { pmemcto_set_root_pointer(self, root as *mut _) }
 	}
@@ -117,7 +117,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn malloc<T>(self) -> Result<*mut T, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		let size = size_of::<T>() as size_t;
 		debug_assert!(size != 0, "size_of::<T>() can not be zero");
@@ -142,7 +142,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 			(value != 0) && ((value & (value - 1)) == 0)
 		}
 		
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		debug_assert!(!is_power_of_two(alignment), "alignment must be a power of two");
 		
@@ -162,7 +162,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn calloc<T>(self, count: size_t) -> Result<*mut T, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		debug_assert!(count != 0, "count can not be zero");
 		
 		let size = size_of::<T>() as size_t;
@@ -182,7 +182,7 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn strdup(self, string: &CStr) -> Result<*mut c_char, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
 		
 		let result = unsafe { pmemcto_strdup(self, string.as_ptr()) };
 		if unlikely(result.is_null())
@@ -198,8 +198,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn wcsdup(self, string: *const wchar_t) -> Result<*mut wchar_t, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
-		debug_assert!(!string.is_null(), "string can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
+		debug_assert!(string.is_not_null(), "string can not be null");
 		
 		let result = unsafe { pmemcto_wcsdup(self, string) };
 		if unlikely(result.is_null())
@@ -215,8 +215,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn usable_size(self, pointer: *mut c_void) -> size_t
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
-		debug_assert!(!pointer.is_null(), "pointer can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
+		debug_assert!(pointer.is_not_null(), "pointer can not be null");
 		
 		unsafe { pmemcto_malloc_usable_size(self, pointer) }
 	}
@@ -224,8 +224,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn realloc(self, pointer: *mut c_void, new_size: size_t) -> Result<*mut c_void, PmdkError>
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
-		debug_assert!(!pointer.is_null(), "pointer can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
+		debug_assert!(pointer.is_not_null(), "pointer can not be null");
 		debug_assert!(new_size != 0, "new_size can not be zero");
 		
 		let result = unsafe { pmemcto_realloc(self, pointer, new_size) };
@@ -242,8 +242,8 @@ impl PMEMctopoolExt for *mut PMEMctopool
 	#[inline(always)]
 	fn free<T>(self, pointer: *mut T)
 	{
-		debug_assert!(!self.is_null(), "self can not be null");
-		debug_assert!(!pointer.is_null(), "pointer can not be null");
+		debug_assert!(self.is_not_null(), "self can not be null");
+		debug_assert!(pointer.is_not_null(), "pointer can not be null");
 		
 		unsafe { pmemcto_free(self, pointer as *mut _) }
 	}

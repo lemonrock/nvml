@@ -15,7 +15,7 @@ impl<Value: CtoSafe> CtoSafe for CtoAtomicOption<Value>
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
 		let value = self.inner_cto_box.load(SeqCst);
-		if !value.is_null()
+		if value.is_not_null()
 		{
 			let mut cto_box = unsafe { CtoBox::from_raw(value) };
 			cto_box.cto_pool_opened(cto_pool_arc);
@@ -38,7 +38,7 @@ impl<Value: CtoSafe> Drop for CtoAtomicOption<Value>
 	fn drop(&mut self)
 	{
 		let value = self.inner_cto_box.load(Relaxed);
-		if !value.is_null()
+		if value.is_not_null()
 		{
 			drop(unsafe { CtoBox::from_raw(value) });
 		}

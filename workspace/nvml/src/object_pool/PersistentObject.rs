@@ -162,6 +162,12 @@ impl<T: Persistable> OID for PersistentObject<T>
 	}
 	
 	#[inline(always)]
+	fn is_not_null(&self) -> bool
+	{
+		self.oid.is_not_null()
+	}
+	
+	#[inline(always)]
 	fn equals(&self, other: &Self) -> bool
 	{
 		self.oid.equals(&other.oid)
@@ -170,10 +176,10 @@ impl<T: Persistable> OID for PersistentObject<T>
 	#[inline(always)]
 	fn object_pool(&self) -> *mut PMEMobjpool
 	{
-		debug_assert!(!self.is_null(), "Null; unallocated");
+		debug_assert!(self.is_not_null(), "Null; unallocated");
 		
 		let object_pool = self.oid.object_pool();
-		debug_assert!(!object_pool.is_null(), "How is the object_pool null for an allocated object?");
+		debug_assert!(object_pool.is_not_null(), "How is the object_pool null for an allocated object?");
 		
 		object_pool
 	}
@@ -187,7 +193,7 @@ impl<T: Persistable> OID for PersistentObject<T>
 	#[inline(always)]
 	fn type_number(&self) -> TypeNumber
 	{
-		debug_assert!(!self.is_null(), "Null; unallocated");
+		debug_assert!(self.is_not_null(), "Null; unallocated");
 		
 		self.oid.type_number()
 	}
@@ -195,10 +201,10 @@ impl<T: Persistable> OID for PersistentObject<T>
 	#[inline(always)]
 	fn address(&self) -> *mut c_void
 	{
-		debug_assert!(!self.is_null(), "Null; unallocated");
+		debug_assert!(self.is_not_null(), "Null; unallocated");
 		
 		let address = self.oid.address();
-		debug_assert!(!address.is_null(), "How is the address null for an allocated object?");
+		debug_assert!(address.is_not_null(), "How is the address null for an allocated object?");
 		address
 	}
 }
@@ -369,7 +375,7 @@ impl<T: Persistable> PersistentObject<T>
 	pub fn object_pool(&self) -> *mut PMEMobjpool
 	{
 		let object_pool = self.oid.object_pool();
-		debug_assert!(!object_pool.is_null(), "This object does not have a valid OID");
+		debug_assert!(object_pool.is_not_null(), "This object does not have a valid OID");
 		
 		object_pool
 	}
@@ -387,7 +393,7 @@ impl<T: Persistable> PersistentObject<T>
 			let size = size::<T>();
 			
 			let oid = unsafe { pmemobj_root_construct(object_pool, size, constructor, arguments) };
-			if likely(!oid.is_null())
+			if likely(oid.is_not_null())
 			{
 				*oid_pointer = oid;
 				false
@@ -422,7 +428,7 @@ impl<T: Persistable> PersistentObject<T>
 	#[inline(always)]
 	fn allocate_uninitialized_and_construct_object_internal<A: FnOnce(*mut PMEMobjpool, &mut PMEMoid, pmemobj_constr, *mut c_void) -> bool>(object_pool: *mut PMEMobjpool, oid: &mut PMEMoid, allocate: A, arguments: &mut T::Arguments) -> Result<(), PmdkError>
 	{
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
 		
 		#[thread_local] static mut CapturedPanic: Option<Box<Any + Send + 'static>> = None;
 		
@@ -430,9 +436,9 @@ impl<T: Persistable> PersistentObject<T>
 		{
 			let result = catch_unwind(AssertUnwindSafe(||
 			{
-				debug_assert!(!object_pool.is_null(), "object_pool is null");
-				debug_assert!(!ptr.is_null(), "ptr is null");
-				debug_assert!(!arg.is_null(), "arg is null");
+				debug_assert!(object_pool.is_not_null(), "object_pool is null");
+				debug_assert!(ptr.is_not_null(), "ptr is null");
+				debug_assert!(arg.is_not_null(), "arg is null");
 				
 				T::initialize(ptr as *mut T, object_pool, &mut *(arg as *mut T::Arguments))
 			}));

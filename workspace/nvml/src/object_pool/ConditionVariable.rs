@@ -15,8 +15,8 @@ impl<'a, T: Persistable> ConditionVariable<'a, T>
 	#[inline(always)]
 	fn new(object_pool: *mut PMEMobjpool, condition_variable: *mut PMEMcond) -> Self
 	{
-		debug_assert!(!object_pool.is_null(), "object_pool is null");
-		debug_assert!(!condition_variable.is_null(), "condition_variable is null");
+		debug_assert!(object_pool.is_not_null(), "object_pool is null");
+		debug_assert!(condition_variable.is_not_null(), "condition_variable is null");
 		
 		Self
 		{

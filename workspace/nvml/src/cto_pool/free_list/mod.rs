@@ -2,10 +2,9 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
-// Based on liblfds
-
-
+use IsNotNull;
 use super::CtoPoolArc;
+use super::PMEMctopoolExt;
 #[cfg(not(feature = "rdrand"))] use ::rand::thread_rng;
 use ::spin_locks::BestSpinLockForCompilationTarget;
 use ::spin_locks::SpinLock;
@@ -16,6 +15,7 @@ use ::std::mem::transmute;
 use ::std::ptr::drop_in_place;
 use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
+use ::std::ptr::replace;
 use ::std::ptr::write;
 use ::std::sync::atomic::AtomicPtr;
 use ::std::sync::atomic::AtomicU64;

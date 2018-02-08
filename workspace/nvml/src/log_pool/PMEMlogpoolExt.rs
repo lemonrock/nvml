@@ -46,7 +46,7 @@ macro_rules! debug_assert_self_is_not_null
 {
 	($self: ident) =>
 	{
-		debug_assert!(!$self.is_null(), "PMEMlogpool (plp) can not be null");
+		debug_assert!($self.is_not_null(), "PMEMlogpool (plp) can not be null");
 	}
 }
 
@@ -54,7 +54,7 @@ macro_rules! debug_assert_buffer_is_not_null
 {
 	($buffer: ident) =>
 	{
-		debug_assert!(!$buffer.is_null(), "buffer can not be null");
+		debug_assert!($buffer.is_not_null(), "buffer can not be null");
 	}
 }
 

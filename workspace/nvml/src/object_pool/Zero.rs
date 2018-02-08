@@ -17,8 +17,8 @@ macro_rules! zero_guard
 	($self: ident, $objectPool: ident) =>
 	{
 		{
-			debug_assert!(!$self.is_null(), "self is null");
-			debug_assert!(!$objectPool.is_null(), "objectPool is null");
+			debug_assert!($self.is_not_null(), "self is null");
+			debug_assert!($objectPool.is_not_null(), "objectPool is null");
 		}
 	}
 }

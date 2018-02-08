@@ -39,7 +39,7 @@ impl PMEMobjpoolExt for *mut PMEMobjpool
 	#[inline(always)]
 	fn copy_nonoverlapping_then_persist(self, address: *mut c_void, length: usize, from: *const c_void)
 	{
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { pmemobj_memcpy_persist(self, address, from, length) };
 	}

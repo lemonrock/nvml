@@ -53,7 +53,7 @@ impl<'memory> PersistOnDrop<'memory> for MappedPersistOnDrop<'memory>
 	#[inline(always)]
 	fn copy_then_flush(&self, length: usize, from: *const c_void)
 	{
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { copy(from, self.0, length) }
 		self.flush(length)
@@ -64,7 +64,7 @@ impl<'memory> PersistOnDrop<'memory> for MappedPersistOnDrop<'memory>
 	#[inline(always)]
 	fn copy_nonoverlapping_then_flush(&self, length: usize, from: *const c_void)
 	{
-		debug_assert!(!from.is_null(), "from must not be null");
+		debug_assert!(from.is_not_null(), "from must not be null");
 		
 		unsafe { copy_nonoverlapping(from, self.0, length) }
 		self.flush(length)

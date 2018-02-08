@@ -153,7 +153,7 @@ impl<T: CtoSafe> Deref for CtoVec<T>
 		unsafe
 		{
 			let pointer = self.buf.ptr();
-			assume(!pointer.is_null());
+			assume(pointer.is_not_null());
 			from_raw_parts(pointer, self.len)
 		}
 	}
@@ -167,7 +167,7 @@ impl<T: CtoSafe> DerefMut for CtoVec<T>
 		unsafe
 		{
 			let pointer = self.buf.ptr();
-			assume(!pointer.is_null());
+			assume(pointer.is_not_null());
 			from_raw_parts_mut(pointer, self.len)
 		}
 	}
@@ -1003,7 +1003,7 @@ impl<T: CtoSafe> IntoIterator for CtoVec<T>
 		unsafe
 		{
 			let begin = self.as_mut_ptr();
-			assume(!begin.is_null());
+			assume(begin.is_not_null());
 
 			let end = if size_of::<T>() == 0
 			{
