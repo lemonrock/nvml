@@ -55,23 +55,17 @@ impl<T> Drop for FreeList<T>
 	}
 }
 
+impl<T> CtoStrongArcInner for FreeList<T>
+{
+	#[inline(always)]
+	fn reference_counter(&self) -> &AtomicUsize
+	{
+		&self.reference_counter
+	}
+}
+
 impl<T> FreeList<T>
 {
-	const MinimumReference: usize = 1;
-	
-	#[inline(always)]
-	fn acquire_reference(&self)
-	{
-		self.reference_counter.fetch_add(1, SeqCst);
-	}
-	
-	// Returns 'true' if the caller was the last reference.
-	#[inline(always)]
-	fn release_reference(&self) -> bool
-	{
-		self.reference_counter.fetch_sub(1, SeqCst) == Self::MinimumReference
-	}
-	
 	/// `initial_value` is written into this `FreeListElement`: it is ***not dropped***.
 	/// `trailing_additional_size_in_value_in_bytes` is used when `T` is a variably-sized type, for example, it represents a block of memory to be allocated inline in a `FreeListElement`.
 	/// An `InitializedFreeListElement` can still be dropped.
@@ -92,7 +86,12 @@ impl<T> FreeList<T>
 		fence(Acquire);
 	}
 	
-	fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> NonNull<Self>
+	/// Provides a strong atomically referenced counted ('Arc') wrapper around a FreeList.
+	/// When the last instance of `CtoFreeListArc` is dropped, the FreeList is dropped and all FreeListElements in the list are dropped.
+	/// Supply a `free_list_element_provider` if you want to make sure the elimination array is initially populated.
+	/// This can return `None` if it no longer can provide free list elements.
+	/// `elimination_array_length` should be equivalent to the number of threads.
+	pub fn new<FreeListElementProvider: Fn(&CtoPoolArc) -> Option<InitializedFreeListElement<T>>>(cto_pool_arc: &CtoPoolArc, elimination_array_length: EliminationArrayLength, free_list_element_provider: Option<FreeListElementProvider>) -> CtoStrongArc<Self>
 	{
 		let allocate_aligned_size = size_of::<Self>() + EliminationArray::<T>::variable_size_of_elimination_array_data(elimination_array_length);
 		
@@ -102,7 +101,7 @@ impl<T> FreeList<T>
 		{
 			let this = this.as_mut();
 			
-			write(&mut this.reference_counter, AtomicUsize::new(Self::MinimumReference));
+			write(&mut this.reference_counter, Self::new_reference_counter());
 			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
 			write(&mut this.pop_back_off_state, BackOffState::default());
 			write(&mut this.push_back_off_state, BackOffState::default());
@@ -121,7 +120,7 @@ impl<T> FreeList<T>
 		}
 		force_store();
 		
-		this
+		CtoStrongArc::new(this)
 	}
 	
 	/// Push a free list element.

@@ -20,5 +20,7 @@ use ::std::sync::atomic::Ordering::SeqCst;
 include!("CtoArc.rs");
 include!("CtoArcCell.rs");
 include!("CtoArcInner.rs");
+include!("CtoStrongArc.rs");
+include!("CtoStrongArcInner.rs");
 include!("WeakCtoArc.rs");
 

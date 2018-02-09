@@ -4,6 +4,8 @@
 
 use super::*;
 use super::super::persistent_memory::persistence::Persistence;
+use super::arc::CtoStrongArc;
+use super::arc::CtoStrongArcInner;
 use self::bags::*;
 use ::libc::c_void;
 use ::std::cell::Cell;

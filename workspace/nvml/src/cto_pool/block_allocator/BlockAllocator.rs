@@ -7,6 +7,7 @@
 #[repr(C)]
 pub struct BlockAllocator<B: Block>
 {
+	reference_counter: AtomicUsize,
 	memory_base_pointer: NonNull<u8>,
 	exclusive_end_address: NonNull<u8>,
 	cto_pool_arc: CtoPoolArc,
@@ -16,14 +17,6 @@ pub struct BlockAllocator<B: Block>
 	
 	// MUST be last item as it is variable-length.
 	block_meta_data_items: BlockMetaDataItems<B>,
-}
-
-unsafe impl<B: Block> Send for BlockAllocator<B>
-{
-}
-
-unsafe impl<B: Block> Sync for BlockAllocator<B>
-{
 }
 
 impl<B: Block> Drop for BlockAllocator<B>
@@ -48,12 +41,21 @@ impl<B: Block> CtoSafe for BlockAllocator<B>
 	}
 }
 
+impl<B: Block> CtoStrongArcInner for BlockAllocator<B>
+{
+	#[inline(always)]
+	fn reference_counter(&self) -> &AtomicUsize
+	{
+		&self.reference_counter
+	}
+}
+
 impl<B: Block> BlockAllocator<B>
 {
 	const CacheLineSize: usize = 64;
 	
 	/// block_size is a minimum of 256 and could be 512 for systems with AVX512 CPU instructions.
-	pub fn new(number_of_blocks: usize, cto_pool_arc: &CtoPoolArc) -> NonNull<Self>
+	pub fn new(number_of_blocks: usize, cto_pool_arc: &CtoPoolArc) -> CtoStrongArc<Self>
 	{
 		assert!(B::BlockSizeInBytes.is_power_of_two(), "BlockSizeInBytes must be a power of two");
 		assert!(B::BlockSizeInBytes >= Self::CacheLineSize, "BlockSizeInBytes must be be equal to or greater than cache-line size");
@@ -71,6 +73,7 @@ impl<B: Block> BlockAllocator<B>
 		unsafe
 		{
 			let this = this.as_mut();
+			write(&mut this.reference_counter, Self::new_reference_counter());
 			write(&mut this.memory_base_pointer, memory_base_pointer);
 			write(&mut this.exclusive_end_address, memory_base_pointer.offset(capacity));
 			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
@@ -81,7 +84,7 @@ impl<B: Block> BlockAllocator<B>
 		
 		// TODO: add blocks to bags and bag stripes.
 		
-		this
+		CtoStrongArc::new(this)
 	}
 	
 	#[inline(always)]

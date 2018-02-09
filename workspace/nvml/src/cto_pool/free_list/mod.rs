@@ -5,6 +5,8 @@
 use IsNotNull;
 use super::CtoPoolArc;
 use super::CtoSafe;
+use super::arc::CtoStrongArc;
+use super::arc::CtoStrongArcInner;
 use super::PMEMctopoolExt;
 #[cfg(not(all(target_feature = "rdrnd", any(target_arch = "x86", target_arch = "x86_64"))))] use ::rand::Rng;
 #[cfg(not(all(target_feature = "rdrnd", any(target_arch = "x86", target_arch = "x86_64"))))] use ::rand::thread_rng;
@@ -29,7 +31,6 @@ use ::std::sync::atomic::fence;
 use ::std::sync::atomic::Ordering::Acquire;
 use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
-use ::std::sync::atomic::Ordering::SeqCst;
 
 
 include!("AlignedVariableLengthArray.rs");
@@ -37,7 +38,6 @@ include!("AtomicIsolationSize.rs");
 include!("AtomicPointerAndCounter.rs");
 include!("AtomicU64Pair.rs");
 include!("BackOffState.rs");
-include!("CtoFreeListArc.rs");
 include!("EliminationArray.rs");
 include!("EliminationArrayCacheLine.rs");
 include!("EliminationArrayEntry.rs");
