@@ -173,7 +173,7 @@ impl<I: CtoStrongArcInner + Hasher> Hasher for CtoStrongArc<I>
 		(**self).write_u64(i)
 	}
 	
-	//	#[inline(always)]
+//	#[inline(always)]
 //	fn write_u128(&mut self, i: u128)
 //	{
 //		(**self).write_u128(i)
@@ -209,7 +209,7 @@ impl<I: CtoStrongArcInner + Hasher> Hasher for CtoStrongArc<I>
 		(**self).write_i64(i)
 	}
 	
-	//	#[inline(always)]
+//	#[inline(always)]
 //	fn write_i128(&mut self, i: i128)
 //	{
 //		(**self).write_i128(i)
