@@ -80,9 +80,9 @@ impl<B: Block> BlockAllocator<B>
 			write(&mut this.bags, Bags::default());
 			
 			this.block_meta_data_items.initialize(number_of_blocks);
+			
+			this.initialize_chains(number_of_blocks);
 		}
-		
-		// TODO: add blocks to bags and bag stripes.
 		
 		CtoStrongArc::new(this)
 	}
@@ -91,6 +91,33 @@ impl<B: Block> BlockAllocator<B>
 	fn block_meta_data_unchecked(&self, block_pointer: BlockPointer<B>) -> &BlockMetaData<B>
 	{
 		block_pointer.expand_to_pointer_to_meta_data_unchecked(&self.block_meta_data_items)
+	}
+	
+	fn initialize_chains(&mut self, number_of_blocks: usize)
+	{
+		let number_of_chains_of_maximum_length = number_of_blocks / InclusiveMaximumChainLength;
+		
+		let maximum_chain_length = ChainLength::from_length(InclusiveMaximumChainLength);
+		
+		let mut chain_index = 0;
+		while chain_index < number_of_chains_of_maximum_length
+		{
+			let block_index = chain_index * InclusiveMaximumChainLength;
+			let add_block = BlockPointer::new(block_index as u32);
+			
+			self.bags.add(&self.block_meta_data_items, maximum_chain_length, add_block);
+			
+			chain_index += 1;
+		}
+		
+		let odd_length_chain = number_of_blocks % InclusiveMaximumChainLength;
+		if odd_length_chain != 0
+		{
+			let block_index = number_of_blocks - odd_length_chain;
+			let add_block = BlockPointer::new(block_index as u32);
+			
+			self.bags.add(&self.block_meta_data_items, ChainLength::from_length(odd_length_chain), add_block);
+		}
 	}
 	
 	#[inline(always)]

@@ -42,7 +42,7 @@ impl<B: Block> BlockPointer<B>
 		let index = difference / B::BlockSizeInBytes;
 		debug_assert!(index < Self::ExclusiveMaximumBlockPointer, "index must be less than the ExclusiveMaximumBlockPointer, {}", Self::ExclusiveMaximumBlockPointer);
 		
-		BlockPointer(index as u32, PhantomData)
+		BlockPointer::new(index as u32)
 	}
 	
 	#[inline(always)]
