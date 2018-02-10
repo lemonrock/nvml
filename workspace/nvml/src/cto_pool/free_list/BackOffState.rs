@@ -85,7 +85,7 @@ impl BackOffState
 		
 		let total_operations = self.increment_total_operations();
 		
-		if total_operations >= 9999 && self.spin_lock.is_unlocked()
+		if total_operations >= 10000 && self.spin_lock.is_unlocked()
 		{
 			if self.spin_lock.try_to_acquire_spin_lock()
 			{

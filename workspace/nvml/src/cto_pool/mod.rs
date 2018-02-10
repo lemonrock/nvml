@@ -83,6 +83,8 @@ pub mod string;
 /// Start with `CtoFreeListArc`.
 pub mod free_list;
 
+mod wait_free_queue;
+
 include!("Allocator.rs");
 include!("CtoPool.rs");
 include!("CtoPoolAlloc.rs");
