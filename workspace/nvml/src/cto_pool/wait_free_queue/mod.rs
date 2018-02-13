@@ -11,8 +11,15 @@
 use IsNotNull;
 use ::std::cell::UnsafeCell;
 use ::std::intrinsics::atomic_load_acq;
+use ::std::intrinsics::atomic_store_rel;
+use ::std::intrinsics::atomic_cxchg;
+use ::std::intrinsics::atomic_cxchg_acq_failrelaxed;
+use ::std::intrinsics::atomic_cxchg_acqrel;
+use ::std::mem::uninitialized;
 use ::std::mem::size_of;
 use ::std::ptr::NonNull;
+use ::std::ptr::null_mut;
+use ::std::ptr::read;
 use ::std::ptr::read_volatile;
 use ::std::ptr::write;
 use ::std::ptr::write_volatile;
@@ -33,8 +40,96 @@ fn memset<T>(pointer: NonNull<T>, byte: u8, copies: usize)
 	unimplemented!()
 }
 
+#[inline(always)]
+fn free<T>(pointer: NonNull<T>)
+{
+	unimplemented!()
+}
+
+#[derive(Debug)]
+struct ExtendedNonNullAtomicPointer<T>(UnsafeCell<NonNull<T>>);
+
+impl<T> ExtendedNonNullAtomicPointer<T>
+{
+	#[inline(always)]
+	fn get(&self) -> NonNull<T>
+	{
+		unsafe { read(self.0.get()) }
+	}
+	
+	#[inline(always)]
+	fn set(&self, value: NonNull<T>)
+	{
+		unsafe { write(self.0.get(), value) }
+	}
+	
+	#[inline(always)]
+	fn CASra(&self, cmp: &mut NonNull<T>, val: NonNull<T>) -> bool
+	{
+		// #define CASra(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)
+		let (value, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *cmp, val) };
+		
+		if !ok
+		{
+			*cmp = value;
+		}
+		ok
+	}
+}
+
 enum void
 {
+}
+
+trait PreFixOperators
+{
+	// the --self C operator
+	#[inline(always)]
+	fn pre_decrement(&mut self) -> Self;
+	
+	// the ++self C operator
+	#[inline(always)]
+	fn pre_increment(&mut self) -> Self;
+}
+
+impl PreFixOperators for isize
+{
+	#[inline(always)]
+	fn pre_decrement(&mut self) -> Self
+	{
+		let old_value = *self;
+		*self = old_value - 1;
+		*self
+	}
+
+	#[inline(always)]
+	fn pre_increment(&mut self) -> Self
+	{
+		let old_value = *self;
+		*self = old_value + 1;
+		*self
+	}
+}
+
+impl PreFixOperators for usize
+{
+	#[inline(always)]
+	fn pre_decrement(&mut self) -> Self
+	{
+		let old_value = *self;
+		debug_assert_ne!(old_value, 0, "old_value was zero");
+		*self = old_value - 1;
+		*self
+	}
+
+	#[inline(always)]
+	fn pre_increment(&mut self) -> Self
+	{
+		let old_value = *self;
+		debug_assert_ne!(old_value, ::std::usize::MAX, "old_value was usize::MAX");
+		*self = old_value + 1;
+		*self
+	}
 }
 
 trait PostFixOperators
@@ -42,16 +137,49 @@ trait PostFixOperators
 	// the self-- C operator
 	#[inline(always)]
 	fn post_decrement(&mut self) -> Self;
+	
+	// the self++ C operator
+	#[inline(always)]
+	fn post_increment(&mut self) -> Self;
 }
 
-impl PostFixOperators for i32
+impl PostFixOperators for isize
 {
 	#[inline(always)]
 	fn post_decrement(&mut self) -> Self
 	{
-		let value = *self;
-		*self = value - 1;
-		value
+		let old_value = *self;
+		*self = old_value - 1;
+		old_value
+	}
+
+	#[inline(always)]
+	fn post_increment(&mut self) -> Self
+	{
+		let old_value = *self;
+		*self = old_value + 1;
+		old_value
+	}
+}
+
+impl PostFixOperators for usize
+{
+	#[inline(always)]
+	fn post_decrement(&mut self) -> Self
+	{
+		let old_value = *self;
+		debug_assert_ne!(old_value, 0, "old_value was zero");
+		*self = old_value - 1;
+		old_value
+	}
+
+	#[inline(always)]
+	fn post_increment(&mut self) -> Self
+	{
+		let old_value = *self;
+		debug_assert_ne!(old_value, ::std::usize::MAX, "old_value was usize::MAX");
+		*self = old_value + 1;
+		old_value
 	}
 }
 
@@ -155,12 +283,28 @@ impl<T: Copy> CacheAligned<volatile<T>>
 		self.0.ACQUIRE()
 	}
 	
-	// true if successful
-	// false if failed
+	#[inline(always)]
+	pub(crate) fn RELEASE(&self, value: T)
+	{
+		self.0.RELEASE(value)
+	}
+	
 	#[inline(always)]
 	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
 	{
 		self.0.CAScs(cmp, val)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CASra(cmp, val)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CASa(cmp, val)
 	}
 }
 
@@ -212,12 +356,28 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 		self.0.ACQUIRE()
 	}
 	
-	// true if successful
-	// false if failed
+	#[inline(always)]
+	pub(crate) fn RELEASE(&self, value: T)
+	{
+		self.0.RELEASE(value)
+	}
+	
 	#[inline(always)]
 	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
 	{
 		self.0.CAScs(cmp, val)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CASra(cmp, val)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CASa(cmp, val)
 	}
 }
 
@@ -250,14 +410,58 @@ impl<T: Copy> volatile<T>
 		unsafe { atomic_load_acq(self.0.get() as *const T) }
 	}
 	
-	// true if successful
-	// false if failed
+	#[inline(always)]
+	pub(crate) fn RELEASE(&self, value: T)
+	{
+		unsafe { atomic_store_rel(self.0.get(), value) }
+	}
+	
+	/// An atomic compare-and-swap that also ensures sequential consistency.
+	/// true if successful
+	/// false if failed
 	#[inline(always)]
 	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
 	{
-		let ptr = self;
 		// #define CAScs(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		unimplemented!();
+		let (value, ok) = unsafe { atomic_cxchg(self.0.get(), *cmp, val) };
+		
+		if !ok
+		{
+			*cmp = value;
+		}
+		ok
+	}
+	
+	/// An atomic compare-and-swap that ensures release semantic when succeed or acquire semantic when failed.
+	/// true if successful
+	/// false if failed
+	#[inline(always)]
+	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	{
+		// #define CASra(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)
+		let (value, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *cmp, val) };
+		
+		if !ok
+		{
+			*cmp = value;
+		}
+		ok
+	}
+	
+	/// An atomic compare-and-swap that ensures acquire semantic when succeed or relaxed semantic when failed.
+	/// true if successful
+	/// false if failed
+	#[inline(always)]
+	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	{
+		// #define CASa(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
+		let (value, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), *cmp, val) };
+		
+		if !ok
+		{
+			*cmp = value;
+		}
+		ok
 	}
 }
 
@@ -276,15 +480,12 @@ const BOT: *mut void = 0 as *mut void;
 
 const TOP: *mut void = !0 as *mut void;
 
-const MAX_SPIN: i32 = 100;
+const MAX_SPIN: usize = 100;
 
 const MAX_PATIENCE: i32 = 10;
 
-#[inline(always)]
-fn MAX_GARBAGE(n: usize) -> usize
-{
-	2 * n
-}
+const MaximumNumberOfProcessors: usize = 256;
+
 
 #[inline(always)]
 fn spin(p: &volatile<*mut void>) -> *mut void
@@ -301,14 +502,14 @@ fn spin(p: &volatile<*mut void>) -> *mut void
 	v
 }
 
-fn check(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<node_t>, old: NonNull<node_t>) -> NonNull<node_t>
+fn check(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<node_t>, old: *mut node_t) -> NonNull<node_t>
 {
-	let hzd_node_id = p_hzd_node_id.ACQUIRE();
+	let hzd_node_id: usize = p_hzd_node_id.ACQUIRE();
 	
-	if hzd_node_id < cur.id()
+	if hzd_node_id < (cur.id() as usize)
 	{
-		let mut tmp = old;
-		while tmp.id() < hzd_node_id
+		let mut tmp = old.to_non_null();
+		while (tmp.id() as usize) < hzd_node_id
 		{
 			tmp = tmp.next_non_null();
 		}
@@ -318,7 +519,7 @@ fn check(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<node_t>, old: NonNull
 	cur
 }
 
-fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_id: &volatile<usize>, old: NonNull<node_t>) -> NonNull<node_t>
+fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_id: &volatile<usize>, old: *mut node_t) -> NonNull<node_t>
 {
 	let mut ptr = pPn.ACQUIRE();
 	
@@ -340,47 +541,6 @@ fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_
 
 /*
 
-static void cleanup(queue_t *q, handle_t *th) {
-    long oid = ACQUIRE(&q->Hi);
-    node_t *new = th->Dp;
-
-    if (oid == -1) return;
-    if (new->id - oid < MAX_GARBAGE(q->nprocs)) return;
-    if (!CASa(&q->Hi, &oid, -1)) return;
-
-    node_t *old = q->Hp;
-    handle_t *ph = th;
-    handle_t *phs[q->nprocs];
-    int i = 0;
-
-    do {
-        new = check(&ph->hzd_node_id, new, old);
-        new = update(&ph->Ep, new, &ph->hzd_node_id, old);
-        new = update(&ph->Dp, new, &ph->hzd_node_id, old);
-
-        phs[i++] = ph;
-        ph = ph->next;
-    } while (new->id > oid && ph != th);
-
-    while (new->id > oid && --i >= 0) {
-        new = check(&phs[i]->hzd_node_id, new, old);
-    }
-
-    long nid = new->id;
-
-    if (nid <= oid) {
-        RELEASE(&q->Hi, oid);
-    } else {
-        q->Hp = new;
-        RELEASE(&q->Hi, nid);
-
-        while (old != new) {
-            node_t *tmp = old->next;
-            free(old);
-            old = tmp;
-        }
-    }
-}
 
 static cell_t *find_cell(node_t *volatile *ptr, long i, handle_t *th) {
     node_t *curr = *ptr;
@@ -633,12 +793,20 @@ void *dequeue(queue_t *q, handle_t *th) {
 struct enq_t
 {
 	id: volatile<isize>,
-	
 	val: volatile<*mut void>,
 }
 
 impl enq_t
 {
+	#[inline(always)]
+	fn new(id: isize, val: *mut void) -> Self
+	{
+		Self
+		{
+			id: volatile::new(id),
+			val: volatile::new(val),
+		}
+	}
 }
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
@@ -646,23 +814,29 @@ impl enq_t
 struct deq_t
 {
 	id: volatile<isize>,
-	
 	idx: volatile<isize>,
 }
 
 impl deq_t
 {
+	#[inline(always)]
+	fn new(id: isize, idx: isize) -> Self
+	{
+		Self
+		{
+			id: volatile::new(id),
+			idx: volatile::new(idx),
+		}
+	}
 }
 
+// `pad` is to make this structure 64 bytes, ie one cache line.
 #[repr(C)]
 struct cell_t
 {
 	val: volatile<*mut void>,
-	
 	enq: volatile<*mut enq_t>,
-	
 	deq: volatile<*mut deq_t>,
-
 	pad: [*mut void; 5],
 }
 
@@ -674,14 +848,25 @@ impl cell_t
 struct node_t
 {
 	next: CacheAligned<volatile<*mut node_t>>,
-	id: CacheAligned<usize>,
+	id: CacheAligned<isize>,
 	cells: CacheAligned<[cell_t; WFQUEUE_NODE_SIZE]>,
+}
+
+impl node_t
+{
+	#[inline(always)]
+	fn new_node() -> NonNull<Self>
+	{
+		let n = align_malloc(PAGE_SIZE, size_of::<Self>());
+		memset(n, 0, size_of::<Self>());
+		n
+	}
 }
 
 trait NodeNonNull<T>: SafeNonNull<T>
 {
 	#[inline(always)]
-	fn id(self) -> usize;
+	fn id(self) -> isize;
 	
 	#[inline(always)]
 	fn next(self) -> *mut node_t;
@@ -693,7 +878,7 @@ trait NodeNonNull<T>: SafeNonNull<T>
 impl NodeNonNull<node_t> for NonNull<node_t>
 {
 	#[inline(always)]
-	fn id(self) -> usize
+	fn id(self) -> isize
 	{
 		self.reference().id.get()
 	}
@@ -708,17 +893,6 @@ impl NodeNonNull<node_t> for NonNull<node_t>
 	fn next_non_null(self) -> NonNull<node_t>
 	{
 		self.next().to_non_null()
-	}
-}
-
-impl node_t
-{
-	#[inline(always)]
-	fn new_node() -> NonNull<Self>
-	{
-		let n = align_malloc(PAGE_SIZE, size_of::<Self>());
-		memset(n, 0, size_of::<Self>());
-		n
 	}
 }
 
@@ -740,21 +914,29 @@ struct queue_t
 	
 	// Number of processors.
 	nprocs: usize,
+
+	_tail: volatile<*mut handle_t>,
 }
 
 impl queue_t
 {
-	pub(crate) fn queue_init(mut this: NonNull<Self>, nprocs: usize)
+	pub(crate) fn new(nprocs: usize) -> NonNull<Self>
 	{
-		let this = this.mutable_reference();
+		let mut this = align_malloc(PAGE_SIZE, size_of::<Self>());
+		
 		unsafe
 		{
-			write(&mut this.Hi, DoubleCacheAligned::new(volatile::new(0)));
-			write(&mut this.Hp, volatile::new(node_t::new_node().as_ptr()));
-			write(&mut this.Ei, DoubleCacheAligned::new(volatile::new(1)));
-			write(&mut this.Di, DoubleCacheAligned::new(volatile::new(1)));
+			let this: &mut Self = this.mutable_reference();
+			
+			this.Hi.set(0);
+			this.Hp.set(node_t::new_node().as_ptr());
+			this.Ei.set(1);
+			this.Di.set(1);
 			write(&mut this.nprocs, nprocs);
+			this._tail.set(null_mut());
 		}
+		
+		this
 	}
 	
 	/// Called per thread exit. Does nothing for a wf-queue.
@@ -763,63 +945,106 @@ impl queue_t
 	{
 	}
 	
-	/*
-	
-	void queue_register(queue_t *q, handle_t *th, int id) {
-		th->next = NULL;
-		th->hzd_node_id = -1;
-		th->Ep = q->Hp;
-		th->enq_node_id = th->Ep->id;
-		th->Dp = q->Hp;
-		th->deq_node_id = th->Dp->id;
-	
-		th->Er.id = 0;
-		th->Er.val = BOT;
-		th->Dr.id = 0;
-		th->Dr.idx = -1;
-	
-		th->Ei = 0;
-		th->spare = new_node();
-	
-		static handle_t *volatile _tail;
-		handle_t *tail = _tail;
-	
-		if (tail == NULL) {
-			th->next = th;
-			if (CASra(&_tail, &tail, th)) {
-				th->Eh = th->next;
-				th->Dh = th->next;
-				return;
-			}
-		}
-	
-		handle_t *next = tail->next;
-		do
-			th->next = next;
-		while (!CASra(&tail->next, &next, th));
-	
-		th->Eh = th->next;
-		th->Dh = th->next;
+	#[inline(always)]
+	fn maximum_garbage(this: NonNull<Self>) -> isize
+	{
+		let result = 2 * this.reference().nprocs;
+		debug_assert!(result <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
+		result as isize
 	}
 	
-	*/
-	
+	pub(crate) fn cleanup(mut q: NonNull<Self>, th: NonNull<handle_t>)
+	{
+		const NoOid: isize = -1;
+		
+		let mut oid = q.reference().Hi.ACQUIRE();
+		
+		let mut new = th.reference().Dp.get();
+		
+		if oid == NoOid
+		{
+			return;
+		}
+		
+		if new.id() - oid < Self::maximum_garbage(q)
+		{
+			return;
+		}
+		
+		if !q.reference().Hi.CASa(&mut oid, NoOid)
+		{
+			return;
+		}
+		
+		let mut old = q.reference().Hp.get();
+		let mut ph = th;
+		
+		// Was dimensioned by q.reference().nprocs, but variable stack arrays aren't supported by Rust.
+		// handle_t *phs[q->nprocs];  ie let mut phs: [*mut handle_t; q.reference().nprocs]
+		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
+		let mut phs: [NonNull<handle_t>; MaximumNumberOfProcessors] = unsafe { uninitialized() };
+		let mut i: isize = 0;
+		
+		{
+			new = check(&ph.reference().hzd_node_id, new, old);
+			new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
+			new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
+			*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
+			ph = ph.reference().next.get();
+		}
+		while new.id() > oid && ph.as_ptr() != th.as_ptr()
+		{
+			new = check(&ph.reference().hzd_node_id, new, old);
+			new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
+			new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
+			*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
+			ph = ph.reference().next.get();
+		}
+		
+		while new.id() > oid && i.pre_decrement() >= 0
+		{
+			new = check(&(unsafe { phs.get_unchecked(i as usize) }.reference().hzd_node_id), new, old);
+		}
+		
+		let nid = new.reference().id.get() as isize;
+		
+		if nid <= oid
+		{
+			q.reference().Hi.RELEASE(oid);
+		}
+		else
+		{
+			q.mutable_reference().Hp.set(new.as_ptr());
+			q.reference().Hi.RELEASE(nid);
+			
+			while old != new.as_ptr()
+			{
+				let old_non_null = old.to_non_null();
+				let tmp = old_non_null.reference().next.get();
+				free(old_non_null);
+				old = tmp;
+			}
+		}
+	}
 }
 
 struct handle_t
 {
-	// Pointer to the next handle.
-	next: *mut handle_t,
+	// Pointer to the next thread handle; a singularly linked list.
+	// Can pointer to self if the first item in the singularly linked list.
+	next: ExtendedNonNullAtomicPointer<handle_t>,
 	
 	// Hazard pointer.
 	hzd_node_id: volatile<usize>,
 	
 	// Pointer to the node for enqueue.
-	Ep: volatile<*mut node_t>,
+	Ep: volatile<NonNull<node_t>>,
+	// Obtained originally from self.Ep.id, assigned to self.hzd_node_id; a kind of cache of the original value of id.
 	enq_node_id: usize,
 	
 	// Pointer to the node for dequeue.
-	Dp: volatile<*mut node_t>,
+	Dp: volatile<NonNull<node_t>>,
+	// Obtained originally from self.Dp.id, assigned to hzd_node_id; a kind of cache of the original value of id.
 	deq_node_id: usize,
 	
 	// Enqueue request.
@@ -829,20 +1054,84 @@ struct handle_t
 	Dr: CacheAligned<deq_t>,
 	
 	// Handle of the next enqueuer to help.
-	Eh: CacheAligned<*mut handle_t>,
+	Eh: CacheAligned<NonNull<handle_t>>,
 	
 	Ei: isize,
 	
 	// Handle of the next dequeuer to help.
-	Dh: *mut handle_t,
+	Dh: NonNull<handle_t>,
 	
 	// Pointer to a spare node to use, to speedup adding a new node.
 	spare: CacheAligned<*mut node_t>,
-	
-	// Count the delay rounds of helping another dequeuer.
-	delay: i32,
 }
 
 impl handle_t
 {
+	pub(crate) fn thread_init(q: NonNull<queue_t>, nprocs: usize) -> NonNull<Self>
+	{
+		assert!(nprocs <= MaximumNumberOfProcessors, "nprocs '{}' exceeds MaximumNumberOfProcessors '{}'", nprocs, MaximumNumberOfProcessors);
+		
+		let th = align_malloc(PAGE_SIZE, size_of::<Self>());
+		Self::queue_register(q, th);
+		th
+	}
+	
+	/// Called once per thread from `thread_init`.
+	/// id is a thread id, but not derived from the thread itself - it is assumed to start at 1.
+	fn queue_register(q: NonNull<queue_t>, mut th: NonNull<handle_t>)
+	{
+		let q = q.reference();
+		let th = th.mutable_reference();
+		
+		unsafe
+		{
+			// Seems to be unnecessary as this value is always overwritten.
+			// th.next.set(null_mut());
+			th.hzd_node_id.set(!0); // Was -1
+			
+			th.Ep.set(q.Hp.get().to_non_null());
+			// enq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
+			write(&mut th.enq_node_id, th.Ep.get().id() as usize);
+			
+			th.Dp.set(q.Hp.get().to_non_null());
+			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
+			write(&mut th.deq_node_id, th.Dp.get().id() as usize);
+			
+			write(&mut th.Er, CacheAligned::new(enq_t::new(0, BOT)));
+			
+			write(&mut th.Dr, CacheAligned::new(deq_t::new(0, -1)));
+			
+			write(&mut th.Ei, 0);
+			
+			write(&mut th.spare, CacheAligned::new(node_t::new_node().as_ptr()));
+			
+			let mut tail = q._tail.get();
+			
+			if tail.is_null()
+			{
+				let th_self = NonNull::new_safe(th);
+				th.next.set(th_self);
+				if q._tail.CASra(&mut tail, th)
+				{
+					th.Eh.set(th.next.get());
+					write(&mut th.Dh, th.next.get());
+					return
+				}
+				// NOTE: tail will have been updated by CASra; q._tail will not longer have been null, hence tail will now no longer be null, so fall through to logic below.
+			}
+			let tail_non_null = tail.to_non_null();
+			
+			let tail = tail_non_null.reference();
+			let mut next = tail.next.get();
+			
+			th.next.set(next);
+			while !tail.next.CASra(&mut next, NonNull::new_safe(th))
+			{
+				th.next.set(next)
+			}
+			
+			th.Eh.set(th.next.get());
+			write(&mut th.Dh, th.next.get());
+		}
+	}
 }
