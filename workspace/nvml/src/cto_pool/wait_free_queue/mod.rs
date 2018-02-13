@@ -815,7 +815,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn cleanup(mut q: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn cleanup(&self, th: NonNull<WaitFreeQueuePerThreadHandle>)
 	{
 		#[inline(always)]
 		fn check(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<Node>, old: *mut Node) -> NonNull<Node>
@@ -856,17 +856,9 @@ impl WaitFreeQueueInner
 			cur
 		}
 		
-		#[inline(always)]
-		fn maximum_garbage(this: NonNull<WaitFreeQueueInner>) -> isize
-		{
-			let result = 2 * this.reference().number_of_threads;
-			debug_assert!(result <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
-			result as isize
-		}
-		
 		const NoOid: isize = -1;
 		
-		let mut oid = q.reference().Hi.ACQUIRE();
+		let mut oid = self.Hi.ACQUIRE();
 		
 		let mut new = th.reference().Dp.get();
 		
@@ -875,17 +867,17 @@ impl WaitFreeQueueInner
 			return;
 		}
 		
-		if new.id() - oid < maximum_garbage(q)
+		if new.id() - oid < self.maximum_garbage()
 		{
 			return;
 		}
 		
-		if !q.reference().Hi.CASa(&mut oid, NoOid)
+		if !self.Hi.CASa(&mut oid, NoOid)
 		{
 			return;
 		}
 		
-		let mut old = q.reference().Hp.get();
+		let mut old = self.Hp.get();
 		let mut ph = th;
 		
 		// Was dimensioned by q.reference().nprocs, but variable stack arrays aren't supported by Rust.
@@ -915,12 +907,12 @@ impl WaitFreeQueueInner
 		
 		if nid <= oid
 		{
-			q.reference().Hi.RELEASE(oid);
+			self.Hi.RELEASE(oid);
 		}
 		else
 		{
-			q.mutable_reference().Hp.set(new.as_ptr());
-			q.reference().Hi.RELEASE(nid);
+			self.Hp.set(new.as_ptr());
+			self.Hi.RELEASE(nid);
 			
 			while old != new.as_ptr()
 			{
@@ -933,18 +925,26 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void)
+	fn maximum_garbage(&self) -> isize
+	{
+		let result = 2 * self.number_of_threads;
+		debug_assert!(result <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
+		result as isize
+	}
+	
+	#[inline(always)]
+	pub(crate) fn enqueue(&self, mut th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void)
 	{
 		th.reference().hzd_node_id.set(th.reference().enq_node_id);
 		
 		let mut id = unsafe { uninitialized() };
 		let mut p = MAX_PATIENCE;
-		while !Self::enq_fast(this, th, v, &mut id) && p.post_decrement() > 0
+		while !self.enq_fast(th, v, &mut id) && p.post_decrement() > 0
 		{
 		}
 		if p < 0
 		{
-			Self::enq_slow(this, th, v, id)
+			self.enq_slow(th, v, id)
 		}
 		
 		th.mutable_reference().enq_node_id = th.reference().Ep.get().reference().id.get() as usize;
@@ -952,7 +952,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn dequeue(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> *mut void
+	pub(crate) fn dequeue(&self, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> *mut void
 	{
 		th.reference().hzd_node_id.set(th.reference().deq_node_id);
 		
@@ -964,19 +964,19 @@ impl WaitFreeQueueInner
 		{
 			do
 			{
-				v = Self::deq_fast(this, th, &mut id);
+				v = self.deq_fast(th, &mut id);
 			}
 			while v == TOP && p.post_decrement() > 0
 		}
 		
 		if v == TOP
 		{
-			v = Self::deq_slow(this, th, id);
+			v = self.deq_slow(th, id);
 		}
 		
 		if v != EMPTY
 		{
-			Self::help_deq(this, th, th.reference().Dh);
+			self.help_deq(th, th.reference().Dh);
 			th.mutable_reference().Dh = th.reference().Dh.reference().next.get();
 		}
 		
@@ -985,7 +985,7 @@ impl WaitFreeQueueInner
 		
 		if th.reference().spare.get().is_null()
 		{
-			Self::cleanup(this, th);
+			self.cleanup(th);
 			th.mutable_reference().spare.set(Node::new_node().as_ptr());
 		}
 		
@@ -993,9 +993,9 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enq_fast(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, id: &mut isize) -> bool
+	fn enq_fast(&self, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, id: &mut isize) -> bool
 	{
-		let i = this.reference().Ei.FAAcs(1);
+		let i = self.Ei.FAAcs(1);
 		
 		let c = Node::find_cell(&th.reference().Ep, i, th);
 		let mut cv: *mut void = BOT;
@@ -1012,7 +1012,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enq_slow(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, mut id: isize)
+	fn enq_slow(&self, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, mut id: isize)
 	{
 		let enq: &Enqueuer = &th.reference().Er;
 		enq.val.set(v);
@@ -1024,7 +1024,7 @@ impl WaitFreeQueueInner
 		
 		'do_while: while
 		{
-			i = this.reference().Ei.FAA(1);
+			i = self.Ei.FAA(1);
 			c = Node::find_cell(tail, i, th);
 			let mut ce = BOT as *mut Enqueuer; // TODO: null_mut()
 			
@@ -1046,8 +1046,8 @@ impl WaitFreeQueueInner
 		c = Node::find_cell(&th.reference().Ep, id, th);
 		if id > i
 		{
-			let mut Ei: isize = this.reference().Ei.get();
-			while Ei <= id && !this.reference().Ei.CAS(&mut Ei, id + 1)
+			let mut Ei: isize = self.Ei.get();
+			while Ei <= id && !self.Ei.CAS(&mut Ei, id + 1)
 			{
 			}
 		}
@@ -1056,7 +1056,7 @@ impl WaitFreeQueueInner
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn help_enq(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, c: &Cell, i: isize) -> *mut void
+	fn help_enq(&self, mut th: NonNull<WaitFreeQueuePerThreadHandle>, c: &Cell, i: isize) -> *mut void
 	{
 		#[inline(always)]
 		fn spin(p: &volatile<*mut void>) -> *mut void
@@ -1099,10 +1099,10 @@ impl WaitFreeQueueInner
 				
 				ph = th.reference().Eh.get();
 				let (pe2, id2) =
-					{
-						let pe = ph.reference().Er.deref();
-						(pe as *const _ as *mut _, pe.id.get())
-					};
+				{
+					let pe = ph.reference().Er.deref();
+					(pe as *const _ as *mut _, pe.id.get())
+				};
 				pe = pe2;
 				id = id2;
 			}
@@ -1125,7 +1125,7 @@ impl WaitFreeQueueInner
 		
 		if e == (TOP as *mut Enqueuer)
 		{
-			return if this.reference().Ei.get() <= i
+			return if self.Ei.get() <= i
 			{
 				BOT
 			}
@@ -1140,7 +1140,7 @@ impl WaitFreeQueueInner
 		
 		if ei > i
 		{
-			if c.val.get() == TOP && this.reference().Ei.get() <= i
+			if c.val.get() == TOP && self.Ei.get() <= i
 			{
 				return BOT
 			}
@@ -1149,8 +1149,8 @@ impl WaitFreeQueueInner
 		{
 			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.val.get() == TOP)
 			{
-				let mut Ei = this.reference().Ei.get();
-				while Ei <= i && !this.reference().Ei.CAS(&mut Ei, i + 1)
+				let mut Ei = self.Ei.get();
+				while Ei <= i && !self.Ei.CAS(&mut Ei, i + 1)
 				{
 				}
 				c.val.set(ev);
@@ -1161,11 +1161,11 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn deq_fast(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: &mut isize) -> *mut void
+	fn deq_fast(&self, th: NonNull<WaitFreeQueuePerThreadHandle>, id: &mut isize) -> *mut void
 	{
-		let i = this.reference().Di.FAAcs(1);
+		let i = self.Di.FAAcs(1);
 		let c = Node::find_cell(&th.reference().Dp, i, th);
-		let v = Self::help_enq(this, th, c, i);
+		let v = self.help_enq(th, c, i);
 		let mut cd = BOT as *mut Dequeuer;
 		
 		if v == BOT
@@ -1183,13 +1183,13 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn deq_slow(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: isize) -> *mut void
+	fn deq_slow(&self, th: NonNull<WaitFreeQueuePerThreadHandle>, id: isize) -> *mut void
 	{
 		let deq = th.reference().Dr.deref();
 		deq.id.RELEASE(id);
 		deq.idx.RELEASE(id);
 		
-		Self::help_deq(this, th, th);
+		self.help_deq(th, th);
 		let i = -deq.idx.get();
 		let c = Node::find_cell(&th.reference().Dp, i, th);
 		let val = c.val.get();
@@ -1205,7 +1205,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn help_deq(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, ph: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn help_deq(&self, th: NonNull<WaitFreeQueuePerThreadHandle>, ph: NonNull<WaitFreeQueuePerThreadHandle>)
 	{
 		let deq = ph.reference().Dr.deref();
 		let mut idx = deq.idx.ACQUIRE();
@@ -1233,12 +1233,12 @@ impl WaitFreeQueueInner
 			{
 				let c = Node::find_cell(h, i, th);
 				
-				let mut Di = this.reference().Di.get();
-				while Di <= i && !this.reference().Di.CAS(&mut Di, i + 1)
+				let mut Di = self.Di.get();
+				while Di <= i && !self.Di.CAS(&mut Di, i + 1)
 				{
 				}
 				
-				let v = Self::help_enq(this, th, c, i);
+				let v = self.help_enq(th, c, i);
 				if v == BOT || (v != TOP && c.deq.get() == (BOT as *mut Dequeuer))
 				{
 					new = i;
