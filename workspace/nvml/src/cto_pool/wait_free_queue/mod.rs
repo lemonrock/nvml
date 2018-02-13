@@ -28,6 +28,8 @@ use ::std::ptr::read;
 use ::std::ptr::read_volatile;
 use ::std::ptr::write;
 use ::std::ptr::write_volatile;
+use ::std::sync::atomic::fence;
+use ::std::sync::atomic::Ordering::SeqCst;
 use ::std::sync::atomic::spin_loop_hint;
 
 
@@ -70,6 +72,14 @@ macro_rules! do_while
         {
         }
     };
+}
+
+// A memory fence to ensure sequential consistency.
+#[inline(always)]
+fn FENCE()
+{
+	//  __atomic_thread_fence(__ATOMIC_SEQ_CST)
+	fence(SeqCst)
 }
 
 #[derive(Debug)]
@@ -666,119 +676,6 @@ fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_
 	cur
 }
 
-/*
-
-
-static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
-    deq_t *deq = &ph->Dr;
-    long idx = ACQUIRE(&deq->idx);
-    long id = deq->id;
-
-    if (idx < id) return;
-
-    node_t *Dp = ph->Dp;
-    th->hzd_node_id = ph->hzd_node_id;
-    FENCE();
-    idx = deq->idx;
-
-    long i = id + 1, old = id, new = 0;
-    while (1) {
-        node_t *h = Dp;
-        for (; idx == old && new == 0; ++i) {
-            cell_t *c = find_cell(&h, i, th);
-
-            long Di = q->Di;
-            while (Di <= i && !CAS(&q->Di, &Di, i + 1))
-                ;
-
-            void *v = help_enq(q, th, c, i);
-            if (v == BOT || (v != TOP && c->deq == BOT))
-                new = i;
-            else
-                idx = ACQUIRE(&deq->idx);
-        }
-
-        if (new != 0) {
-            if (CASra(&deq->idx, &idx, new)) idx = new;
-            if (idx >= new) new = 0;
-        }
-
-        if (idx < 0 || deq->id != id) break;
-
-        cell_t *c = find_cell(&Dp, idx, th);
-        deq_t *cd = BOT;
-        if (c->val == TOP || CAS(&c->deq, &cd, deq) || cd == deq) {
-            CAS(&deq->idx, &idx, -idx);
-            break;
-        }
-
-        old = idx;
-        if (idx >= i) i = idx + 1;
-    }
-}
-
-static void *deq_fast(queue_t *q, handle_t *th, long *id) {
-    long i = FAAcs(&q->Di, 1);
-    cell_t *c = find_cell(&th->Dp, i, th);
-    void *v = help_enq(q, th, c, i);
-    deq_t *cd = BOT;
-
-    if (v == BOT) return BOT;
-    if (v != TOP && CAS(&c->deq, &cd, TOP)) return v;
-
-    *id = i;
-    return TOP;
-}
-
-static void *deq_slow(queue_t *q, handle_t *th, long id) {
-    deq_t *deq = &th->Dr;
-    RELEASE(&deq->id, id);
-    RELEASE(&deq->idx, id);
-
-    help_deq(q, th, th);
-    long i = -deq->idx;
-    cell_t *c = find_cell(&th->Dp, i, th);
-    void *val = c->val;
-
-    return val == TOP ? BOT : val;
-}
-
-void *dequeue(queue_t *q, handle_t *th) {
-    th->hzd_node_id = th->deq_node_id;
-
-    void *v;
-    long id = 0;
-    int p = MAX_PATIENCE;
-
-    do
-        v = deq_fast(q, th, &id);
-    while (v == TOP && p-- > 0);
-    if (v == TOP)
-        v = deq_slow(q, th, id);
-    else {
-#ifdef RECORD
-        th->fastdeq++;
-#endif
-    }
-
-    if (v != EMPTY) {
-        help_deq(q, th, th->Dh);
-        th->Dh = th->Dh->next;
-    }
-
-    th->deq_node_id = th->Dp->id;
-    RELEASE(&th->hzd_node_id, -1);
-
-    if (th->spare == NULL) {
-        cleanup(q, th);
-        th->spare = new_node();
-    }
-
-    return v;
-}
-
-
-*/
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
@@ -1074,6 +971,47 @@ impl queue_t
 	}
 	
 	#[inline(always)]
+	pub(crate) fn dequeue(q: NonNull<queue_t>, mut th: NonNull<handle_t>) -> *mut void
+	{
+		th.reference().hzd_node_id.set(th.reference().deq_node_id);
+		
+		let mut v;
+		let mut id = 0;
+		let mut p = MAX_PATIENCE;
+		
+		do_while!
+		{
+			do
+			{
+				v = Self::deq_fast(q, th, &mut id);
+			}
+			while v == TOP && p.post_decrement() > 0
+		}
+		
+		if v == TOP
+		{
+			v = Self::deq_slow(q, th, id);
+		}
+		
+		if v != EMPTY
+		{
+			Self::help_deq(q, th, th.reference().Dh);
+			th.mutable_reference().Dh = th.reference().Dh.reference().next.get();
+		}
+		
+		th.mutable_reference().deq_node_id = th.reference().Dp.get().reference().id.get() as usize;
+		th.reference().hzd_node_id.RELEASE(!0);
+		
+		if th.reference().spare.get().is_null()
+		{
+			Self::cleanup(q, th);
+			th.mutable_reference().spare.set(node_t::new_node().as_ptr());
+		}
+		
+		v
+	}
+	
+	#[inline(always)]
 	fn enq_fast(q: NonNull<queue_t>, th: NonNull<handle_t>, v: *mut void, id: &mut isize) -> bool
 	{
 		let i = q.reference().Ei.FAAcs(1);
@@ -1153,10 +1091,10 @@ impl queue_t
 		{
 			let mut ph = th.reference().Eh.get();
 			let (mut pe, mut id) =
-			{
-				let pe = ph.reference().Er.deref();
-				(pe as *const _ as *mut _, pe.id.get())
-			};
+				{
+					let pe = ph.reference().Er.deref();
+					(pe as *const _ as *mut _, pe.id.get())
+				};
 			
 			if th.reference().Ei != 0 && th.reference().Ei != id
 			{
@@ -1165,10 +1103,10 @@ impl queue_t
 				
 				ph = th.reference().Eh.get();
 				let (pe2, id2) =
-				{
-					let pe = ph.reference().Er.deref();
-					(pe as *const _ as *mut _, pe.id.get())
-				};
+					{
+						let pe = ph.reference().Er.deref();
+						(pe as *const _ as *mut _, pe.id.get())
+					};
 				pe = pe2;
 				id = id2;
 			}
@@ -1224,6 +1162,132 @@ impl queue_t
 		}
 		
 		c.val.get()
+	}
+	
+	#[inline(always)]
+	fn deq_fast(q: NonNull<queue_t>, th: NonNull<handle_t>, id: &mut isize) -> *mut void
+	{
+		let i = q.reference().Di.FAAcs(1);
+		let c = node_t::find_cell(&th.reference().Dp, i, th);
+		let v = Self::help_enq(q, th, c, i);
+		let mut cd = BOT as *mut deq_t;
+		
+		if v == BOT
+		{
+			return BOT
+		}
+		
+		if v != TOP && c.deq.CAS(&mut cd, TOP as *mut deq_t)
+		{
+			return v
+		}
+		
+		*id = 1;
+		TOP
+	}
+	
+	#[inline(always)]
+	fn deq_slow(q: NonNull<queue_t>, th: NonNull<handle_t>, id: isize) -> *mut void
+	{
+		let deq = th.reference().Dr.deref();
+		deq.id.RELEASE(id);
+		deq.idx.RELEASE(id);
+		
+		Self::help_deq(q, th, th);
+		let i = -deq.idx.get();
+		let c = node_t::find_cell(&th.reference().Dp, i, th);
+		let val = c.val.get();
+		
+		if val == TOP
+		{
+			BOT
+		}
+		else
+		{
+			val
+		}
+	}
+	
+	#[inline(always)]
+	fn help_deq(q: NonNull<queue_t>, th: NonNull<handle_t>, ph: NonNull<handle_t>)
+	{
+		let deq = ph.reference().Dr.deref();
+		let mut idx = deq.idx.ACQUIRE();
+		let id = deq.id.get();
+		
+		if idx < id
+		{
+			return;
+		}
+		
+		let Dp = &ph.reference().Dp;
+		th.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
+		FENCE();
+		idx = deq.idx.get();
+		
+		let mut i = id + 1;
+		let mut old = id;
+		let mut new = 0;
+		
+		loop
+		{
+			let h = Dp;
+			
+			while idx == old && new == 0
+			{
+				let c = node_t::find_cell(h, i, th);
+				
+				let mut Di = q.reference().Di.get();
+				while Di <= i && !q.reference().Di.CAS(&mut Di, i + 1)
+				{
+				}
+				
+				let v = Self::help_enq(q, th, c, i);
+				if v == BOT || (v != TOP && c.deq.get() == (BOT as *mut deq_t))
+				{
+					new = i;
+				}
+				else
+				{
+					idx = deq.idx.ACQUIRE();
+				}
+				
+				
+				i.pre_increment();
+			}
+			
+			if new != 0
+			{
+				if deq.idx.CASra(&mut idx, new)
+				{
+					idx = new;
+				}
+				if idx >= new
+				{
+					new = 0;
+				}
+			}
+			
+			if idx < 0 || deq.id.get() != id
+			{
+				break;
+			}
+			
+			let c = node_t::find_cell(Dp, idx, th);
+			let mut cd = BOT as *mut deq_t;
+			if c.val.get() == TOP || c.deq.CAS(&mut cd, deq as *const _ as *mut _) || cd == (deq as *const _ as *mut _)
+			{
+				let negative_idx = -idx;
+				deq.idx.CAS(&mut idx, negative_idx);
+				break
+			}
+			
+			old = idx;
+			if idx >= i
+			{
+				i = idx + 1;
+			}
+		}
 	}
 }
 
