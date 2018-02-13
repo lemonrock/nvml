@@ -937,7 +937,7 @@ impl WaitFreeQueueInner
 	{
 		th.reference().hzd_node_id.set(th.reference().enq_node_id);
 		
-		let mut id: isize = unsafe { uninitialized() };
+		let mut id = unsafe { uninitialized() };
 		let mut p = MAX_PATIENCE;
 		while !Self::enq_fast(this, th, v, &mut id) && p.post_decrement() > 0
 		{
