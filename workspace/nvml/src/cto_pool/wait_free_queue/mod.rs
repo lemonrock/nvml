@@ -621,7 +621,7 @@ const MAX_SPIN: usize = 100;
 
 const MAX_PATIENCE: isize = 10;
 
-const MaximumNumberOfProcessors: usize = 256;
+const MaximumNumberOfThreads: usize = 256;
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
@@ -786,15 +786,17 @@ struct WaitFreeQueueInner
 	Hp: volatile<*mut Node>,
 	
 	// Number of processors.
-	nprocs: usize,
+	number_of_threads: usize,
 
 	_tail: volatile<*mut WaitFreeQueuePerThreadHandle>,
 }
 
 impl WaitFreeQueueInner
 {
-	pub(crate) fn new(nprocs: usize) -> NonNull<Self>
+	pub(crate) fn new(number_of_threads: usize) -> NonNull<Self>
 	{
+		assert!(number_of_threads <= MaximumNumberOfThreads, "number_of_threads '{}' exceeds MaximumNumberOfThreads '{}'", number_of_threads, MaximumNumberOfThreads);
+		
 		let mut this = align_malloc(PAGE_SIZE, size_of::<Self>());
 		
 		unsafe
@@ -805,17 +807,11 @@ impl WaitFreeQueueInner
 			this.Hp.set(Node::new_node().as_ptr());
 			this.Ei.set(1);
 			this.Di.set(1);
-			write(&mut this.nprocs, nprocs);
+			write(&mut this.number_of_threads, number_of_threads);
 			this._tail.set(null_mut());
 		}
 		
 		this
-	}
-	
-	/// Called per thread exit. Does nothing for a wf-queue.
-	#[inline(always)]
-	pub(crate) fn queue_free(this: NonNull<Self>, handle: NonNull<WaitFreeQueuePerThreadHandle>)
-	{
 	}
 	
 	#[inline(always)]
@@ -863,7 +859,7 @@ impl WaitFreeQueueInner
 		#[inline(always)]
 		fn maximum_garbage(this: NonNull<WaitFreeQueueInner>) -> isize
 		{
-			let result = 2 * this.reference().nprocs;
+			let result = 2 * this.reference().number_of_threads;
 			debug_assert!(result <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
 			result as isize
 		}
@@ -895,7 +891,7 @@ impl WaitFreeQueueInner
 		// Was dimensioned by q.reference().nprocs, but variable stack arrays aren't supported by Rust.
 		// handle_t *phs[q->nprocs];  ie let mut phs: [*mut handle_t; q.reference().nprocs]
 		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
-		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle>; MaximumNumberOfProcessors] = unsafe { uninitialized() };
+		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle>; MaximumNumberOfThreads] = unsafe { uninitialized() };
 		let mut i: isize = 0;
 		do_while!
 		{
@@ -937,18 +933,18 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(q: NonNull<WaitFreeQueueInner>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void)
+	pub(crate) fn enqueue(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void)
 	{
 		th.reference().hzd_node_id.set(th.reference().enq_node_id);
 		
 		let mut id: isize = unsafe { uninitialized() };
 		let mut p = MAX_PATIENCE;
-		while !Self::enq_fast(q, th, v, &mut id) && p.post_decrement() > 0
+		while !Self::enq_fast(this, th, v, &mut id) && p.post_decrement() > 0
 		{
 		}
 		if p < 0
 		{
-			Self::enq_slow(q, th, v, id)
+			Self::enq_slow(this, th, v, id)
 		}
 		
 		th.mutable_reference().enq_node_id = th.reference().Ep.get().reference().id.get() as usize;
@@ -956,7 +952,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn dequeue(q: NonNull<WaitFreeQueueInner>, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> *mut void
+	pub(crate) fn dequeue(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> *mut void
 	{
 		th.reference().hzd_node_id.set(th.reference().deq_node_id);
 		
@@ -968,19 +964,19 @@ impl WaitFreeQueueInner
 		{
 			do
 			{
-				v = Self::deq_fast(q, th, &mut id);
+				v = Self::deq_fast(this, th, &mut id);
 			}
 			while v == TOP && p.post_decrement() > 0
 		}
 		
 		if v == TOP
 		{
-			v = Self::deq_slow(q, th, id);
+			v = Self::deq_slow(this, th, id);
 		}
 		
 		if v != EMPTY
 		{
-			Self::help_deq(q, th, th.reference().Dh);
+			Self::help_deq(this, th, th.reference().Dh);
 			th.mutable_reference().Dh = th.reference().Dh.reference().next.get();
 		}
 		
@@ -989,7 +985,7 @@ impl WaitFreeQueueInner
 		
 		if th.reference().spare.get().is_null()
 		{
-			Self::cleanup(q, th);
+			Self::cleanup(this, th);
 			th.mutable_reference().spare.set(Node::new_node().as_ptr());
 		}
 		
@@ -997,9 +993,9 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enq_fast(q: NonNull<WaitFreeQueueInner>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, id: &mut isize) -> bool
+	fn enq_fast(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, id: &mut isize) -> bool
 	{
-		let i = q.reference().Ei.FAAcs(1);
+		let i = this.reference().Ei.FAAcs(1);
 		
 		let c = Node::find_cell(&th.reference().Ep, i, th);
 		let mut cv: *mut void = BOT;
@@ -1016,7 +1012,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enq_slow(q: NonNull<WaitFreeQueueInner>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, mut id: isize)
+	fn enq_slow(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, mut id: isize)
 	{
 		let enq: &Enqueuer = &th.reference().Er;
 		enq.val.set(v);
@@ -1028,7 +1024,7 @@ impl WaitFreeQueueInner
 		
 		'do_while: while
 		{
-			i = q.reference().Ei.FAA(1);
+			i = this.reference().Ei.FAA(1);
 			c = Node::find_cell(tail, i, th);
 			let mut ce = BOT as *mut Enqueuer; // TODO: null_mut()
 			
@@ -1050,8 +1046,8 @@ impl WaitFreeQueueInner
 		c = Node::find_cell(&th.reference().Ep, id, th);
 		if id > i
 		{
-			let mut Ei: isize = q.reference().Ei.get();
-			while Ei <= id && !q.reference().Ei.CAS(&mut Ei, id + 1)
+			let mut Ei: isize = this.reference().Ei.get();
+			while Ei <= id && !this.reference().Ei.CAS(&mut Ei, id + 1)
 			{
 			}
 		}
@@ -1060,7 +1056,7 @@ impl WaitFreeQueueInner
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn help_enq(q: NonNull<WaitFreeQueueInner>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, c: &Cell, i: isize) -> *mut void
+	fn help_enq(this: NonNull<Self>, mut th: NonNull<WaitFreeQueuePerThreadHandle>, c: &Cell, i: isize) -> *mut void
 	{
 		#[inline(always)]
 		fn spin(p: &volatile<*mut void>) -> *mut void
@@ -1129,7 +1125,7 @@ impl WaitFreeQueueInner
 		
 		if e == (TOP as *mut Enqueuer)
 		{
-			return if q.reference().Ei.get() <= i
+			return if this.reference().Ei.get() <= i
 			{
 				BOT
 			}
@@ -1144,7 +1140,7 @@ impl WaitFreeQueueInner
 		
 		if ei > i
 		{
-			if c.val.get() == TOP && q.reference().Ei.get() <= i
+			if c.val.get() == TOP && this.reference().Ei.get() <= i
 			{
 				return BOT
 			}
@@ -1153,8 +1149,8 @@ impl WaitFreeQueueInner
 		{
 			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.val.get() == TOP)
 			{
-				let mut Ei = q.reference().Ei.get();
-				while Ei <= i && !q.reference().Ei.CAS(&mut Ei, i + 1)
+				let mut Ei = this.reference().Ei.get();
+				while Ei <= i && !this.reference().Ei.CAS(&mut Ei, i + 1)
 				{
 				}
 				c.val.set(ev);
@@ -1165,11 +1161,11 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn deq_fast(q: NonNull<WaitFreeQueueInner>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: &mut isize) -> *mut void
+	fn deq_fast(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: &mut isize) -> *mut void
 	{
-		let i = q.reference().Di.FAAcs(1);
+		let i = this.reference().Di.FAAcs(1);
 		let c = Node::find_cell(&th.reference().Dp, i, th);
-		let v = Self::help_enq(q, th, c, i);
+		let v = Self::help_enq(this, th, c, i);
 		let mut cd = BOT as *mut Dequeuer;
 		
 		if v == BOT
@@ -1187,13 +1183,13 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn deq_slow(q: NonNull<WaitFreeQueueInner>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: isize) -> *mut void
+	fn deq_slow(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, id: isize) -> *mut void
 	{
 		let deq = th.reference().Dr.deref();
 		deq.id.RELEASE(id);
 		deq.idx.RELEASE(id);
 		
-		Self::help_deq(q, th, th);
+		Self::help_deq(this, th, th);
 		let i = -deq.idx.get();
 		let c = Node::find_cell(&th.reference().Dp, i, th);
 		let val = c.val.get();
@@ -1209,7 +1205,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn help_deq(q: NonNull<WaitFreeQueueInner>, th: NonNull<WaitFreeQueuePerThreadHandle>, ph: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn help_deq(this: NonNull<Self>, th: NonNull<WaitFreeQueuePerThreadHandle>, ph: NonNull<WaitFreeQueuePerThreadHandle>)
 	{
 		let deq = ph.reference().Dr.deref();
 		let mut idx = deq.idx.ACQUIRE();
@@ -1237,12 +1233,12 @@ impl WaitFreeQueueInner
 			{
 				let c = Node::find_cell(h, i, th);
 				
-				let mut Di = q.reference().Di.get();
-				while Di <= i && !q.reference().Di.CAS(&mut Di, i + 1)
+				let mut Di = this.reference().Di.get();
+				while Di <= i && !this.reference().Di.CAS(&mut Di, i + 1)
 				{
 				}
 				
-				let v = Self::help_enq(q, th, c, i);
+				let v = Self::help_enq(this, th, c, i);
 				if v == BOT || (v != TOP && c.deq.get() == (BOT as *mut Dequeuer))
 				{
 					new = i;
@@ -1332,7 +1328,7 @@ impl WaitFreeQueuePerThreadHandle
 {
 	pub(crate) fn thread_init(q: NonNull<WaitFreeQueueInner>, nprocs: usize) -> NonNull<Self>
 	{
-		assert!(nprocs <= MaximumNumberOfProcessors, "nprocs '{}' exceeds MaximumNumberOfProcessors '{}'", nprocs, MaximumNumberOfProcessors);
+		assert!(nprocs <= MaximumNumberOfThreads, "nprocs '{}' exceeds MaximumNumberOfThreads '{}'", nprocs, MaximumNumberOfThreads);
 		
 		let th = align_malloc(PAGE_SIZE, size_of::<Self>());
 		Self::queue_register(q, th);
