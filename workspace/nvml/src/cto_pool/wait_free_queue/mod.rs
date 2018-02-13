@@ -72,10 +72,6 @@ macro_rules! do_while
     };
 }
 
-
-
-
-
 #[derive(Debug)]
 struct ExtendedNonNullAtomicPointer<T>(UnsafeCell<NonNull<T>>);
 
@@ -672,54 +668,6 @@ fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_
 
 /*
 
-static void *help_enq(queue_t *q, handle_t *th, cell_t *c, long i) {
-    void *v = spin(&c->val);
-
-    if ((v != TOP && v != BOT) ||
-        (v == BOT && !CAScs(&c->val, &v, TOP) && v != TOP)) {
-        return v;
-    }
-
-    enq_t *e = c->enq;
-
-    if (e == BOT) {
-        handle_t *ph;
-        enq_t *pe;
-        long id;
-        ph = th->Eh, pe = &ph->Er, id = pe->id;
-
-        if (th->Ei != 0 && th->Ei != id) {
-            th->Ei = 0;
-            th->Eh = ph->next;
-            ph = th->Eh, pe = &ph->Er, id = pe->id;
-        }
-
-        if (id > 0 && id <= i && !CAS(&c->enq, &e, pe))
-            th->Ei = id;
-        else
-            th->Eh = ph->next;
-
-        if (e == BOT && CAS(&c->enq, &e, TOP)) e = TOP;
-    }
-
-    if (e == TOP) return (q->Ei <= i ? BOT : TOP);
-
-    long ei = ACQUIRE(&e->id);
-    void *ev = ACQUIRE(&e->val);
-
-    if (ei > i) {
-        if (c->val == TOP && q->Ei <= i) return BOT;
-    } else {
-        if ((ei > 0 && CAS(&e->id, &ei, -i)) || (ei == -i && c->val == TOP)) {
-            long Ei = q->Ei;
-            while (Ei <= i && !CAS(&q->Ei, &Ei, i + 1))
-                ;
-            c->val = ev;
-        }
-    }
-
-    return c->val;
-}
 
 static void help_deq(queue_t *q, handle_t *th, handle_t *ph) {
     deq_t *deq = &ph->Dr;
@@ -1185,6 +1133,97 @@ impl queue_t
 			}
 		}
 		c.val.set(v);
+	}
+	
+	// Used only when dequeue() is called.
+	#[inline(always)]
+	fn help_enq(q: NonNull<queue_t>, mut th: NonNull<handle_t>, c: &cell_t, i: isize) -> *mut void
+	{
+		let mut v: *mut void = spin(&c.val);
+		
+		if (v != TOP && v != BOT) || (v == BOT && !c.val.CAScs(&mut v, TOP) && v != TOP)
+		{
+			return v;
+		}
+		
+		let mut e = c.enq.get();
+		
+		// TODO: null_mut()
+		if e == (BOT as *mut enq_t)
+		{
+			let mut ph = th.reference().Eh.get();
+			let (mut pe, mut id) =
+			{
+				let pe = ph.reference().Er.deref();
+				(pe as *const _ as *mut _, pe.id.get())
+			};
+			
+			if th.reference().Ei != 0 && th.reference().Ei != id
+			{
+				th.mutable_reference().Ei = 0;
+				th.mutable_reference().Eh.set(ph.reference().next.get());
+				
+				ph = th.reference().Eh.get();
+				let (pe2, id2) =
+				{
+					let pe = ph.reference().Er.deref();
+					(pe as *const _ as *mut _, pe.id.get())
+				};
+				pe = pe2;
+				id = id2;
+			}
+			
+			if id > 0 && id <= i && !c.enq.CAS(&mut e, pe)
+			{
+				th.mutable_reference().Ei = id
+			}
+			else
+			{
+				th.mutable_reference().Eh.set(ph.reference().next.get())
+			}
+			
+			// TODO: null_mut()
+			if e == (BOT as *mut enq_t) && c.enq.CAS(&mut e, TOP as *mut enq_t)
+			{
+				e = TOP as *mut enq_t;
+			}
+		}
+		
+		if e == (TOP as *mut enq_t)
+		{
+			return if q.reference().Ei.get() <= i
+			{
+				BOT
+			}
+			else
+			{
+				TOP
+			}
+		}
+		
+		let mut ei = e.to_non_null().reference().id.ACQUIRE();
+		let ev = e.to_non_null().reference().val.ACQUIRE();
+		
+		if ei > i
+		{
+			if c.val.get() == TOP && q.reference().Ei.get() <= i
+			{
+				return BOT
+			}
+		}
+		else
+		{
+			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.val.get() == TOP)
+			{
+				let mut Ei = q.reference().Ei.get();
+				while Ei <= i && !q.reference().Ei.CAS(&mut Ei, i + 1)
+				{
+				}
+				c.val.set(ev);
+			}
+		}
+		
+		c.val.get()
 	}
 }
 
