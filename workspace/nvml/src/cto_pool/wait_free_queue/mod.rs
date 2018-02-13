@@ -15,8 +15,13 @@ use ::std::intrinsics::atomic_store_rel;
 use ::std::intrinsics::atomic_cxchg;
 use ::std::intrinsics::atomic_cxchg_acq_failrelaxed;
 use ::std::intrinsics::atomic_cxchg_acqrel;
+use ::std::intrinsics::atomic_cxchg_relaxed;
+use ::std::intrinsics::atomic_xadd;
+use ::std::intrinsics::atomic_xadd_relaxed;
 use ::std::mem::uninitialized;
 use ::std::mem::size_of;
+use ::std::ops::Deref;
+use ::std::ops::DerefMut;
 use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
 use ::std::ptr::read;
@@ -45,6 +50,31 @@ fn free<T>(pointer: NonNull<T>)
 {
 	unimplemented!()
 }
+
+
+
+
+macro_rules! do_while
+{
+    (
+        do
+        $body:block
+        while $cond:expr
+    ) =>
+    {
+        while
+        {
+            $body;
+            $cond
+        }
+        {
+        }
+    };
+}
+
+
+
+
 
 #[derive(Debug)]
 struct ExtendedNonNullAtomicPointer<T>(UnsafeCell<NonNull<T>>);
@@ -239,6 +269,26 @@ impl<T> SafeNonNull<T> for NonNull<T>
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
 pub(crate) struct CacheAligned<T>(T);
 
+impl<T> Deref for CacheAligned<T>
+{
+	type Target = T;
+	
+	#[inline(always)]
+	fn deref(&self) -> &Self::Target
+	{
+		&self.0
+	}
+}
+
+impl<T> DerefMut for CacheAligned<T>
+{
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut Self::Target
+	{
+		&mut self.0
+	}
+}
+
 impl<T> CacheAligned<T>
 {
 	#[inline(always)]
@@ -260,6 +310,17 @@ impl<T: Copy> CacheAligned<T>
 	pub(crate) fn set(&mut self, value: T)
 	{
 		self.0 = value
+	}
+}
+
+impl CacheAligned<[cell_t; WFQUEUE_NODE_SIZE]>
+{
+	#[inline(always)]
+	pub(crate) fn get_cell(&self, index: isize) -> &cell_t
+	{
+		debug_assert!(index >= 0, "index is negative");
+		debug_assert!(index < N, "index is N or greater");
+		unsafe { self.0.get_unchecked(index as usize) }
 	}
 }
 
@@ -287,6 +348,24 @@ impl<T: Copy> CacheAligned<volatile<T>>
 	pub(crate) fn RELEASE(&self, value: T)
 	{
 		self.0.RELEASE(value)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn FAA(&self, increment: T) -> T
+	{
+		self.0.FAA(increment)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn FAAcs(&self, increment: T) -> T
+	{
+		self.0.FAAcs(increment)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CAS(cmp, val)
 	}
 	
 	#[inline(always)]
@@ -363,6 +442,24 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
+	pub(crate) fn FAA(&self, increment: T) -> T
+	{
+		self.0.FAA(increment)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn FAAcs(&self, increment: T) -> T
+	{
+		self.0.FAAcs(increment)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	{
+		self.0.CAS(cmp, val)
+	}
+	
+	#[inline(always)]
 	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
 	{
 		self.0.CAScs(cmp, val)
@@ -414,6 +511,40 @@ impl<T: Copy> volatile<T>
 	pub(crate) fn RELEASE(&self, value: T)
 	{
 		unsafe { atomic_store_rel(self.0.get(), value) }
+	}
+	
+	/// An atomic fetch-and-add.
+	/// Returns previous value.
+	#[inline(always)]
+	pub(crate) fn FAA(&self, increment: T) -> T
+	{
+		// FAA(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_RELAXED)
+		unsafe { atomic_xadd_relaxed(self.0.get(), increment) }
+	}
+	
+	/// An atomic fetch-and-add that also ensures sequential consistency.
+	/// Returns previous value.
+	#[inline(always)]
+	pub(crate) fn FAAcs(&self, increment: T) -> T
+	{
+		// __atomic_fetch_add(ptr, val, __ATOMIC_SEQ_CST)
+		unsafe { atomic_xadd(self.0.get(), increment) }
+	}
+	
+	/// An atomic compare-and-swap that is completely relaxed.
+	/// true if successful
+	/// false if failed
+	#[inline(always)]
+	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	{
+		// #define CAS(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+		let (value, ok) = unsafe { atomic_cxchg_relaxed(self.0.get(), *cmp, val) };
+		
+		if !ok
+		{
+			*cmp = value;
+		}
+		ok
 	}
 	
 	/// An atomic compare-and-swap that also ensures sequential consistency.
@@ -474,7 +605,7 @@ const EMPTY: *mut void = 0 as *mut void;
 
 const WFQUEUE_NODE_SIZE: usize = (1 << 10) - 2;
 
-const N: usize = WFQUEUE_NODE_SIZE;
+const N: isize = WFQUEUE_NODE_SIZE as isize;
 
 const BOT: *mut void = 0 as *mut void;
 
@@ -482,7 +613,7 @@ const TOP: *mut void = !0 as *mut void;
 
 const MAX_SPIN: usize = 100;
 
-const MAX_PATIENCE: i32 = 10;
+const MAX_PATIENCE: isize = 10;
 
 const MaximumNumberOfProcessors: usize = 256;
 
@@ -540,93 +671,6 @@ fn update(pPn: &volatile<NonNull<node_t>>, mut cur: NonNull<node_t>, p_hzd_node_
 }
 
 /*
-
-
-static cell_t *find_cell(node_t *volatile *ptr, long i, handle_t *th) {
-    node_t *curr = *ptr;
-
-    long j;
-    for (j = curr->id; j < i / N; ++j) {
-        node_t *next = curr->next;
-
-        if (next == NULL) {
-            node_t *temp = th->spare;
-
-            if (!temp) {
-                temp = new_node();
-                th->spare = temp;
-            }
-
-            temp->id = j + 1;
-
-            if (CASra(&curr->next, &next, temp)) {
-                next = temp;
-                th->spare = NULL;
-            }
-        }
-
-        curr = next;
-    }
-
-    *ptr = curr;
-    return &curr->cells[i % N];
-}
-
-static int enq_fast(queue_t *q, handle_t *th, void *v, long *id) {
-    long i = FAAcs(&q->Ei, 1);
-    cell_t *c = find_cell(&th->Ep, i, th);
-    void *cv = BOT;
-
-    if (CAS(&c->val, &cv, v)) {
-        return 1;
-    } else {
-        *id = i;
-        return 0;
-    }
-}
-
-static void enq_slow(queue_t *q, handle_t *th, void *v, long id) {
-    enq_t *enq = &th->Er;
-    enq->val = v;
-    RELEASE(&enq->id, id);
-
-    node_t *tail = th->Ep;
-    long i;
-    cell_t *c;
-
-    do {
-        i = FAA(&q->Ei, 1);
-        c = find_cell(&tail, i, th);
-        enq_t *ce = BOT;
-
-        if (CAScs(&c->enq, &ce, enq) && c->val != TOP) {
-            if (CAS(&enq->id, &id, -i)) id = -i;
-            break;
-        }
-    } while (enq->id > 0);
-
-    id = -enq->id;
-    c = find_cell(&th->Ep, id, th);
-    if (id > i) {
-        long Ei = q->Ei;
-        while (Ei <= id && !CAS(&q->Ei, &Ei, id + 1))
-            ;
-    }
-    c->val = v;
-}
-
-void enqueue(queue_t *q, handle_t *th, void *v) {
-    th->hzd_node_id = th->enq_node_id;
-
-    long id;
-    int p = MAX_PATIENCE;
-    while (!enq_fast(q, th, v, &id) && p-- > 0)
-        ;
-    if (p < 0) enq_slow(q, th, v, id);
-
-    th->enq_node_id = th->Ep->id;
-    RELEASE(&th->hzd_node_id, -1);
-}
 
 static void *help_enq(queue_t *q, handle_t *th, cell_t *c, long i) {
     void *v = spin(&c->val);
@@ -861,6 +905,44 @@ impl node_t
 		memset(n, 0, size_of::<Self>());
 		n
 	}
+	
+	fn find_cell<'node>(ptr: &'node volatile<NonNull<node_t>>, i: isize, mut th: NonNull<handle_t>) -> &'node cell_t
+	{
+		let mut curr = ptr.get();
+		
+		let mut j = curr.reference().id.get();
+		while j < i / N
+		{
+			let mut next: *mut node_t = curr.reference().next.get();
+			
+			if next.is_null()
+			{
+				let mut temp = th.reference().spare.get();
+				if temp.is_null()
+				{
+					let new_node = Self::new_node();
+					temp = new_node.as_ptr();
+					th.mutable_reference().spare.set(temp);
+				}
+				
+				temp.to_non_null().mutable_reference().id.set(j + 1);
+				
+				if curr.reference().next.CASra(&mut next, temp)
+				{
+					next = temp;
+					th.mutable_reference().spare.set(null_mut());
+				}
+			}
+			
+			curr = next.to_non_null();
+			
+			j.pre_increment();
+		}
+		
+		ptr.set(curr);
+		
+		unsafe { &* curr.as_ptr() }.cells.get_cell(i % N)
+	}
 }
 
 trait NodeNonNull<T>: SafeNonNull<T>
@@ -953,6 +1035,7 @@ impl queue_t
 		result as isize
 	}
 	
+	#[inline(always)]
 	pub(crate) fn cleanup(mut q: NonNull<Self>, th: NonNull<handle_t>)
 	{
 		const NoOid: isize = -1;
@@ -984,21 +1067,17 @@ impl queue_t
 		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
 		let mut phs: [NonNull<handle_t>; MaximumNumberOfProcessors] = unsafe { uninitialized() };
 		let mut i: isize = 0;
-		
+		do_while!
 		{
-			new = check(&ph.reference().hzd_node_id, new, old);
-			new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
-			new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
-			*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
-			ph = ph.reference().next.get();
-		}
-		while new.id() > oid && ph.as_ptr() != th.as_ptr()
-		{
-			new = check(&ph.reference().hzd_node_id, new, old);
-			new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
-			new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
-			*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
-			ph = ph.reference().next.get();
+			do
+			{
+				new = check(&ph.reference().hzd_node_id, new, old);
+				new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
+				new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
+				*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
+				ph = ph.reference().next.get();
+			}
+			while new.id() > oid && ph.as_ptr() != th.as_ptr()
 		}
 		
 		while new.id() > oid && i.pre_decrement() >= 0
@@ -1025,6 +1104,87 @@ impl queue_t
 				old = tmp;
 			}
 		}
+	}
+	
+	#[inline(always)]
+	pub(crate) fn enqueue(q: NonNull<queue_t>, mut th: NonNull<handle_t>, v: *mut void)
+	{
+		th.reference().hzd_node_id.set(th.reference().enq_node_id);
+		
+		let mut id: isize = unsafe { uninitialized() };
+		let mut p = MAX_PATIENCE;
+		while !Self::enq_fast(q, th, v, &mut id) && p.post_decrement() > 0
+		{
+		}
+		if p < 0
+		{
+			Self::enq_slow(q, th, v, id)
+		}
+		
+		th.mutable_reference().enq_node_id = th.reference().Ep.get().reference().id.get() as usize;
+		th.reference().hzd_node_id.RELEASE(!0)
+	}
+	
+	#[inline(always)]
+	fn enq_fast(q: NonNull<queue_t>, th: NonNull<handle_t>, v: *mut void, id: &mut isize) -> bool
+	{
+		let i = q.reference().Ei.FAAcs(1);
+		
+		let c = node_t::find_cell(&th.reference().Ep, i, th);
+		let mut cv: *mut void = BOT;
+		
+		if c.val.CAS(&mut cv, v)
+		{
+			true
+		}
+		else
+		{
+			*id = i;
+			false
+		}
+	}
+	
+	#[inline(always)]
+	fn enq_slow(q: NonNull<queue_t>, th: NonNull<handle_t>, v: *mut void, mut id: isize)
+	{
+		let enq: &enq_t = &th.reference().Er;
+		enq.val.set(v);
+		enq.id.RELEASE(id);
+
+		let tail = &th.reference().Ep;
+		let mut i: isize;
+		let mut c: &cell_t;
+		
+		'do_while: while
+		{
+			i = q.reference().Ei.FAA(1);
+			c = node_t::find_cell(tail, i, th);
+			let mut ce = BOT as *mut enq_t; // TODO: null_mut()
+			
+			if c.enq.CAScs(&mut ce, enq as *const _ as *mut _) && c.val.get() != TOP
+			{
+				if enq.id.CAS(&mut id, -i)
+				{
+					// Rust compiler has determined that this value is never read.
+					// id = -1;
+				}
+				break 'do_while;
+			}
+			enq.id.get() > 0
+		}
+		{
+		}
+		
+		id = -enq.id.get();
+		c = node_t::find_cell(&th.reference().Ep, id, th);
+		if id > i
+		{
+			let mut Ei: isize = q.reference().Ei.get();
+			while Ei <= id && !q.reference().Ei.CAS(&mut Ei, id + 1)
+			{
+			}
+		}
+		c.val.set(v);
 	}
 }
 
@@ -1124,10 +1284,13 @@ impl handle_t
 			let tail = tail_non_null.reference();
 			let mut next = tail.next.get();
 			
-			th.next.set(next);
-			while !tail.next.CASra(&mut next, NonNull::new_safe(th))
+			do_while!
 			{
-				th.next.set(next)
+				do
+				{
+					th.next.set(next)
+				}
+				while !tail.next.CASra(&mut next, NonNull::new_safe(th))
 			}
 			
 			th.Eh.set(th.next.get());
