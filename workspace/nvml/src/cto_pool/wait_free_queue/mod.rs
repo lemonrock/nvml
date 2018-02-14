@@ -608,7 +608,6 @@ impl<T: Copy> volatile<T>
 
 
 
-const MaximumNumberOfThreads: usize = 256;
 
 
 trait BottomAndTop
@@ -833,19 +832,19 @@ struct WaitFreeQueueInner
 	Hp: volatile<*mut Node>,
 	
 	// Number of processors.
-	number_of_threads: usize,
+	number_of_hyper_threads: NumberOfHyperThreads,
 
 	_tail: volatile<*mut WaitFreeQueuePerThreadHandle>,
 }
 
 impl WaitFreeQueueInner
 {
+	const MaximumNumberOfThreads: usize = 256;
+	
 	const MaximumPatienceForFastPath: isize = 10;
 	
-	pub(crate) fn new(number_of_threads: usize) -> NonNull<Self>
+	pub(crate) fn new(number_of_hyper_threads: NumberOfHyperThreads) -> NonNull<Self>
 	{
-		assert!(number_of_threads <= MaximumNumberOfThreads, "number_of_threads '{}' exceeds MaximumNumberOfThreads '{}'", number_of_threads, MaximumNumberOfThreads);
-		
 		let mut this = page_size_align_malloc();
 		
 		unsafe
@@ -856,7 +855,7 @@ impl WaitFreeQueueInner
 			this.Hp.set(Node::new_node().as_ptr());
 			this.Ei.set(1);
 			this.Di.set(1);
-			write(&mut this.number_of_threads, number_of_threads);
+			write(&mut this.number_of_hyper_threads, number_of_hyper_threads);
 			this._tail.set(null_mut());
 		}
 		
@@ -1268,7 +1267,7 @@ impl WaitFreeQueueInner
 			return;
 		}
 		
-		if new.id() - oid < self.maximum_garbage()
+		if new.id() - oid < self.number_of_hyper_threads.maximum_garbage()
 		{
 			return;
 		}
@@ -1284,7 +1283,7 @@ impl WaitFreeQueueInner
 		// Was dimensioned by q.reference().nprocs, but variable stack arrays aren't supported by Rust.
 		// handle_t *phs[q->nprocs];  ie let mut phs: [*mut handle_t; q.reference().nprocs]
 		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
-		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle>; MaximumNumberOfThreads] = unsafe { uninitialized() };
+		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads] = unsafe { uninitialized() };
 		let mut i: isize = 0;
 		do_while!
 		{
@@ -1324,13 +1323,33 @@ impl WaitFreeQueueInner
 			}
 		}
 	}
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct NumberOfHyperThreads(usize);
+
+impl NumberOfHyperThreads
+{
+	pub const InclusiveMaximumNumberOfHyperThreads: usize = 256;
+	
+	/// Panics if `number_of_hyper_threads` is 0 or exceeds InclusiveMaximumNumberOfHyperThreads.
+	#[inline(always)]
+	pub fn new(number_of_hyper_threads: u16) -> Self
+	{
+		let number_of_hyper_threads = number_of_hyper_threads as usize;
+		
+		assert_ne!(number_of_hyper_threads, 0, "number_of_hyper_threads can not be zero");
+		assert!(number_of_hyper_threads <= Self::InclusiveMaximumNumberOfHyperThreads, "number_of_hyper_threads '{}' exceeds Self::InclusiveMaximumNumberOfHyperThreads '{}'", number_of_hyper_threads, Self::InclusiveMaximumNumberOfHyperThreads);
+		
+		NumberOfHyperThreads(number_of_hyper_threads)
+	}
 	
 	#[inline(always)]
 	fn maximum_garbage(&self) -> isize
 	{
-		let result = 2 * self.number_of_threads;
-		debug_assert!(result <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
-		result as isize
+		let maximum_garbage = 2 * self.0;
+		debug_assert!(maximum_garbage <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
+		maximum_garbage as isize
 	}
 }
 
@@ -1373,17 +1392,15 @@ struct WaitFreeQueuePerThreadHandle
 
 impl WaitFreeQueuePerThreadHandle
 {
-	pub(crate) fn thread_init(q: NonNull<WaitFreeQueueInner>, nprocs: usize) -> NonNull<Self>
+	pub(crate) fn thread_init(q: NonNull<WaitFreeQueueInner>) -> NonNull<Self>
 	{
-		assert!(nprocs <= MaximumNumberOfThreads, "nprocs '{}' exceeds MaximumNumberOfThreads '{}'", nprocs, MaximumNumberOfThreads);
-		
 		let th = page_size_align_malloc();
 		Self::queue_register(q, th);
 		th
 	}
 	
 	/// Called once per thread from `thread_init`.
-	/// id is a thread id, but not derived from the thread itself - it is assumed to start at 1.
+	#[inline(always)]
 	fn queue_register(q: NonNull<WaitFreeQueueInner>, mut th: NonNull<WaitFreeQueuePerThreadHandle>)
 	{
 		let q = q.reference();
