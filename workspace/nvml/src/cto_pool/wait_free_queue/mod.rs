@@ -885,7 +885,7 @@ impl WaitFreeQueueInner
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().deq_node_id);
 		
 		let mut dequeued_value;
-		let mut id = 0;
+		let mut id = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
 		
 		do_while!
