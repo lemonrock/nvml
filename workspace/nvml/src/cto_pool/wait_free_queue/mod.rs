@@ -672,6 +672,12 @@ struct Enqueuer
 impl Enqueuer
 {
 	#[inline(always)]
+	fn as_ptr(&self) -> *mut Self
+	{
+		self as *const _ as *mut _
+	}
+	
+	#[inline(always)]
 	fn new(id: isize, val: *mut void) -> Self
 	{
 		Self
@@ -692,6 +698,12 @@ struct Dequeuer
 
 impl Dequeuer
 {
+	#[inline(always)]
+	fn as_ptr(&self) -> *mut Self
+	{
+		self as *const _ as *mut _
+	}
+	
 	#[inline(always)]
 	fn new(id: isize, idx: isize) -> Self
 	{
@@ -958,7 +970,7 @@ impl WaitFreeQueueInner
 			c = Node::find_cell(tail, i, per_thread_handle);
 			let mut ce = BottomAndTop::Bottom;
 			
-			if c.enq.CAScs(&mut ce, enq as *const _ as *mut _) && c.val.get().is_not_top()
+			if c.enq.CAScs(&mut ce, enq.as_ptr()) && c.val.get().is_not_top()
 			{
 				enq.id.CAS(&mut id, -i);
 				break 'do_while;
@@ -1016,7 +1028,7 @@ impl WaitFreeQueueInner
 			let (mut pe, mut id) =
 				{
 					let pe = ph.reference().Er.deref();
-					(pe as *const _ as *mut _, pe.id.get())
+					(pe.as_ptr(), pe.id.get())
 				};
 			
 			if per_thread_handle.reference().Ei != 0 && per_thread_handle.reference().Ei != id
@@ -1028,7 +1040,7 @@ impl WaitFreeQueueInner
 				let (pe2, id2) =
 				{
 					let pe = ph.reference().Er.deref();
-					(pe as *const _ as *mut _, pe.id.get())
+					(pe.as_ptr(), pe.id.get())
 				};
 				pe = pe2;
 				id = id2;
@@ -1197,7 +1209,7 @@ impl WaitFreeQueueInner
 			
 			let c = Node::find_cell(Dp, idx, per_thread_handle);
 			let mut cd = BottomAndTop::Bottom;
-			if c.val.get().is_top() || c.deq.CAS(&mut cd, deq as *const _ as *mut _) || cd == (deq as *const _ as *mut _)
+			if c.val.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == (deq.as_ptr())
 			{
 				let negative_idx = -idx;
 				deq.idx.CAS(&mut idx, negative_idx);
