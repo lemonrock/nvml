@@ -35,11 +35,6 @@ use ::std::sync::atomic::spin_loop_hint;
 
 
 
-#[inline(always)]
-fn align_malloc<T>(alignment: usize, size: usize) -> NonNull<T>
-{
-	unimplemented!()
-}
 
 #[inline(always)]
 fn memset<T>(pointer: NonNull<T>, byte: u8, copies: usize)
@@ -53,6 +48,18 @@ fn free<T>(pointer: NonNull<T>)
 	unimplemented!()
 }
 
+#[inline(always)]
+fn page_size_align_malloc<T>() -> NonNull<T>
+{
+	#[inline(always)]
+	fn align_malloc<T>(alignment: usize, size: usize) -> NonNull<T>
+	{
+		unimplemented!()
+	}
+	
+	const PAGE_SIZE: usize = 4096;
+	align_malloc(PAGE_SIZE, size_of::<T>())
+}
 
 
 
@@ -319,13 +326,13 @@ impl<T: Copy> CacheAligned<T>
 	}
 }
 
-impl CacheAligned<[Cell; WFQUEUE_NODE_SIZE]>
+impl CacheAligned<Cells>
 {
 	#[inline(always)]
 	pub(crate) fn get_cell(&self, index: isize) -> &Cell
 	{
 		debug_assert!(index >= 0, "index is negative");
-		debug_assert!(index < N, "index is N or greater");
+		debug_assert!(index < Node::SignedNumberOfCells, "index is N or greater");
 		unsafe { self.0.get_unchecked(index as usize) }
 	}
 }
@@ -605,13 +612,8 @@ impl<T: Copy> volatile<T>
 
 
 
-const PAGE_SIZE: usize = 4096;
 
 const EMPTY: *mut void = 0 as *mut void;
-
-const WFQUEUE_NODE_SIZE: usize = (1 << 10) - 2;
-
-const N: isize = WFQUEUE_NODE_SIZE as isize;
 
 const MaximumNumberOfThreads: usize = 256;
 
@@ -710,33 +712,40 @@ impl Dequeuer
 }
 
 // `pad` is to make this structure 64 bytes, ie one cache line.
-#[repr(C)]
+#[repr(C, align(64))]
 struct Cell
 {
 	val: volatile<*mut void>,
 	enq: volatile<*mut Enqueuer>,
 	deq: volatile<*mut Dequeuer>,
-	pad: [*mut void; 5],
+	_pad: [*mut (); 5],
 }
 
 impl Cell
 {
 }
 
+type Cells = [Cell; Node::NumberOfCells];
+
 #[repr(C)]
 struct Node
 {
 	next: CacheAligned<volatile<*mut Node>>,
 	id: CacheAligned<isize>,
-	cells: CacheAligned<[Cell; WFQUEUE_NODE_SIZE]>,
+	cells: CacheAligned<Cells>,
 }
 
 impl Node
 {
+	// 1022
+	const NumberOfCells: usize = (1 << 10) - 2;
+	
+	const SignedNumberOfCells: isize = Self::NumberOfCells as isize;
+	
 	#[inline(always)]
 	fn new_node() -> NonNull<Self>
 	{
-		let n = align_malloc(PAGE_SIZE, size_of::<Self>());
+		let n = page_size_align_malloc();
 		memset(n, 0, size_of::<Self>());
 		n
 	}
@@ -746,7 +755,7 @@ impl Node
 		let mut curr = ptr.get();
 		
 		let mut j = curr.reference().id.get();
-		while j < i / N
+		while j < i / Self::SignedNumberOfCells
 		{
 			let mut next: *mut Node = curr.reference().next.get();
 			
@@ -776,7 +785,7 @@ impl Node
 		
 		ptr.set(curr);
 		
-		unsafe { &* curr.as_ptr() }.cells.get_cell(i % N)
+		unsafe { &* curr.as_ptr() }.cells.get_cell(i % Self::SignedNumberOfCells)
 	}
 }
 
@@ -843,7 +852,7 @@ impl WaitFreeQueueInner
 	{
 		assert!(number_of_threads <= MaximumNumberOfThreads, "number_of_threads '{}' exceeds MaximumNumberOfThreads '{}'", number_of_threads, MaximumNumberOfThreads);
 		
-		let mut this = align_malloc(PAGE_SIZE, size_of::<Self>());
+		let mut this = page_size_align_malloc();
 		
 		unsafe
 		{
@@ -1372,7 +1381,7 @@ impl WaitFreeQueuePerThreadHandle
 	{
 		assert!(nprocs <= MaximumNumberOfThreads, "nprocs '{}' exceeds MaximumNumberOfThreads '{}'", nprocs, MaximumNumberOfThreads);
 		
-		let th = align_malloc(PAGE_SIZE, size_of::<Self>());
+		let th = page_size_align_malloc();
 		Self::queue_register(q, th);
 		th
 	}
