@@ -726,7 +726,7 @@ impl Dequeuer
 struct Cell<Value>
 {
 	value: volatile<*mut Value>,
-	enq: volatile<*mut Enqueuer<Value>>,
+	enqueuer: volatile<*mut Enqueuer<Value>>,
 	deq: volatile<*mut Dequeuer>,
 	_pad: [*mut (); 5],
 }
@@ -967,7 +967,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value, mut id: isize)
 	{
-		let enqueuer: &Enqueuer<Value> = &per_thread_handle.reference().Er;
+		let enqueuer = &per_thread_handle.reference().Er;
 		enqueuer.value.set(value_to_enqueue);
 		enqueuer.id.RELEASE(id);
 
@@ -981,7 +981,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			cell = Node::find_cell(tail, i, per_thread_handle);
 			let mut ce = BottomAndTop::Bottom;
 			
-			if cell.enq.CAScs(&mut ce, enqueuer.as_ptr()) && cell.value.get().is_not_top()
+			if cell.enqueuer.CAScs(&mut ce, enqueuer.as_ptr()) && cell.value.get().is_not_top()
 			{
 				enqueuer.id.CAS(&mut id, -i);
 				break 'do_while;
@@ -1031,7 +1031,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return value;
 		}
 		
-		let mut enqueuer = cell.enq.get();
+		let mut enqueuer = cell.enqueuer.get();
 		
 		if enqueuer.is_bottom()
 		{
@@ -1057,7 +1057,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				id = id2;
 			}
 			
-			if id > 0 && id <= i && !cell.enq.CAS(&mut enqueuer, pe)
+			if id > 0 && id <= i && !cell.enqueuer.CAS(&mut enqueuer, pe)
 			{
 				per_thread_handle.mutable_reference().Ei = id
 			}
@@ -1066,7 +1066,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				per_thread_handle.mutable_reference().Eh.set(ph.reference().next.get())
 			}
 			
-			if enqueuer.is_bottom() && cell.enq.CAS(&mut enqueuer, BottomAndTop::Top)
+			if enqueuer.is_bottom() && cell.enqueuer.CAS(&mut enqueuer, BottomAndTop::Top)
 			{
 				enqueuer = BottomAndTop::Top
 			}
@@ -1134,7 +1134,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, id: isize) -> *mut Value
 	{
-		let dequeuer = per_thread_handle.reference().Dr.deref();
+		let dequeuer = &per_thread_handle.reference().Dr;
 		dequeuer.id.RELEASE(id);
 		dequeuer.idx.RELEASE(id);
 		
