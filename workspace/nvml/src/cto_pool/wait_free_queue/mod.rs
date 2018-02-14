@@ -1090,9 +1090,11 @@ impl<Value> WaitFreeQueueInner<Value>
 				<*mut Value>::Top
 			}
 		}
+		let non_null_enqueuer = enqueuer.to_non_null();
+		let enqueuer = non_null_enqueuer.reference();
 		
-		let mut ei = enqueuer.to_non_null().reference().id.ACQUIRE();
-		let ev = enqueuer.to_non_null().reference().value.ACQUIRE();
+		let mut ei = enqueuer.id.ACQUIRE();
+		let ev = enqueuer.value.ACQUIRE();
 		
 		if ei > i
 		{
@@ -1103,7 +1105,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		else
 		{
-			if (ei > 0 && enqueuer.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
+			if (ei > 0 && enqueuer.id.CAS(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
 			{
 				let mut Ei = self.Ei.get();
 				while Ei <= i && !self.Ei.CAS(&mut Ei, i + 1)
@@ -1172,7 +1174,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		let Dp = &ph.reference().Dp;
+		// ie, Read the value, then construct a new volatile reference used for compatibility in find_cell.
+		let Dp = volatile::new(ph.reference().Dp.get());
 		per_thread_handle.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
 		FENCE();
 		idx = dequeuer.idx.get();
@@ -1183,11 +1186,9 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		loop
 		{
-			let h = Dp;
-			
 			while idx == old && new == 0
 			{
-				let cell = Node::find_cell(h, i, per_thread_handle);
+				let cell = Node::find_cell(&Dp, i, per_thread_handle);
 				
 				let mut Di = self.Di.get();
 				while Di <= i && !self.Di.CAS(&mut Di, i + 1)
@@ -1225,7 +1226,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				break;
 			}
 			
-			let c = Node::find_cell(Dp, idx, per_thread_handle);
+			let c = Node::find_cell(&Dp, idx, per_thread_handle);
 			let mut cd = <*mut Dequeuer>::Bottom;
 			if c.value.get().is_top() || c.dequeuer.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
