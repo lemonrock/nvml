@@ -1174,19 +1174,19 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		// ie, Read the value, then construct a new volatile reference used for compatibility in find_cell.
+		// ie, Read the value, then construct a new_id volatile reference used for compatibility in find_cell.
 		let Dp = volatile::new(ph.reference().Dp.get());
 		per_thread_handle.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
 		FENCE();
 		idx = dequeuer.idx.get();
 		
 		let mut i = id + 1;
-		let mut old = id;
-		let mut new = 0;
+		let mut old_id = id;
+		let mut new_id = 0;
 		
 		loop
 		{
-			while idx == old && new == 0
+			while idx == old_id && new_id == 0
 			{
 				let cell = Node::find_cell(&Dp, i, per_thread_handle);
 				
@@ -1198,7 +1198,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				let value = self.enqueue_help(per_thread_handle, cell, i);
 				if value.is_bottom() || (value.is_not_top() && cell.dequeuer.get().is_bottom())
 				{
-					new = i;
+					new_id = i;
 				}
 				else
 				{
@@ -1209,15 +1209,15 @@ impl<Value> WaitFreeQueueInner<Value>
 				i.pre_increment();
 			}
 			
-			if new != 0
+			if new_id != 0
 			{
-				if dequeuer.idx.CASra(&mut idx, new)
+				if dequeuer.idx.CASra(&mut idx, new_id)
 				{
-					idx = new;
+					idx = new_id;
 				}
-				if idx >= new
+				if idx >= new_id
 				{
-					new = 0;
+					new_id = 0;
 				}
 			}
 			
@@ -1226,16 +1226,16 @@ impl<Value> WaitFreeQueueInner<Value>
 				break;
 			}
 			
-			let c = Node::find_cell(&Dp, idx, per_thread_handle);
+			let cell = Node::find_cell(&Dp, idx, per_thread_handle);
 			let mut cd = <*mut Dequeuer>::Bottom;
-			if c.value.get().is_top() || c.dequeuer.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
+			if cell.value.get().is_top() || cell.dequeuer.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
 				let negative_idx = -idx;
 				dequeuer.idx.CAS(&mut idx, negative_idx);
 				break
 			}
 			
-			old = idx;
+			old_id = idx;
 			if idx >= i
 			{
 				i = idx + 1;
@@ -1247,42 +1247,42 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn clean_up_garbage_after_dequeue(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
 		#[inline(always)]
-		fn check<Value>(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+		fn check<Value>(p_hzd_node_id: &volatile<usize>, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
 			let hzd_node_id: usize = p_hzd_node_id.ACQUIRE();
 			
-			if hzd_node_id < (cur.id() as usize)
+			if hzd_node_id < (current.id() as usize)
 			{
-				let mut tmp = old.to_non_null();
-				while (tmp.id() as usize) < hzd_node_id
+				let mut node = old.to_non_null();
+				while (node.id() as usize) < hzd_node_id
 				{
-					tmp = tmp.reference().next.get().to_non_null();
+					node = node.reference().next.get().to_non_null();
 				}
-				cur = tmp;
+				current = node;
 			}
 			
-			cur
+			current
 		}
 		
 		#[inline(always)]
-		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut cur: NonNull<Node<Value>>, p_hzd_node_id: &volatile<usize>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut current: NonNull<Node<Value>>, p_hzd_node_id: &volatile<usize>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
-			let mut ptr = pPn.ACQUIRE();
+			let mut node = pPn.ACQUIRE();
 			
-			if ptr.id() < cur.id()
+			if node.id() < current.id()
 			{
-				if !pPn.CAScs(&mut ptr, cur)
+				if !pPn.CAScs(&mut node, current)
 				{
-					if ptr.id() < cur.id()
+					if node.id() < current.id()
 					{
-						cur = ptr;
+						current = node;
 					}
 				}
 				
-				cur = check(p_hzd_node_id, cur, old);
+				current = check(p_hzd_node_id, current, old);
 			}
 			
-			cur
+			current
 		}
 		
 		const NoOid: isize = -1;
