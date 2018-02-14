@@ -777,13 +777,13 @@ impl<Value> Node<Value>
 	
 	fn find_cell<'node>(ptr: &'node volatile<NonNull<Node<Value>>>, i: isize, mut th: NonNull<WaitFreeQueuePerThreadHandle<Value>>) -> &'node Cell<Value>
 	{
-		let mut curr = ptr.get();
+		let mut current = ptr.get();
 		
-		let mut j = curr.reference().id.get();
+		let mut j = current.reference().id.get();
 		let x = i / Cells::<Value>::SignedNumberOfCells;
 		while j < x
 		{
-			let mut next = curr.reference().next.get();
+			let mut next = current.reference().next.get();
 			
 			if next.is_null()
 			{
@@ -797,21 +797,21 @@ impl<Value> Node<Value>
 				
 				temp.to_non_null().mutable_reference().id.set(j + 1);
 				
-				if curr.reference().next.CASra(&mut next, temp)
+				if current.reference().next.CASra(&mut next, temp)
 				{
 					next = temp;
 					th.mutable_reference().spare.set(null_mut());
 				}
 			}
 			
-			curr = next.to_non_null();
+			current = next.to_non_null();
 			
 			j.pre_increment();
 		}
 		
-		ptr.set(curr);
+		ptr.set(current);
 		
-		unsafe { &* curr.as_ptr() }.cells.get_cell(i % Cells::<Value>::SignedNumberOfCells)
+		unsafe { &* current.as_ptr() }.cells.get_cell(i % Cells::<Value>::SignedNumberOfCells)
 	}
 	
 	#[inline(always)]
@@ -1175,6 +1175,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		// ie, Read the value, then construct a new_id volatile reference used for compatibility in find_cell.
+		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
 		let Dp = volatile::new(ph.reference().Dp.get());
 		per_thread_handle.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
 		FENCE();
@@ -1186,9 +1187,12 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		loop
 		{
+			// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
+			let h = volatile::new(Dp.get());
+			
 			while idx == old_id && new_id == 0
 			{
-				let cell = Node::find_cell(&Dp, i, per_thread_handle);
+				let cell = Node::find_cell(&h, i, per_thread_handle);
 				
 				let mut Di = self.Di.get();
 				while Di <= i && !self.Di.CAS(&mut Di, i + 1)
@@ -1380,6 +1384,14 @@ impl NumberOfHyperThreads
 		debug_assert!(maximum_garbage <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
 		maximum_garbage as isize
 	}
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+struct NodeHazardPointerIdentifier(usize);
+
+impl NodeHazardPointerIdentifier
+{
+	const Null: NodeHazardPointerIdentifier = NodeHazardPointerIdentifier(!0);
 }
 
 struct WaitFreeQueuePerThreadHandle<Value>
