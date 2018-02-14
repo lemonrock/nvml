@@ -607,7 +607,6 @@ impl<T: Copy> volatile<T>
 
 
 
-const EMPTY: *mut void = 0 as *mut void;
 
 const MaximumNumberOfThreads: usize = 256;
 
@@ -732,6 +731,7 @@ struct Node
 impl Node
 {
 	// 1022
+	// -2 presumably for the fields `next` and `id` which are also cache aligned, implying 1024 cache aligned 'lines' or 'fields' in the Node struct.
 	const NumberOfCells: usize = (1 << 10) - 2;
 	
 	const SignedNumberOfCells: isize = Self::NumberOfCells as isize;
@@ -905,6 +905,8 @@ impl WaitFreeQueueInner
 			dequeued_value = self.dequeue_slow_path(per_thread_handle, id);
 		}
 		
+		// `EMPTY`: a value that will be returned if a `dequeue` fails.
+		const EMPTY: *mut void = 0 as *mut void;
 		if dequeued_value != EMPTY
 		{
 			self.dequeue_help(per_thread_handle, per_thread_handle.reference().Dh);
