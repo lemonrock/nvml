@@ -834,7 +834,7 @@ struct WaitFreeQueueInner
 	// Number of processors.
 	number_of_hyper_threads: NumberOfHyperThreads,
 
-	_tail: volatile<*mut WaitFreeQueuePerThreadHandle>,
+	tail: volatile<*mut WaitFreeQueuePerThreadHandle>,
 }
 
 impl WaitFreeQueueInner
@@ -854,7 +854,7 @@ impl WaitFreeQueueInner
 			this.Ei.set(1);
 			this.Di.set(1);
 			write(&mut this.number_of_hyper_threads, number_of_hyper_threads);
-			this._tail.set(null_mut());
+			this.tail.set(null_mut());
 		}
 		
 		this
@@ -1426,13 +1426,13 @@ impl WaitFreeQueuePerThreadHandle
 			
 			write(&mut th.spare, CacheAligned::new(Node::new_node().as_ptr()));
 			
-			let mut tail = q._tail.get();
+			let mut tail = q.tail.get();
 			
 			if tail.is_null()
 			{
 				let th_self = NonNull::new_safe(th);
 				th.next.set(th_self);
-				if q._tail.CASra(&mut tail, th)
+				if q.tail.CASra(&mut tail, th)
 				{
 					th.Eh.set(th.next.get());
 					write(&mut th.Dh, th.next.get());
