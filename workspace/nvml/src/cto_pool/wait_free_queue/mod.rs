@@ -296,6 +296,15 @@ impl<T> DerefMut for CacheAligned<T>
 	}
 }
 
+impl<T: Default> Default for CacheAligned<T>
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self::new(T::default())
+	}
+}
+
 impl<T> CacheAligned<T>
 {
 	#[inline(always)]
@@ -397,6 +406,15 @@ impl<T: Copy> CacheAligned<volatile<T>>
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
 pub(crate) struct DoubleCacheAligned<T>(T);
+
+impl<T: Default> Default for DoubleCacheAligned<T>
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self::new(T::default())
+	}
+}
 
 impl<T> DoubleCacheAligned<T>
 {
@@ -666,7 +684,20 @@ impl<T> BottomAndTop for *mut T
 struct Enqueuer
 {
 	id: volatile<isize>,
-	val: volatile<*mut void>,
+	value: volatile<*mut void>,
+}
+
+impl Default for Enqueuer
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self
+		{
+			id: volatile::new(0),
+			value: volatile::new(BottomAndTop::Bottom),
+		}
+	}
 }
 
 impl Enqueuer
@@ -675,16 +706,6 @@ impl Enqueuer
 	fn as_ptr(&self) -> *mut Self
 	{
 		self as *const _ as *mut _
-	}
-	
-	#[inline(always)]
-	fn new(id: isize, val: *mut void) -> Self
-	{
-		Self
-		{
-			id: volatile::new(id),
-			val: volatile::new(val),
-		}
 	}
 }
 
@@ -696,22 +717,25 @@ struct Dequeuer
 	idx: volatile<isize>,
 }
 
+impl Default for Dequeuer
+{
+	#[inline(always)]
+	fn default() -> Self
+	{
+		Self
+		{
+			id: volatile::new(0),
+			idx: volatile::new(-1),
+		}
+	}
+}
+
 impl Dequeuer
 {
 	#[inline(always)]
 	fn as_ptr(&self) -> *mut Self
 	{
 		self as *const _ as *mut _
-	}
-	
-	#[inline(always)]
-	fn new(id: isize, idx: isize) -> Self
-	{
-		Self
-		{
-			id: volatile::new(id),
-			idx: volatile::new(idx),
-		}
 	}
 }
 
@@ -873,18 +897,18 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void)
+	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void)
 	{
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().enq_node_id);
 		
 		let mut id = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
-		while !self.enqueue_fast_path(per_thread_handle, v, &mut id) && remaining_patience_for_fast_path.post_decrement() > 0
+		while !self.enqueue_fast_path(per_thread_handle, value, &mut id) && remaining_patience_for_fast_path.post_decrement() > 0
 		{
 		}
 		if remaining_patience_for_fast_path < 0
 		{
-			self.enqueue_slow_path(per_thread_handle, v, id)
+			self.enqueue_slow_path(per_thread_handle, value, id)
 		}
 		
 		per_thread_handle.mutable_reference().enq_node_id = per_thread_handle.reference().Ep.get().reference().id.get() as usize;
@@ -935,14 +959,14 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, id: &mut isize) -> bool
+	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void, id: &mut isize) -> bool
 	{
 		let i = self.Ei.FAAcs(1);
 		
 		let c = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
 		let mut cv = BottomAndTop::Bottom;
 		
-		if c.val.CAS(&mut cv, v)
+		if c.val.CAS(&mut cv, value)
 		{
 			true
 		}
@@ -954,10 +978,10 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, v: *mut void, mut id: isize)
+	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void, mut id: isize)
 	{
 		let enq: &Enqueuer = &per_thread_handle.reference().Er;
-		enq.val.set(v);
+		enq.value.set(value);
 		enq.id.RELEASE(id);
 
 		let tail = &per_thread_handle.reference().Ep;
@@ -989,7 +1013,7 @@ impl WaitFreeQueueInner
 			{
 			}
 		}
-		c.val.set(v);
+		c.val.set(value);
 	}
 	
 	// Used only when dequeue() is called.
@@ -1074,7 +1098,7 @@ impl WaitFreeQueueInner
 		}
 		
 		let mut ei = e.to_non_null().reference().id.ACQUIRE();
-		let ev = e.to_non_null().reference().val.ACQUIRE();
+		let ev = e.to_non_null().reference().value.ACQUIRE();
 		
 		if ei > i
 		{
@@ -1430,9 +1454,9 @@ impl WaitFreeQueuePerThreadHandle
 			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
 			write(&mut th.deq_node_id, th.Dp.get().id() as usize);
 			
-			write(&mut th.Er, CacheAligned::new(Enqueuer::new(0, BottomAndTop::Bottom)));
+			write(&mut th.Er, CacheAligned::default());
 			
-			write(&mut th.Dr, CacheAligned::new(Dequeuer::new(0, -1)));
+			write(&mut th.Dr, CacheAligned::default());
 			
 			write(&mut th.Ei, 0);
 			
