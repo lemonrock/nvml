@@ -613,8 +613,6 @@ const WFQUEUE_NODE_SIZE: usize = (1 << 10) - 2;
 
 const N: isize = WFQUEUE_NODE_SIZE as isize;
 
-const BOT: *mut void = 0 as *mut void;
-
 const MaximumNumberOfThreads: usize = 256;
 
 
@@ -928,7 +926,7 @@ impl WaitFreeQueueInner
 		let i = self.Ei.FAAcs(1);
 		
 		let c = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
-		let mut cv: *mut void = BOT;
+		let mut cv = BottomAndTop::Bottom;
 		
 		if c.val.CAS(&mut cv, v)
 		{
@@ -956,7 +954,7 @@ impl WaitFreeQueueInner
 		{
 			i = self.Ei.FAA(1);
 			c = Node::find_cell(tail, i, per_thread_handle);
-			let mut ce = BOT as *mut Enqueuer; // TODO: null_mut()
+			let mut ce = BottomAndTop::Bottom;
 			
 			if c.enq.CAScs(&mut ce, enq as *const _ as *mut _) && c.val.get().is_not_top()
 			{
@@ -1010,8 +1008,7 @@ impl WaitFreeQueueInner
 		
 		let mut e = c.enq.get();
 		
-		// TODO: null_mut()
-		if e == (BOT as *mut Enqueuer)
+		if e.is_bottom()
 		{
 			let mut ph = per_thread_handle.reference().Eh.get();
 			let (mut pe, mut id) =
@@ -1093,7 +1090,7 @@ impl WaitFreeQueueInner
 		let i = self.Di.FAAcs(1);
 		let c = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
 		let dequeued_value = self.enqueue_help(per_thread_handle, c, i);
-		let mut cd = BOT as *mut Dequeuer;
+		let mut cd = BottomAndTop::Bottom;
 		
 		if dequeued_value.is_bottom()
 		{
@@ -1391,7 +1388,7 @@ impl WaitFreeQueuePerThreadHandle
 		{
 			// Seems to be unnecessary as this value is always overwritten.
 			// th.next.set(null_mut());
-			th.hzd_node_id.set(!0); // Was -1
+			th.hzd_node_id.set(!0);
 			
 			th.Ep.set(q.Hp.get().to_non_null());
 			// enq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
@@ -1401,7 +1398,7 @@ impl WaitFreeQueuePerThreadHandle
 			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
 			write(&mut th.deq_node_id, th.Dp.get().id() as usize);
 			
-			write(&mut th.Er, CacheAligned::new(Enqueuer::new(0, BOT)));
+			write(&mut th.Er, CacheAligned::new(Enqueuer::new(0, BottomAndTop::Bottom)));
 			
 			write(&mut th.Dr, CacheAligned::new(Dequeuer::new(0, -1)));
 			
