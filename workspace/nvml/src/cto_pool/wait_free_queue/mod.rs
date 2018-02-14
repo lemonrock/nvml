@@ -617,9 +617,59 @@ const BOT: *mut void = 0 as *mut void;
 
 const TOP: *mut void = !0 as *mut void;
 
-const MAX_SPIN: usize = 100;
-
 const MaximumNumberOfThreads: usize = 256;
+
+
+trait BottomAndTop
+{
+	const Bottom: Self;
+	
+	const Top: Self;
+	
+	#[inline(always)]
+	fn is_bottom(self) -> bool;
+	
+	#[inline(always)]
+	fn is_not_bottom(self) -> bool;
+	
+	#[inline(always)]
+	fn is_top(self) -> bool;
+	
+	#[inline(always)]
+	fn is_not_top(self) -> bool;
+}
+
+impl<T> BottomAndTop for *mut T
+{
+	const Bottom: Self = 0 as Self;
+	
+	const Top: Self = !0 as Self;
+	
+	#[inline(always)]
+	fn is_bottom(self) -> bool
+	{
+		self == Self::Bottom
+	}
+	
+	#[inline(always)]
+	fn is_not_bottom(self) -> bool
+	{
+		self != Self::Bottom
+	}
+	
+	#[inline(always)]
+	fn is_top(self) -> bool
+	{
+		self == Self::Top
+	}
+	
+	#[inline(always)]
+	fn is_not_top(self) -> bool
+	{
+		self != Self::Top
+	}
+}
+
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
@@ -943,7 +993,9 @@ impl WaitFreeQueueInner
 		#[inline(always)]
 		fn spin(p: &volatile<*mut void>) -> *mut void
 		{
-			let mut patience = MAX_SPIN;
+			const MaximumSpinPatience: usize = 100;
+			
+			let mut patience = MaximumSpinPatience;
 			let mut v = p.get();
 			
 			while v.is_not_null() && patience.post_decrement() > 0
@@ -998,22 +1050,21 @@ impl WaitFreeQueueInner
 				per_thread_handle.mutable_reference().Eh.set(ph.reference().next.get())
 			}
 			
-			// TODO: null_mut()
-			if e == (BOT as *mut Enqueuer) && c.enq.CAS(&mut e, TOP as *mut Enqueuer)
+			if e.is_bottom() && c.enq.CAS(&mut e, BottomAndTop::Top)
 			{
-				e = TOP as *mut Enqueuer;
+				e = BottomAndTop::Top
 			}
 		}
 		
-		if e == (TOP as *mut Enqueuer)
+		if e.is_top()
 		{
 			return if self.Ei.get() <= i
 			{
-				BOT
+				BottomAndTop::Bottom
 			}
 			else
 			{
-				TOP
+				BottomAndTop::Top
 			}
 		}
 		
@@ -1022,9 +1073,9 @@ impl WaitFreeQueueInner
 		
 		if ei > i
 		{
-			if c.val.get() == TOP && self.Ei.get() <= i
+			if c.val.get().is_top() && self.Ei.get() <= i
 			{
-				return BOT
+				return BottomAndTop::Bottom
 			}
 		}
 		else
