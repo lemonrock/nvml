@@ -839,8 +839,6 @@ struct WaitFreeQueueInner
 
 impl WaitFreeQueueInner
 {
-	const MaximumNumberOfThreads: usize = 256;
-	
 	const MaximumPatienceForFastPath: isize = 10;
 	
 	pub(crate) fn new(number_of_hyper_threads: NumberOfHyperThreads) -> NonNull<Self>
