@@ -1454,9 +1454,9 @@ impl WaitFreeQueuePerThreadHandle
 			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
 			write(&mut th.deq_node_id, th.Dp.get().id() as usize);
 			
-			write(&mut th.Er, CacheAligned::default());
+			write_volatile(&mut th.Er, CacheAligned::default());
 			
-			write(&mut th.Dr, CacheAligned::default());
+			write_volatile(&mut th.Dr, CacheAligned::default());
 			
 			write(&mut th.Ei, 0);
 			
