@@ -338,9 +338,9 @@ impl<T: Copy> CacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn set(&self, value: T)
+	pub(crate) fn set(&self, valueue: T)
 	{
-		self.0.set(value)
+		self.0.set(valueue)
 	}
 	
 	#[inline(always)]
@@ -368,27 +368,27 @@ impl<T: Copy> CacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAS(cmp, val)
+		self.0.CAS(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAScs(cmp, val)
+		self.0.CAScs(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASra(cmp, val)
+		self.0.CASra(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASa(cmp, val)
+		self.0.CASa(compare, value)
 	}
 }
 
@@ -438,9 +438,9 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn set(&self, value: T)
+	pub(crate) fn set(&self, valueue: T)
 	{
-		self.0.set(value)
+		self.0.set(valueue)
 	}
 	
 	#[inline(always)]
@@ -468,27 +468,27 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAS(cmp, val)
+		self.0.CAS(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAScs(cmp, val)
+		self.0.CAScs(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASra(cmp, val)
+		self.0.CASra(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASa(cmp, val)
+		self.0.CASa(compare, value)
 	}
 }
 
@@ -532,7 +532,6 @@ impl<T: Copy> volatile<T>
 	#[inline(always)]
 	pub(crate) fn FAA(&self, increment: T) -> T
 	{
-		// FAA(ptr, val) __atomic_fetch_add(ptr, val, __ATOMIC_RELAXED)
 		unsafe { atomic_xadd_relaxed(self.0.get(), increment) }
 	}
 	
@@ -541,70 +540,69 @@ impl<T: Copy> volatile<T>
 	#[inline(always)]
 	pub(crate) fn FAAcs(&self, increment: T) -> T
 	{
-		// __atomic_fetch_add(ptr, val, __ATOMIC_SEQ_CST)
 		unsafe { atomic_xadd(self.0.get(), increment) }
 	}
 	
 	/// An atomic compare-and-swap that is completely relaxed.
-	/// true if successful
-	/// false if failed
+	/// true if successful.
+	/// false if failed.
+	/// compare is updated if failed.
 	#[inline(always)]
-	pub(crate) fn CAS(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
 	{
-		// #define CAS(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)
-		let (value, ok) = unsafe { atomic_cxchg_relaxed(self.0.get(), *cmp, val) };
+		let (valueue, ok) = unsafe { atomic_cxchg_relaxed(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*cmp = value;
+			*compare = valueue;
 		}
 		ok
 	}
 	
 	/// An atomic compare-and-swap that also ensures sequential consistency.
-	/// true if successful
-	/// false if failed
+	/// true if successful.
+	/// false if failed.
+	/// compare is updated if failed.
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
 	{
-		// #define CAScs(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		let (value, ok) = unsafe { atomic_cxchg(self.0.get(), *cmp, val) };
+		let (valueue, ok) = unsafe { atomic_cxchg(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*cmp = value;
+			*compare = valueue;
 		}
 		ok
 	}
 	
 	/// An atomic compare-and-swap that ensures release semantic when succeed or acquire semantic when failed.
-	/// true if successful
-	/// false if failed
+	/// true if successful.
+	/// false if failed.
+	/// compare is updated if failed.
 	#[inline(always)]
-	pub(crate) fn CASra(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
 	{
-		// #define CASra(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)
-		let (value, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *cmp, val) };
+		let (valueue, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*cmp = value;
+			*compare = valueue;
 		}
 		ok
 	}
 	
 	/// An atomic compare-and-swap that ensures acquire semantic when succeed or relaxed semantic when failed.
-	/// true if successful
-	/// false if failed
+	/// true if successful.
+	/// false if failed.
+	/// compare is updated if failed.
 	#[inline(always)]
-	pub(crate) fn CASa(&self, cmp: &mut T, val: T) -> bool
+	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
 	{
-		// #define CASa(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
-		let (value, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), *cmp, val) };
+		let (valueue, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*cmp = value;
+			*compare = valueue;
 		}
 		ok
 	}
@@ -631,8 +629,10 @@ trait BottomAndTop
 
 impl<T> BottomAndTop for *mut T
 {
+	// Works because the initial state of a Node or Cell is zeroed
 	const Bottom: Self = 0 as Self;
 	
+	// Works because no valid pointer can currently by 2^64 - 1 (most pointers are exhausted at 2^48 - 1).
 	const Top: Self = !0 as Self;
 	
 	#[inline(always)]
@@ -659,7 +659,6 @@ impl<T> BottomAndTop for *mut T
 		self != Self::Top
 	}
 }
-
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
@@ -884,8 +883,10 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value)
+	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: NonNull<Value>)
 	{
+		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
+		
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().enq_node_id);
 		
 		let mut id = unsafe { uninitialized() };
@@ -946,14 +947,17 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value, id: &mut isize) -> bool
+	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, id: &mut isize) -> bool
 	{
+		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
+		
 		let i = self.Ei.FAAcs(1);
 		
 		let cell = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
 		
-		let mut compare_to_value = BottomAndTop::Bottom;
-		if cell.value.CAS(&mut compare_to_value, value_to_enqueue)
+		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
+		let mut compare_to_value = <*mut Value>::Bottom;
+		if cell.value.CAS(&mut compare_to_value, value_to_enqueue.as_ptr())
 		{
 			true
 		}
@@ -965,8 +969,11 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value, mut id: isize)
+	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, mut id: isize)
 	{
+		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
+		let value_to_enqueue = value_to_enqueue.as_ptr();
+		
 		let enqueuer = &per_thread_handle.reference().Er;
 		enqueuer.value.set(value_to_enqueue);
 		enqueuer.id.RELEASE(id);
