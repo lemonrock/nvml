@@ -1013,7 +1013,7 @@ impl WaitFreeQueueInner
 			v
 		}
 		
-		let mut v: *mut void = spin(&c.val);
+		let mut v = spin(&c.val);
 		
 		if (v.is_not_top() && v.is_not_bottom()) || (v.is_bottom() && !c.val.CAScs(&mut v, BottomAndTop::Top) && v.is_not_top())
 		{
@@ -1209,7 +1209,7 @@ impl WaitFreeQueueInner
 			
 			let c = Node::find_cell(Dp, idx, per_thread_handle);
 			let mut cd = BottomAndTop::Bottom;
-			if c.val.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == (deq.as_ptr())
+			if c.val.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == deq.as_ptr()
 			{
 				let negative_idx = -idx;
 				deq.idx.CAS(&mut idx, negative_idx);
