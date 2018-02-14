@@ -743,7 +743,7 @@ impl Dequeuer
 #[repr(C, align(64))]
 struct Cell
 {
-	val: volatile<*mut void>,
+	value: volatile<*mut void>,
 	enq: volatile<*mut Enqueuer>,
 	deq: volatile<*mut Dequeuer>,
 	_pad: [*mut (); 5],
@@ -967,7 +967,7 @@ impl WaitFreeQueueInner
 		let c = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
 		let mut cv = BottomAndTop::Bottom;
 		
-		if c.val.CAS(&mut cv, value)
+		if c.value.CAS(&mut cv, value)
 		{
 			true
 		}
@@ -995,7 +995,7 @@ impl WaitFreeQueueInner
 			c = Node::find_cell(tail, i, per_thread_handle);
 			let mut ce = BottomAndTop::Bottom;
 			
-			if c.enq.CAScs(&mut ce, enq.as_ptr()) && c.val.get().is_not_top()
+			if c.enq.CAScs(&mut ce, enq.as_ptr()) && c.value.get().is_not_top()
 			{
 				enq.id.CAS(&mut id, -i);
 				break 'do_while;
@@ -1014,7 +1014,7 @@ impl WaitFreeQueueInner
 			{
 			}
 		}
-		c.val.set(value);
+		c.value.set(value);
 	}
 	
 	// Used only when dequeue() is called.
@@ -1038,9 +1038,9 @@ impl WaitFreeQueueInner
 			v
 		}
 		
-		let mut v = spin(&c.val);
+		let mut v = spin(&c.value);
 		
-		if (v.is_not_top() && v.is_not_bottom()) || (v.is_bottom() && !c.val.CAScs(&mut v, BottomAndTop::Top) && v.is_not_top())
+		if (v.is_not_top() && v.is_not_bottom()) || (v.is_bottom() && !c.value.CAScs(&mut v, BottomAndTop::Top) && v.is_not_top())
 		{
 			return v;
 		}
@@ -1103,24 +1103,24 @@ impl WaitFreeQueueInner
 		
 		if ei > i
 		{
-			if c.val.get().is_top() && self.Ei.get() <= i
+			if c.value.get().is_top() && self.Ei.get() <= i
 			{
 				return BottomAndTop::Bottom
 			}
 		}
 		else
 		{
-			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.val.get().is_top())
+			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.value.get().is_top())
 			{
 				let mut Ei = self.Ei.get();
 				while Ei <= i && !self.Ei.CAS(&mut Ei, i + 1)
 				{
 				}
-				c.val.set(ev);
+				c.value.set(ev);
 			}
 		}
 		
-		c.val.get()
+		c.value.get()
 	}
 	
 	#[inline(always)]
@@ -1155,7 +1155,7 @@ impl WaitFreeQueueInner
 		self.dequeue_help(per_thread_handle, per_thread_handle);
 		let i = -deq.idx.get();
 		let c = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
-		let dequeued_value = c.val.get();
+		let dequeued_value = c.value.get();
 		
 		if dequeued_value.is_top()
 		{
@@ -1234,7 +1234,7 @@ impl WaitFreeQueueInner
 			
 			let c = Node::find_cell(Dp, idx, per_thread_handle);
 			let mut cd = BottomAndTop::Bottom;
-			if c.val.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == deq.as_ptr()
+			if c.value.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == deq.as_ptr()
 			{
 				let negative_idx = -idx;
 				deq.idx.CAS(&mut idx, negative_idx);
