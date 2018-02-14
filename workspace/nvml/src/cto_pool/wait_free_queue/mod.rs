@@ -329,17 +329,6 @@ impl<T: Copy> CacheAligned<T>
 	}
 }
 
-impl CacheAligned<Cells>
-{
-	#[inline(always)]
-	pub(crate) fn get_cell(&self, index: isize) -> &Cell
-	{
-		debug_assert!(index >= 0, "index is negative");
-		debug_assert!(index < Node::SignedNumberOfCells, "index is N or greater");
-		unsafe { self.0.get_unchecked(index as usize) }
-	}
-}
-
 impl<T: Copy> CacheAligned<volatile<T>>
 {
 	#[inline(always)]
@@ -621,13 +610,6 @@ impl<T: Copy> volatile<T>
 	}
 }
 
-
-
-
-
-
-
-
 trait BottomAndTop
 {
 	const Bottom: Self;
@@ -681,13 +663,13 @@ impl<T> BottomAndTop for *mut T
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
-struct Enqueuer
+struct Enqueuer<Value>
 {
 	id: volatile<isize>,
-	value: volatile<*mut void>,
+	value: volatile<*mut Value>,
 }
 
-impl Default for Enqueuer
+impl<Value> Default for Enqueuer<Value>
 {
 	#[inline(always)]
 	fn default() -> Self
@@ -700,7 +682,7 @@ impl Default for Enqueuer
 	}
 }
 
-impl Enqueuer
+impl<Value> Enqueuer<Value>
 {
 	#[inline(always)]
 	fn as_ptr(&self) -> *mut Self
@@ -741,36 +723,50 @@ impl Dequeuer
 
 // `pad` is to make this structure 64 bytes, ie one cache line.
 #[repr(C, align(64))]
-struct Cell
+struct Cell<Value>
 {
-	value: volatile<*mut void>,
-	enq: volatile<*mut Enqueuer>,
+	value: volatile<*mut Value>,
+	enq: volatile<*mut Enqueuer<Value>>,
 	deq: volatile<*mut Dequeuer>,
 	_pad: [*mut (); 5],
 }
 
-impl Cell
+impl<Value> Cell<Value>
 {
 }
 
-type Cells = [Cell; Node::NumberOfCells];
+// 1022
+// -2 presumably for the fields `next` and `id` which are also cache aligned, implying 1024 cache aligned 'lines' or 'fields' in the Node struct.
+const NumberOfCells: usize = (1 << 10) - 2;
 
-#[repr(C)]
-struct Node
-{
-	next: CacheAligned<volatile<*mut Node>>,
-	id: CacheAligned<isize>,
-	cells: CacheAligned<Cells>,
-}
+#[repr(C, align(64))]
+struct Cells<Value>([Cell<Value>; NumberOfCells]);
 
-impl Node
+impl<Value> Cells<Value>
 {
-	// 1022
-	// -2 presumably for the fields `next` and `id` which are also cache aligned, implying 1024 cache aligned 'lines' or 'fields' in the Node struct.
-	const NumberOfCells: usize = (1 << 10) - 2;
+	const NumberOfCells: usize = NumberOfCells;
 	
 	const SignedNumberOfCells: isize = Self::NumberOfCells as isize;
 	
+	#[inline(always)]
+	pub(crate) fn get_cell(&self, index: isize) -> &Cell<Value>
+	{
+		debug_assert!(index >= 0, "index is negative");
+		debug_assert!(index < Self::SignedNumberOfCells, "index is N or greater");
+		unsafe { self.0.get_unchecked(index as usize) }
+	}
+}
+
+#[repr(C)]
+struct Node<Value>
+{
+	next: CacheAligned<volatile<*mut Node<Value>>>,
+	id: CacheAligned<isize>,
+	cells: Cells<Value>,
+}
+
+impl<Value> Node<Value>
+{
 	// Result is never null
 	#[inline(always)]
 	fn new_node() -> *mut Self
@@ -780,12 +776,13 @@ impl Node
 		n.as_ptr()
 	}
 	
-	fn find_cell<'node>(ptr: &'node volatile<NonNull<Node>>, i: isize, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> &'node Cell
+	fn find_cell<'node>(ptr: &'node volatile<NonNull<Node<Value>>>, i: isize, mut th: NonNull<WaitFreeQueuePerThreadHandle<Value>>) -> &'node Cell<Value>
 	{
 		let mut curr = ptr.get();
 		
 		let mut j = curr.reference().id.get();
-		while j < i / Self::SignedNumberOfCells
+		let x = i / Cells::<Value>::SignedNumberOfCells;
+		while j < x
 		{
 			let mut next = curr.reference().next.get();
 			
@@ -815,7 +812,13 @@ impl Node
 		
 		ptr.set(curr);
 		
-		unsafe { &* curr.as_ptr() }.cells.get_cell(i % Self::SignedNumberOfCells)
+		unsafe { &* curr.as_ptr() }.cells.get_cell(i % Cells::<Value>::SignedNumberOfCells)
+	}
+	
+	#[inline(always)]
+	fn id(&self) -> isize
+	{
+		self.id.get()
 	}
 }
 
@@ -823,38 +826,20 @@ trait NodeNonNull<T>: SafeNonNull<T>
 {
 	#[inline(always)]
 	fn id(self) -> isize;
-	
-	#[inline(always)]
-	fn next(self) -> *mut Node;
-	
-	#[inline(always)]
-	fn next_non_null(self) -> NonNull<Node>;
 }
 
-impl NodeNonNull<Node> for NonNull<Node>
+impl<Value> NodeNonNull<Node<Value>> for NonNull<Node<Value>>
 {
 	#[inline(always)]
 	fn id(self) -> isize
 	{
-		self.reference().id.get()
-	}
-	
-	#[inline(always)]
-	fn next(self) -> *mut Node
-	{
-		self.reference().next.get()
-	}
-	
-	#[inline(always)]
-	fn next_non_null(self) -> NonNull<Node>
-	{
-		self.next().to_non_null()
+		self.reference().id()
 	}
 }
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-struct WaitFreeQueueInner
+struct WaitFreeQueueInner<Value>
 {
 	// Index of the next position for enqueue.
 	Ei: DoubleCacheAligned<volatile<isize>>,
@@ -866,15 +851,15 @@ struct WaitFreeQueueInner
 	Hi: DoubleCacheAligned<volatile<isize>>,
 	
 	// Pointer to the head node of the queue.
-	Hp: volatile<*mut Node>,
+	Hp: volatile<*mut Node<Value>>,
 	
 	// Number of processors.
 	number_of_hyper_threads: NumberOfHyperThreads,
 
-	tail: volatile<*mut WaitFreeQueuePerThreadHandle>,
+	tail: volatile<*mut WaitFreeQueuePerThreadHandle<Value>>,
 }
 
-impl WaitFreeQueueInner
+impl<Value> WaitFreeQueueInner<Value>
 {
 	const MaximumPatienceForFastPath: isize = 10;
 	
@@ -898,7 +883,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void)
+	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value)
 	{
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().enq_node_id);
 		
@@ -917,7 +902,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	pub(crate) fn dequeue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>) -> *mut void
+	pub(crate) fn dequeue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>) -> *mut Value
 	{
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().deq_node_id);
 		
@@ -940,7 +925,7 @@ impl WaitFreeQueueInner
 		}
 		
 		// `EMPTY`: a value that will be returned if a `dequeue` fails.
-		const EMPTY: *mut void = 0 as *mut void;
+		let EMPTY: *mut Value = 0 as *mut Value;
 		if dequeued_value != EMPTY
 		{
 			self.dequeue_help(per_thread_handle, per_thread_handle.reference().Dh);
@@ -960,14 +945,14 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void, id: &mut isize) -> bool
+	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value, id: &mut isize) -> bool
 	{
 		let i = self.Ei.FAAcs(1);
 		
 		let c = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
-		let mut cv = BottomAndTop::Bottom;
 		
-		if c.value.CAS(&mut cv, value)
+		let mut compare_to_value = BottomAndTop::Bottom;
+		if c.value.CAS(&mut compare_to_value, value)
 		{
 			true
 		}
@@ -979,15 +964,15 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, value: *mut void, mut id: isize)
+	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value, mut id: isize)
 	{
-		let enq: &Enqueuer = &per_thread_handle.reference().Er;
+		let enq: &Enqueuer<Value> = &per_thread_handle.reference().Er;
 		enq.value.set(value);
 		enq.id.RELEASE(id);
 
 		let tail = &per_thread_handle.reference().Ep;
-		let mut i: isize;
-		let mut c: &Cell;
+		let mut i;
+		let mut c;
 		
 		'do_while: while
 		{
@@ -1019,10 +1004,10 @@ impl WaitFreeQueueInner
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn enqueue_help(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, c: &Cell, i: isize) -> *mut void
+	fn enqueue_help(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, c: &Cell<Value>, i: isize) -> *mut Value
 	{
 		#[inline(always)]
-		fn spin(p: &volatile<*mut void>) -> *mut void
+		fn spin<Value>(p: &volatile<*mut Value>) -> *mut Value
 		{
 			const MaximumSpinPatience: usize = 100;
 			
@@ -1038,11 +1023,11 @@ impl WaitFreeQueueInner
 			v
 		}
 		
-		let mut v = spin(&c.value);
+		let mut value = spin(&c.value);
 		
-		if (v.is_not_top() && v.is_not_bottom()) || (v.is_bottom() && !c.value.CAScs(&mut v, BottomAndTop::Top) && v.is_not_top())
+		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !c.value.CAScs(&mut value, BottomAndTop::Top) && value.is_not_top())
 		{
-			return v;
+			return value;
 		}
 		
 		let mut e = c.enq.get();
@@ -1124,7 +1109,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn dequeue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, id: &mut isize) -> *mut void
+	fn dequeue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
 		let i = self.Di.FAAcs(1);
 		let c = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
@@ -1146,7 +1131,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn dequeue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, id: isize) -> *mut void
+	fn dequeue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, id: isize) -> *mut Value
 	{
 		let deq = per_thread_handle.reference().Dr.deref();
 		deq.id.RELEASE(id);
@@ -1168,7 +1153,7 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn dequeue_help(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>, ph: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn dequeue_help(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, ph: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
 		let deq = ph.reference().Dr.deref();
 		let mut idx = deq.idx.ACQUIRE();
@@ -1250,10 +1235,10 @@ impl WaitFreeQueueInner
 	}
 	
 	#[inline(always)]
-	fn clean_up_garbage_after_dequeue(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn clean_up_garbage_after_dequeue(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
 		#[inline(always)]
-		fn check(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<Node>, old: *mut Node) -> NonNull<Node>
+		fn check<Value>(p_hzd_node_id: &volatile<usize>, mut cur: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
 			let hzd_node_id: usize = p_hzd_node_id.ACQUIRE();
 			
@@ -1262,7 +1247,7 @@ impl WaitFreeQueueInner
 				let mut tmp = old.to_non_null();
 				while (tmp.id() as usize) < hzd_node_id
 				{
-					tmp = tmp.next_non_null();
+					tmp = tmp.reference().next.get().to_non_null();
 				}
 				cur = tmp;
 			}
@@ -1271,7 +1256,7 @@ impl WaitFreeQueueInner
 		}
 		
 		#[inline(always)]
-		fn update(pPn: &volatile<NonNull<Node>>, mut cur: NonNull<Node>, p_hzd_node_id: &volatile<usize>, old: *mut Node) -> NonNull<Node>
+		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut cur: NonNull<Node<Value>>, p_hzd_node_id: &volatile<usize>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
 			let mut ptr = pPn.ACQUIRE();
 			
@@ -1315,10 +1300,10 @@ impl WaitFreeQueueInner
 		let mut old = self.Hp.get();
 		let mut ph = per_thread_handle;
 		
-		// Was dimensioned by q.reference().nprocs, but variable stack arrays aren't supported by Rust.
-		// handle_t *phs[q->nprocs];  ie let mut phs: [*mut handle_t; q.reference().nprocs]
+		// Was dimensioned by q.reference().number_of_hyper_threads, but variable stack arrays aren't supported by Rust.
+		// handle_t *phs[q->number_of_hyper_threads];  ie let mut phs: [*mut handle_t; q.reference().number_of_hyper_threads]
 		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
-		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads] = unsafe { uninitialized() };
+		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads] = unsafe { uninitialized() };
 		let mut i: isize = 0;
 		do_while!
 		{
@@ -1388,46 +1373,46 @@ impl NumberOfHyperThreads
 	}
 }
 
-struct WaitFreeQueuePerThreadHandle
+struct WaitFreeQueuePerThreadHandle<Value>
 {
 	// Pointer to the next thread handle; a singularly linked list.
 	// Can pointer to self if the first item in the singularly linked list.
-	next: ExtendedNonNullAtomicPointer<WaitFreeQueuePerThreadHandle>,
+	next: ExtendedNonNullAtomicPointer<WaitFreeQueuePerThreadHandle<Value>>,
 	
 	// Hazard pointer.
 	hzd_node_id: volatile<usize>,
 	
 	// Pointer to the node for enqueue.
-	Ep: volatile<NonNull<Node>>,
+	Ep: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.Ep.id, assigned to self.hzd_node_id; a kind of cache of the original value of id.
 	enq_node_id: usize,
 	
 	// Pointer to the node for dequeue.
-	Dp: volatile<NonNull<Node>>,
+	Dp: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.Dp.id, assigned to hzd_node_id; a kind of cache of the original value of id.
 	deq_node_id: usize,
 	
 	// Enqueue request.
-	Er: CacheAligned<Enqueuer>,
+	Er: CacheAligned<Enqueuer<Value>>,
 	
 	// Dequeue request.
 	Dr: CacheAligned<Dequeuer>,
 	
 	// Handle of the next enqueuer to help.
-	Eh: CacheAligned<NonNull<WaitFreeQueuePerThreadHandle>>,
+	Eh: CacheAligned<NonNull<WaitFreeQueuePerThreadHandle<Value>>>,
 	
 	Ei: isize,
 	
 	// Handle of the next dequeuer to help.
-	Dh: NonNull<WaitFreeQueuePerThreadHandle>,
+	Dh: NonNull<WaitFreeQueuePerThreadHandle<Value>>,
 	
 	// Pointer to a spare node to use, to speedup adding a new node.
-	spare: CacheAligned<*mut Node>,
+	spare: CacheAligned<*mut Node<Value>>,
 }
 
-impl WaitFreeQueuePerThreadHandle
+impl<Value> WaitFreeQueuePerThreadHandle<Value>
 {
-	pub(crate) fn thread_init(q: NonNull<WaitFreeQueueInner>) -> NonNull<Self>
+	pub(crate) fn thread_init(q: NonNull<WaitFreeQueueInner<Value>>) -> NonNull<Self>
 	{
 		let th = page_size_align_malloc();
 		Self::queue_register(q, th);
@@ -1436,7 +1421,7 @@ impl WaitFreeQueuePerThreadHandle
 	
 	/// Called once per thread from `thread_init`.
 	#[inline(always)]
-	fn queue_register(q: NonNull<WaitFreeQueueInner>, mut th: NonNull<WaitFreeQueuePerThreadHandle>)
+	fn queue_register(q: NonNull<WaitFreeQueueInner<Value>>, mut th: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
 		let q = q.reference();
 		let th = th.mutable_reference();
