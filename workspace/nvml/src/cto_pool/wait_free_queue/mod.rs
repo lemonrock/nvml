@@ -855,7 +855,8 @@ struct WaitFreeQueueInner<Value>
 	
 	// Number of processors.
 	number_of_hyper_threads: NumberOfHyperThreads,
-
+	
+	// A singularly-linked list of per-thread handles, atomically updated.
 	tail: volatile<*mut WaitFreeQueuePerThreadHandle<Value>>,
 }
 
@@ -883,18 +884,18 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value)
+	pub(crate) fn enqueue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value)
 	{
 		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().enq_node_id);
 		
 		let mut id = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
-		while !self.enqueue_fast_path(per_thread_handle, value, &mut id) && remaining_patience_for_fast_path.post_decrement() > 0
+		while !self.enqueue_fast_path(per_thread_handle, value_to_enqueue, &mut id) && remaining_patience_for_fast_path.post_decrement() > 0
 		{
 		}
 		if remaining_patience_for_fast_path < 0
 		{
-			self.enqueue_slow_path(per_thread_handle, value, id)
+			self.enqueue_slow_path(per_thread_handle, value_to_enqueue, id)
 		}
 		
 		per_thread_handle.mutable_reference().enq_node_id = per_thread_handle.reference().Ep.get().reference().id.get() as usize;
@@ -945,14 +946,14 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value, id: &mut isize) -> bool
+	fn enqueue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value, id: &mut isize) -> bool
 	{
 		let i = self.Ei.FAAcs(1);
 		
-		let c = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
+		let cell = Node::find_cell(&per_thread_handle.reference().Ep, i, per_thread_handle);
 		
 		let mut compare_to_value = BottomAndTop::Bottom;
-		if c.value.CAS(&mut compare_to_value, value)
+		if cell.value.CAS(&mut compare_to_value, value_to_enqueue)
 		{
 			true
 		}
@@ -964,82 +965,82 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value: *mut Value, mut id: isize)
+	fn enqueue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, value_to_enqueue: *mut Value, mut id: isize)
 	{
-		let enq: &Enqueuer<Value> = &per_thread_handle.reference().Er;
-		enq.value.set(value);
-		enq.id.RELEASE(id);
+		let enqueuer: &Enqueuer<Value> = &per_thread_handle.reference().Er;
+		enqueuer.value.set(value_to_enqueue);
+		enqueuer.id.RELEASE(id);
 
 		let tail = &per_thread_handle.reference().Ep;
 		let mut i;
-		let mut c;
+		let mut cell;
 		
 		'do_while: while
 		{
 			i = self.Ei.FAA(1);
-			c = Node::find_cell(tail, i, per_thread_handle);
+			cell = Node::find_cell(tail, i, per_thread_handle);
 			let mut ce = BottomAndTop::Bottom;
 			
-			if c.enq.CAScs(&mut ce, enq.as_ptr()) && c.value.get().is_not_top()
+			if cell.enq.CAScs(&mut ce, enqueuer.as_ptr()) && cell.value.get().is_not_top()
 			{
-				enq.id.CAS(&mut id, -i);
+				enqueuer.id.CAS(&mut id, -i);
 				break 'do_while;
 			}
-			enq.id.get() > 0
+			enqueuer.id.get() > 0
 		}
 		{
 		}
 		
-		id = -enq.id.get();
-		c = Node::find_cell(&per_thread_handle.reference().Ep, id, per_thread_handle);
+		id = -enqueuer.id.get();
+		cell = Node::find_cell(&per_thread_handle.reference().Ep, id, per_thread_handle);
 		if id > i
 		{
-			let mut Ei: isize = self.Ei.get();
+			let mut Ei = self.Ei.get();
 			while Ei <= id && !self.Ei.CAS(&mut Ei, id + 1)
 			{
 			}
 		}
-		c.value.set(value);
+		cell.value.set(value_to_enqueue);
 	}
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn enqueue_help(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, c: &Cell<Value>, i: isize) -> *mut Value
+	fn enqueue_help(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, cell: &Cell<Value>, i: isize) -> *mut Value
 	{
 		#[inline(always)]
-		fn spin<Value>(p: &volatile<*mut Value>) -> *mut Value
+		fn spin<Value>(value_holder: &volatile<*mut Value>) -> *mut Value
 		{
 			const MaximumSpinPatience: usize = 100;
 			
 			let mut patience = MaximumSpinPatience;
-			let mut v = p.get();
+			let mut value = value_holder.get();
 			
-			while v.is_not_null() && patience.post_decrement() > 0
+			while value.is_not_null() && patience.post_decrement() > 0
 			{
-				v = p.get();
+				value = value_holder.get();
 				spin_loop_hint();
 			}
 			
-			v
+			value
 		}
 		
-		let mut value = spin(&c.value);
+		let mut value = spin(&cell.value);
 		
-		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !c.value.CAScs(&mut value, BottomAndTop::Top) && value.is_not_top())
+		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.value.CAScs(&mut value, BottomAndTop::Top) && value.is_not_top())
 		{
 			return value;
 		}
 		
-		let mut e = c.enq.get();
+		let mut enqueuer = cell.enq.get();
 		
-		if e.is_bottom()
+		if enqueuer.is_bottom()
 		{
 			let mut ph = per_thread_handle.reference().Eh.get();
 			let (mut pe, mut id) =
-				{
-					let pe = ph.reference().Er.deref();
-					(pe.as_ptr(), pe.id.get())
-				};
+			{
+				let pe = ph.reference().Er.deref();
+				(pe.as_ptr(), pe.id.get())
+			};
 			
 			if per_thread_handle.reference().Ei != 0 && per_thread_handle.reference().Ei != id
 			{
@@ -1056,7 +1057,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				id = id2;
 			}
 			
-			if id > 0 && id <= i && !c.enq.CAS(&mut e, pe)
+			if id > 0 && id <= i && !cell.enq.CAS(&mut enqueuer, pe)
 			{
 				per_thread_handle.mutable_reference().Ei = id
 			}
@@ -1065,13 +1066,13 @@ impl<Value> WaitFreeQueueInner<Value>
 				per_thread_handle.mutable_reference().Eh.set(ph.reference().next.get())
 			}
 			
-			if e.is_bottom() && c.enq.CAS(&mut e, BottomAndTop::Top)
+			if enqueuer.is_bottom() && cell.enq.CAS(&mut enqueuer, BottomAndTop::Top)
 			{
-				e = BottomAndTop::Top
+				enqueuer = BottomAndTop::Top
 			}
 		}
 		
-		if e.is_top()
+		if enqueuer.is_top()
 		{
 			return if self.Ei.get() <= i
 			{
@@ -1083,37 +1084,37 @@ impl<Value> WaitFreeQueueInner<Value>
 			}
 		}
 		
-		let mut ei = e.to_non_null().reference().id.ACQUIRE();
-		let ev = e.to_non_null().reference().value.ACQUIRE();
+		let mut ei = enqueuer.to_non_null().reference().id.ACQUIRE();
+		let ev = enqueuer.to_non_null().reference().value.ACQUIRE();
 		
 		if ei > i
 		{
-			if c.value.get().is_top() && self.Ei.get() <= i
+			if cell.value.get().is_top() && self.Ei.get() <= i
 			{
 				return BottomAndTop::Bottom
 			}
 		}
 		else
 		{
-			if (ei > 0 && e.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && c.value.get().is_top())
+			if (ei > 0 && enqueuer.to_non_null().reference().id.CAS(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
 			{
 				let mut Ei = self.Ei.get();
 				while Ei <= i && !self.Ei.CAS(&mut Ei, i + 1)
 				{
 				}
-				c.value.set(ev);
+				cell.value.set(ev);
 			}
 		}
 		
-		c.value.get()
+		cell.value.get()
 	}
 	
 	#[inline(always)]
 	fn dequeue_fast_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
 		let i = self.Di.FAAcs(1);
-		let c = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
-		let dequeued_value = self.enqueue_help(per_thread_handle, c, i);
+		let cell = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
+		let dequeued_value = self.enqueue_help(per_thread_handle, cell, i);
 		let mut cd = BottomAndTop::Bottom;
 		
 		if dequeued_value.is_bottom()
@@ -1121,7 +1122,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return BottomAndTop::Bottom
 		}
 		
-		if dequeued_value.is_not_top() && c.deq.CAS(&mut cd, BottomAndTop::Top)
+		if dequeued_value.is_not_top() && cell.deq.CAS(&mut cd, BottomAndTop::Top)
 		{
 			return dequeued_value
 		}
@@ -1133,14 +1134,14 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_slow_path(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, id: isize) -> *mut Value
 	{
-		let deq = per_thread_handle.reference().Dr.deref();
-		deq.id.RELEASE(id);
-		deq.idx.RELEASE(id);
+		let dequeuer = per_thread_handle.reference().Dr.deref();
+		dequeuer.id.RELEASE(id);
+		dequeuer.idx.RELEASE(id);
 		
 		self.dequeue_help(per_thread_handle, per_thread_handle);
-		let i = -deq.idx.get();
-		let c = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
-		let dequeued_value = c.value.get();
+		let i = -dequeuer.idx.get();
+		let cell = Node::find_cell(&per_thread_handle.reference().Dp, i, per_thread_handle);
+		let dequeued_value = cell.value.get();
 		
 		if dequeued_value.is_top()
 		{
@@ -1155,9 +1156,9 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_help(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>, ph: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
-		let deq = ph.reference().Dr.deref();
-		let mut idx = deq.idx.ACQUIRE();
-		let id = deq.id.get();
+		let dequeuer = ph.reference().Dr.deref();
+		let mut idx = dequeuer.idx.ACQUIRE();
+		let id = dequeuer.id.get();
 		
 		if idx < id
 		{
@@ -1167,7 +1168,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		let Dp = &ph.reference().Dp;
 		per_thread_handle.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
 		FENCE();
-		idx = deq.idx.get();
+		idx = dequeuer.idx.get();
 		
 		let mut i = id + 1;
 		let mut old = id;
@@ -1179,21 +1180,21 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			while idx == old && new == 0
 			{
-				let c = Node::find_cell(h, i, per_thread_handle);
+				let cell = Node::find_cell(h, i, per_thread_handle);
 				
 				let mut Di = self.Di.get();
 				while Di <= i && !self.Di.CAS(&mut Di, i + 1)
 				{
 				}
 				
-				let v = self.enqueue_help(per_thread_handle, c, i);
-				if v.is_bottom() || (v.is_not_top() && c.deq.get().is_bottom())
+				let value = self.enqueue_help(per_thread_handle, cell, i);
+				if value.is_bottom() || (value.is_not_top() && cell.deq.get().is_bottom())
 				{
 					new = i;
 				}
 				else
 				{
-					idx = deq.idx.ACQUIRE();
+					idx = dequeuer.idx.ACQUIRE();
 				}
 				
 				
@@ -1202,7 +1203,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if new != 0
 			{
-				if deq.idx.CASra(&mut idx, new)
+				if dequeuer.idx.CASra(&mut idx, new)
 				{
 					idx = new;
 				}
@@ -1212,17 +1213,17 @@ impl<Value> WaitFreeQueueInner<Value>
 				}
 			}
 			
-			if idx < 0 || deq.id.get() != id
+			if idx < 0 || dequeuer.id.get() != id
 			{
 				break;
 			}
 			
 			let c = Node::find_cell(Dp, idx, per_thread_handle);
 			let mut cd = BottomAndTop::Bottom;
-			if c.value.get().is_top() || c.deq.CAS(&mut cd, deq.as_ptr()) || cd == deq.as_ptr()
+			if c.value.get().is_top() || c.deq.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
 				let negative_idx = -idx;
-				deq.idx.CAS(&mut idx, negative_idx);
+				dequeuer.idx.CAS(&mut idx, negative_idx);
 				break
 			}
 			
