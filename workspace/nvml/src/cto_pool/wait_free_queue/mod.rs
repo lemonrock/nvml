@@ -771,12 +771,13 @@ impl Node
 	
 	const SignedNumberOfCells: isize = Self::NumberOfCells as isize;
 	
+	// Result is never null
 	#[inline(always)]
-	fn new_node() -> NonNull<Self>
+	fn new_node() -> *mut Self
 	{
 		let n = page_size_align_malloc();
 		unsafe { n.as_ptr().write_bytes(0, 1) }
-		n
+		n.as_ptr()
 	}
 	
 	fn find_cell<'node>(ptr: &'node volatile<NonNull<Node>>, i: isize, mut th: NonNull<WaitFreeQueuePerThreadHandle>) -> &'node Cell
@@ -786,7 +787,7 @@ impl Node
 		let mut j = curr.reference().id.get();
 		while j < i / Self::SignedNumberOfCells
 		{
-			let mut next: *mut Node = curr.reference().next.get();
+			let mut next = curr.reference().next.get();
 			
 			if next.is_null()
 			{
@@ -794,7 +795,7 @@ impl Node
 				if temp.is_null()
 				{
 					let new_node = Self::new_node();
-					temp = new_node.as_ptr();
+					temp = new_node;
 					th.mutable_reference().spare.set(temp);
 				}
 				
@@ -886,7 +887,7 @@ impl WaitFreeQueueInner
 			let this: &mut Self = this.mutable_reference();
 			
 			this.Hi.set(0);
-			this.Hp.set(Node::new_node().as_ptr());
+			this.Hp.set(Node::new_node());
 			this.Ei.set(1);
 			this.Di.set(1);
 			write(&mut this.number_of_hyper_threads, number_of_hyper_threads);
@@ -952,7 +953,7 @@ impl WaitFreeQueueInner
 		if per_thread_handle.reference().spare.get().is_null()
 		{
 			self.clean_up_garbage_after_dequeue(per_thread_handle);
-			per_thread_handle.mutable_reference().spare.set(Node::new_node().as_ptr());
+			per_thread_handle.mutable_reference().spare.set(Node::new_node());
 		}
 		
 		dequeued_value
@@ -1460,7 +1461,7 @@ impl WaitFreeQueuePerThreadHandle
 			
 			write(&mut th.Ei, 0);
 			
-			write(&mut th.spare, CacheAligned::new(Node::new_node().as_ptr()));
+			write_volatile(&mut th.spare, CacheAligned::new(Node::new_node()));
 			
 			let mut tail = q.tail.get();
 			
