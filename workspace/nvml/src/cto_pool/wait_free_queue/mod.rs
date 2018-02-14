@@ -887,7 +887,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().enq_node_id);
+		per_thread_handle.reference().hazard_node_pointer_identifier.set(per_thread_handle.reference().enqueuer_node_pointer_identifier);
 		
 		let mut id = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
@@ -899,14 +899,14 @@ impl<Value> WaitFreeQueueInner<Value>
 			self.enqueue_slow_path(per_thread_handle, value_to_enqueue, id)
 		}
 		
-		per_thread_handle.mutable_reference().enq_node_id = per_thread_handle.reference().Ep.get().reference().id.get() as usize;
-		per_thread_handle.reference().hzd_node_id.RELEASE(!0)
+		per_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = NodePointerIdentifier::from_isize_identifier(per_thread_handle.reference().Ep.get().reference().id.get());
+		per_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null)
 	}
 	
 	#[inline(always)]
 	pub(crate) fn dequeue(&self, mut per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>) -> *mut Value
 	{
-		per_thread_handle.reference().hzd_node_id.set(per_thread_handle.reference().deq_node_id);
+		per_thread_handle.reference().hazard_node_pointer_identifier.set(per_thread_handle.reference().dequeuer_node_pointer_identifier);
 		
 		let mut dequeued_value;
 		let mut id = unsafe { uninitialized() };
@@ -934,8 +934,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			per_thread_handle.mutable_reference().Dh = per_thread_handle.reference().Dh.reference().next.get();
 		}
 		
-		per_thread_handle.mutable_reference().deq_node_id = per_thread_handle.reference().Dp.get().reference().id.get() as usize;
-		per_thread_handle.reference().hzd_node_id.RELEASE(!0);
+		per_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = NodePointerIdentifier::from_isize_identifier(per_thread_handle.reference().Dp.get().reference().id.get());
+		per_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
 		
 		if per_thread_handle.reference().spare.get().is_null()
 		{
@@ -1174,10 +1174,10 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		// ie, Read the value, then construct a new_id volatile reference used for compatibility in find_cell.
+		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
 		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
 		let Dp = volatile::new(ph.reference().Dp.get());
-		per_thread_handle.reference().hzd_node_id.set(ph.reference().hzd_node_id.get());
+		per_thread_handle.reference().hazard_node_pointer_identifier.set(ph.reference().hazard_node_pointer_identifier.get());
 		FENCE();
 		idx = dequeuer.idx.get();
 		
@@ -1248,17 +1248,17 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn clean_up_garbage_after_dequeue(&self, per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
+	fn clean_up_garbage_after_dequeue(&self, our_per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
 	{
 		#[inline(always)]
-		fn check<Value>(p_hzd_node_id: &volatile<usize>, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+		fn check<Value>(hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
-			let hzd_node_id: usize = p_hzd_node_id.ACQUIRE();
+			let hazard_node_pointer_identifier = hazard_node_pointer_identifier.ACQUIRE();
 			
-			if hzd_node_id < (current.id() as usize)
+			if hazard_node_pointer_identifier < NodePointerIdentifier::from_isize_identifier(current.id())
 			{
 				let mut node = old.to_non_null();
-				while (node.id() as usize) < hzd_node_id
+				while NodePointerIdentifier::from_isize_identifier(node.id()) < hazard_node_pointer_identifier
 				{
 					node = node.reference().next.get().to_non_null();
 				}
@@ -1269,7 +1269,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		#[inline(always)]
-		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut current: NonNull<Node<Value>>, p_hzd_node_id: &volatile<usize>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut current: NonNull<Node<Value>>, hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
 			let mut node = pPn.ACQUIRE();
 			
@@ -1283,64 +1283,93 @@ impl<Value> WaitFreeQueueInner<Value>
 					}
 				}
 				
-				current = check(p_hzd_node_id, current, old);
+				current = check(hazard_node_pointer_identifier, current, old);
 			}
 			
 			current
 		}
 		
-		const NoOid: isize = -1;
+		const NoId: isize = -1;
 		
-		let mut oid = self.Hi.ACQUIRE();
+		let mut old_id = self.Hi.ACQUIRE();
 		
-		let mut new = per_thread_handle.reference().Dp.get();
+		let mut new = our_per_thread_handle.reference().Dp.get();
 		
-		if oid == NoOid
+		if old_id == NoId
 		{
 			return;
 		}
 		
-		if new.id() - oid < self.number_of_hyper_threads.maximum_garbage()
+		if new.id() - old_id < self.number_of_hyper_threads.maximum_garbage()
 		{
 			return;
 		}
 		
-		if !self.Hi.CASa(&mut oid, NoOid)
+		if !self.Hi.CASa(&mut old_id, NoId)
 		{
 			return;
 		}
 		
 		let mut old = self.Hp.get();
-		let mut ph = per_thread_handle;
+		let mut our_or_another_threads_per_thread_handle = our_per_thread_handle;
 		
 		// Was dimensioned by q.reference().number_of_hyper_threads, but variable stack arrays aren't supported by Rust.
 		// handle_t *phs[q->number_of_hyper_threads];  ie let mut phs: [*mut handle_t; q.reference().number_of_hyper_threads]
 		// We could use a Vec here but a heap allocation seems overkill, unless we keep it with the thread handle.
-		let mut phs: [NonNull<WaitFreeQueuePerThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads] = unsafe { uninitialized() };
-		let mut i: isize = 0;
+		struct AllWaitFreeQueuePerThreadHandles<Value>([NonNull<WaitFreeQueuePerThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads]);
+		
+		impl<Value> AllWaitFreeQueuePerThreadHandles<Value>
+		{
+			#[inline(always)]
+			fn new() -> Self
+			{
+				unsafe { uninitialized() }
+			}
+			
+			#[inline(always)]
+			fn set(&mut self, index: isize, another_wait_free_queue_per_thread_handle: NonNull<WaitFreeQueuePerThreadHandle<Value>>)
+			{
+				*(unsafe { self.0.get_unchecked_mut(index as usize) }) = another_wait_free_queue_per_thread_handle;
+			}
+			
+			#[inline(always)]
+			fn get(&mut self, index: isize) -> NonNull<WaitFreeQueuePerThreadHandle<Value>>
+			{
+				*unsafe { self.0.get_unchecked(index as usize) }
+			}
+		}
+		
+		let mut phs = AllWaitFreeQueuePerThreadHandles::new();
+		
+		let mut index: isize = 0;
 		do_while!
 		{
 			do
 			{
-				new = check(&ph.reference().hzd_node_id, new, old);
-				new = update(&ph.reference().Ep, new, &ph.reference().hzd_node_id, old);
-				new = update(&ph.reference().Dp, new, &ph.reference().hzd_node_id, old);
-				*(unsafe { phs.get_unchecked_mut(i.post_increment() as usize) }) = ph;
-				ph = ph.reference().next.get();
+				{
+					let reference = our_or_another_threads_per_thread_handle.reference();
+					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
+				
+					new = check(hazard_node_pointer_identifier, new, old);
+					new = update(&reference.Ep, new, hazard_node_pointer_identifier, old);
+					new = update(&reference.Dp, new, hazard_node_pointer_identifier, old);
+					phs.set(index.post_increment(), our_or_another_threads_per_thread_handle);
+				}
+				our_or_another_threads_per_thread_handle = our_or_another_threads_per_thread_handle.reference().next.get();
 			}
-			while new.id() > oid && ph.as_ptr() != per_thread_handle.as_ptr()
+			while new.id() > old_id && our_or_another_threads_per_thread_handle.as_ptr() != our_per_thread_handle.as_ptr()
 		}
 		
-		while new.id() > oid && i.pre_decrement() >= 0
+		while new.id() > old_id && index.pre_decrement() >= 0
 		{
-			new = check(&(unsafe { phs.get_unchecked(i as usize) }.reference().hzd_node_id), new, old);
+			new = check(&phs.get(index).reference().hazard_node_pointer_identifier, new, old);
 		}
 		
 		let nid = new.reference().id.get() as isize;
 		
-		if nid <= oid
+		if nid <= old_id
 		{
-			self.Hi.RELEASE(oid);
+			self.Hi.RELEASE(old_id);
 		}
 		else
 		{
@@ -1350,9 +1379,9 @@ impl<Value> WaitFreeQueueInner<Value>
 			while old != new.as_ptr()
 			{
 				let old_non_null = old.to_non_null();
-				let tmp = old_non_null.reference().next.get();
+				let node = old_non_null.reference().next.get();
 				free(old_non_null);
-				old = tmp;
+				old = node;
 			}
 		}
 	}
@@ -1387,11 +1416,20 @@ impl NumberOfHyperThreads
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-struct NodeHazardPointerIdentifier(usize);
+struct NodePointerIdentifier(usize);
 
-impl NodeHazardPointerIdentifier
+impl NodePointerIdentifier
 {
-	const Null: NodeHazardPointerIdentifier = NodeHazardPointerIdentifier(!0);
+	const Null: NodePointerIdentifier = NodePointerIdentifier(!0);
+}
+
+impl NodePointerIdentifier
+{
+	#[inline(always)]
+	fn from_isize_identifier(identifier: isize) -> Self
+	{
+		NodePointerIdentifier(identifier as usize)
+	}
 }
 
 struct WaitFreeQueuePerThreadHandle<Value>
@@ -1401,17 +1439,17 @@ struct WaitFreeQueuePerThreadHandle<Value>
 	next: ExtendedNonNullAtomicPointer<WaitFreeQueuePerThreadHandle<Value>>,
 	
 	// Hazard pointer.
-	hzd_node_id: volatile<usize>,
+	hazard_node_pointer_identifier: volatile<NodePointerIdentifier>,
 	
 	// Pointer to the node for enqueue.
 	Ep: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.Ep.id, assigned to self.hzd_node_id; a kind of cache of the original value of id.
-	enq_node_id: usize,
+	enqueuer_node_pointer_identifier: NodePointerIdentifier,
 	
 	// Pointer to the node for dequeue.
 	Dp: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.Dp.id, assigned to hzd_node_id; a kind of cache of the original value of id.
-	deq_node_id: usize,
+	dequeuer_node_pointer_identifier: NodePointerIdentifier,
 	
 	// Enqueue request.
 	Er: CacheAligned<Enqueuer<Value>>,
@@ -1451,15 +1489,15 @@ impl<Value> WaitFreeQueuePerThreadHandle<Value>
 		{
 			// Seems to be unnecessary as this value is always overwritten.
 			// th.next.set(null_mut());
-			th.hzd_node_id.set(!0);
+			th.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
 			th.Ep.set(q.Hp.get().to_non_null());
 			// enq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
-			write(&mut th.enq_node_id, th.Ep.get().id() as usize);
+			write(&mut th.enqueuer_node_pointer_identifier, NodePointerIdentifier::from_isize_identifier(th.Ep.get().id()));
 			
 			th.Dp.set(q.Hp.get().to_non_null());
 			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
-			write(&mut th.deq_node_id, th.Dp.get().id() as usize);
+			write(&mut th.dequeuer_node_pointer_identifier, NodePointerIdentifier::from_isize_identifier(th.Dp.get().id()));
 			
 			write_volatile(&mut th.Er, CacheAligned::default());
 			
