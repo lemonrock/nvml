@@ -37,12 +37,6 @@ use ::std::sync::atomic::spin_loop_hint;
 
 
 #[inline(always)]
-fn memset<T>(pointer: NonNull<T>, byte: u8, copies: usize)
-{
-	unimplemented!()
-}
-
-#[inline(always)]
 fn free<T>(pointer: NonNull<T>)
 {
 	unimplemented!()
@@ -746,7 +740,7 @@ impl Node
 	fn new_node() -> NonNull<Self>
 	{
 		let n = page_size_align_malloc();
-		memset(n, 0, size_of::<Self>());
+		unsafe { n.as_ptr().write_bytes(0, 1) }
 		n
 	}
 	
