@@ -727,7 +727,7 @@ struct Cell<Value>
 {
 	value: volatile<*mut Value>,
 	enqueuer: volatile<*mut Enqueuer<Value>>,
-	deq: volatile<*mut Dequeuer>,
+	dequeuer: volatile<*mut Dequeuer>,
 	_pad: [*mut (); 5],
 }
 
@@ -1122,7 +1122,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return BottomAndTop::Bottom
 		}
 		
-		if dequeued_value.is_not_top() && cell.deq.CAS(&mut cd, BottomAndTop::Top)
+		if dequeued_value.is_not_top() && cell.dequeuer.CAS(&mut cd, BottomAndTop::Top)
 		{
 			return dequeued_value
 		}
@@ -1188,7 +1188,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				}
 				
 				let value = self.enqueue_help(per_thread_handle, cell, i);
-				if value.is_bottom() || (value.is_not_top() && cell.deq.get().is_bottom())
+				if value.is_bottom() || (value.is_not_top() && cell.dequeuer.get().is_bottom())
 				{
 					new = i;
 				}
@@ -1220,7 +1220,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			let c = Node::find_cell(Dp, idx, per_thread_handle);
 			let mut cd = BottomAndTop::Bottom;
-			if c.value.get().is_top() || c.deq.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
+			if c.value.get().is_top() || c.dequeuer.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
 				let negative_idx = -idx;
 				dequeuer.idx.CAS(&mut idx, negative_idx);
