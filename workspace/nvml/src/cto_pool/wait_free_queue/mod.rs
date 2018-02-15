@@ -993,7 +993,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, id)
 		}
 		
-		per_hyper_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = per_hyper_thread_handle.reference().Ep.get().reference().identifier.get().to_node_identifier();
+		per_hyper_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier();
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null)
 	}
 	
@@ -1028,7 +1028,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			per_hyper_thread_handle.mutable_reference().Dh = per_hyper_thread_handle.reference().Dh.reference().next.get();
 		}
 		
-		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = per_hyper_thread_handle.reference().Dp.get().reference().identifier.get().to_node_identifier();
+		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier();
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare.get().is_null()
@@ -1047,7 +1047,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let i = self.Ei.FAAcs(1);
 		
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().Ep, i, per_hyper_thread_handle);
+		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, i, per_hyper_thread_handle);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
@@ -1072,7 +1072,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		enqueuer.value.set(value_to_enqueue);
 		enqueuer.id.RELEASE(id);
 
-		let tail = &per_hyper_thread_handle.reference().Ep;
+		let tail = &per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue;
 		let mut i;
 		let mut cell;
 		
@@ -1093,7 +1093,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		id = -enqueuer.id.get();
-		cell = Node::find_cell(&per_hyper_thread_handle.reference().Ep, id, per_hyper_thread_handle);
+		cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, id, per_hyper_thread_handle);
 		if id > i
 		{
 			let mut Ei = self.Ei.get();
@@ -1216,7 +1216,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
 		let i = self.Di.FAAcs(1);
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().Dp, i, per_hyper_thread_handle);
+		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, i, per_hyper_thread_handle);
 		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, i);
 		
 		if dequeued_value.is_bottom()
@@ -1243,7 +1243,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle);
 		let i = -dequeuer.idx.get();
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().Dp, i, per_hyper_thread_handle);
+		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, i, per_hyper_thread_handle);
 		let dequeued_value = cell.value.get();
 		
 		if dequeued_value.is_top()
@@ -1270,7 +1270,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
 		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
-		let Dp = volatile::new(ph.reference().Dp.get());
+		let Dp = volatile::new(ph.reference().pointer_to_the_node_for_dequeue.get());
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(ph.reference().hazard_node_pointer_identifier.get());
 		FENCE();
 		idx = dequeuer.idx.get();
@@ -1391,7 +1391,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		let mut new = our_per_hyper_thread_handle.reference().Dp.get();
+		let mut new = our_per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get();
 		
 		if old_head_of_queue_node_identifier.there_is_not_yet_enough_garbage_to_collect(new, self.maximum_garbage)
 		{
@@ -1412,7 +1412,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let mut phs = AllWaitFreeQueuePerThreadHandles::new();
 		
-		let mut index: isize = 0;
+		let mut index = 0;
 		do_while!
 		{
 			do
@@ -1422,8 +1422,9 @@ impl<Value> WaitFreeQueueInner<Value>
 					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
 				
 					new = check(hazard_node_pointer_identifier, new, old);
-					new = update(&reference.Ep, new, hazard_node_pointer_identifier, old);
-					new = update(&reference.Dp, new, hazard_node_pointer_identifier, old);
+					new = update(&reference.pointer_to_the_node_for_enqueue, new, hazard_node_pointer_identifier, old);
+					new = update(&reference.pointer_to_the_node_for_dequeue, new, hazard_node_pointer_identifier, old);
+					
 					phs.set(index.post_increment(), our_or_another_threads_per_hyper_thread_handle);
 				}
 				our_or_another_threads_per_hyper_thread_handle = our_or_another_threads_per_hyper_thread_handle.reference().next.get();
@@ -1507,14 +1508,12 @@ struct PerHyperThreadHandle<Value>
 	// Hazard pointer.
 	hazard_node_pointer_identifier: volatile<NodePointerIdentifier>,
 	
-	// Pointer to the node for enqueue.
-	Ep: volatile<NonNull<Node<Value>>>,
-	// Obtained originally from self.Ep.id, assigned to self.hzd_node_id; a kind of cache of the original value of id.
+	pointer_to_the_node_for_enqueue: volatile<NonNull<Node<Value>>>,
+	// Obtained originally from self.pointer_to_the_node_for_enqueue.id, assigned to self.hazard_node_pointer_identifier; a kind of cache of the original value of id.
 	enqueuer_node_pointer_identifier: NodePointerIdentifier,
 	
-	// Pointer to the node for dequeue.
-	Dp: volatile<NonNull<Node<Value>>>,
-	// Obtained originally from self.Dp.id, assigned to hzd_node_id; a kind of cache of the original value of id.
+	pointer_to_the_node_for_dequeue: volatile<NonNull<Node<Value>>>,
+	// Obtained originally from self.pointer_to_the_node_for_dequeue.id, assigned to self.hazard_node_pointer_identifier; a kind of cache of the original value of id.
 	dequeuer_node_pointer_identifier: NodePointerIdentifier,
 	
 	// Enqueue request.
@@ -1553,11 +1552,11 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
-			this.Ep.set(wait_free_queue_inner.Hp.get().to_non_null());
-			write(&mut this.enqueuer_node_pointer_identifier, this.Ep.get().identifier().to_node_identifier());
+			this.pointer_to_the_node_for_enqueue.set(wait_free_queue_inner.Hp.get().to_non_null());
+			write(&mut this.enqueuer_node_pointer_identifier, this.pointer_to_the_node_for_enqueue.get().identifier().to_node_identifier());
 			
-			this.Dp.set(wait_free_queue_inner.Hp.get().to_non_null());
-			write(&mut this.dequeuer_node_pointer_identifier, this.Dp.get().identifier().to_node_identifier());
+			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.Hp.get().to_non_null());
+			write(&mut this.dequeuer_node_pointer_identifier, this.pointer_to_the_node_for_dequeue.get().identifier().to_node_identifier());
 			
 			write_volatile(&mut this.Er, CacheAligned::default());
 			
