@@ -749,9 +749,9 @@ impl<Value> Cells<Value>
 //
 // We could use a Vec here but a heap allocation seems overkill and would impact performance.
 // Even pushing a variable length array onto the end of a PerHyperThreadHandle still uses the heap somewhat and could easily cause cache eviction.
-struct AllWaitFreeQueuePerThreadHandles<Value>([NonNull<PerHyperThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads]);
+struct AllPerHyperThreadHandles<Value>([NonNull<PerHyperThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads]);
 
-impl<Value> AllWaitFreeQueuePerThreadHandles<Value>
+impl<Value> AllPerHyperThreadHandles<Value>
 {
 	#[inline(always)]
 	fn new() -> Self
@@ -1404,13 +1404,12 @@ impl<Value> WaitFreeQueueInner<Value>
 			// Did not grab lock because someone else did - and they'll do the clean up.
 			return;
 		}
-		
-		// Lock if released when `self.head_of_queue_node_identifier.RELEASE()` is called.
+		// Lock is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
 		
 		let old = self.Hp.get();
 		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
 		
-		let mut phs = AllWaitFreeQueuePerThreadHandles::new();
+		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
 		
 		let mut index = 0;
 		do_while!
@@ -1425,7 +1424,7 @@ impl<Value> WaitFreeQueueInner<Value>
 					new = update(&reference.pointer_to_the_node_for_enqueue, new, hazard_node_pointer_identifier, old);
 					new = update(&reference.pointer_to_the_node_for_dequeue, new, hazard_node_pointer_identifier, old);
 					
-					phs.set(index.post_increment(), our_or_another_threads_per_hyper_thread_handle);
+					all_per_hyper_thread_handles.set(index.post_increment(), our_or_another_threads_per_hyper_thread_handle);
 				}
 				our_or_another_threads_per_hyper_thread_handle = our_or_another_threads_per_hyper_thread_handle.reference().next.get();
 			}
@@ -1434,10 +1433,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		while new.identifier() > old_head_of_queue_node_identifier && index.pre_decrement() >= 0
 		{
-			new = check(&phs.get(index).reference().hazard_node_pointer_identifier, new, old);
+			new = check(&all_per_hyper_thread_handles.get(index).reference().hazard_node_pointer_identifier, new, old);
 		}
 		
-		let new_head_of_queue_node_identifier = new.reference().identifier();
+		let new_head_of_queue_node_identifier = new.identifier();
 		
 		if new_head_of_queue_node_identifier <= old_head_of_queue_node_identifier
 		{
