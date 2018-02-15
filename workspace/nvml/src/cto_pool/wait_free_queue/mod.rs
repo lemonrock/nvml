@@ -1444,9 +1444,9 @@ impl<Value> WaitFreeQueueInner<Value>
 		// Lock is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
 		
 		let old = self.Hp.get();
-		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
 		
 		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
+		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
 		do_while!
 		{
 			do
