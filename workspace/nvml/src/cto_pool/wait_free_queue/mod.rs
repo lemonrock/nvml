@@ -802,6 +802,33 @@ impl<Value> AllPerHyperThreadHandles<Value>
 	}
 	
 	#[inline(always)]
+	fn check_and_update_all_hyper_thread_handle_hazard_pointers(our_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, mut new: NonNull<Node<Value>>, old: *mut Node<Value>, old_head_of_queue_node_identifier: NodeIdentifier) -> NonNull<Node<Value>>
+	{
+		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
+		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
+		do_while!
+		{
+			do
+			{
+				{
+					let reference = our_or_another_threads_per_hyper_thread_handle.reference();
+					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
+				
+					new = hazard_node_pointer_identifier.check(new, old);
+					new = reference.pointer_to_the_node_for_enqueue.update(new, hazard_node_pointer_identifier, old);
+					new = reference.pointer_to_the_node_for_dequeue.update(new, hazard_node_pointer_identifier, old);
+					
+					all_per_hyper_thread_handles.set(our_or_another_threads_per_hyper_thread_handle);
+				}
+				our_or_another_threads_per_hyper_thread_handle = our_or_another_threads_per_hyper_thread_handle.reference().next.get();
+			}
+			while new.identifier() > old_head_of_queue_node_identifier && our_or_another_threads_per_hyper_thread_handle.as_ptr() != our_per_hyper_thread_handle.as_ptr()
+		}
+		all_per_hyper_thread_handles.check(&mut new, old, old_head_of_queue_node_identifier);
+		new
+	}
+	
+	#[inline(always)]
 	fn set(&mut self, another_wait_free_queue_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
 		let index = self.index.post_increment();
@@ -1417,7 +1444,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		let mut new = our_per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get();
+		let new = our_per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get();
 		
 		if old_head_of_queue_node_identifier.there_is_not_yet_enough_garbage_to_collect(new, self.maximum_garbage)
 		{
@@ -1434,27 +1461,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let old = self.pointer_to_the_head_node.get();
 		
-		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
-		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
-		do_while!
-		{
-			do
-			{
-				{
-					let reference = our_or_another_threads_per_hyper_thread_handle.reference();
-					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
-				
-					new = hazard_node_pointer_identifier.check(new, old);
-					new = reference.pointer_to_the_node_for_enqueue.update(new, hazard_node_pointer_identifier, old);
-					new = reference.pointer_to_the_node_for_dequeue.update(new, hazard_node_pointer_identifier, old);
-					
-					all_per_hyper_thread_handles.set(our_or_another_threads_per_hyper_thread_handle);
-				}
-				our_or_another_threads_per_hyper_thread_handle = our_or_another_threads_per_hyper_thread_handle.reference().next.get();
-			}
-			while new.identifier() > old_head_of_queue_node_identifier && our_or_another_threads_per_hyper_thread_handle.as_ptr() != our_per_hyper_thread_handle.as_ptr()
-		}
-		all_per_hyper_thread_handles.check(&mut new, old, old_head_of_queue_node_identifier);
+		let new = AllPerHyperThreadHandles::check_and_update_all_hyper_thread_handle_hazard_pointers(our_per_hyper_thread_handle, new, old, old_head_of_queue_node_identifier);
 		
 		let new_head_of_queue_node_identifier = new.identifier();
 		
