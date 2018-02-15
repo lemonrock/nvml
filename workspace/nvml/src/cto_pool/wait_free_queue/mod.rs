@@ -484,6 +484,16 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 #[derive(Debug)]
 pub(crate) struct volatile<T: Copy>(UnsafeCell<T>);
 
+impl volatile<NodePointerIdentifier>
+{
+	#[inline(always)]
+	fn check<Value>(&self, current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+	{
+		let hazard_node_pointer_identifier = self.ACQUIRE();
+		hazard_node_pointer_identifier.check(current, old)
+	}
+}
+
 impl<T: Copy> volatile<T>
 {
 	#[inline(always)]
@@ -749,26 +759,53 @@ impl<Value> Cells<Value>
 //
 // We could use a Vec here but a heap allocation seems overkill and would impact performance.
 // Even pushing a variable length array onto the end of a PerHyperThreadHandle still uses the heap somewhat and could easily cause cache eviction.
-struct AllPerHyperThreadHandles<Value>([NonNull<PerHyperThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads]);
+struct AllPerHyperThreadHandles<Value>
+{
+	per_thread_handles: [NonNull<PerHyperThreadHandle<Value>>; NumberOfHyperThreads::InclusiveMaximumNumberOfHyperThreads],
+	index: isize,
+}
 
 impl<Value> AllPerHyperThreadHandles<Value>
 {
 	#[inline(always)]
 	fn new() -> Self
 	{
-		unsafe { uninitialized() }
+		Self
+		{
+			per_thread_handles: unsafe { uninitialized() },
+			index: 0
+		}
 	}
 	
 	#[inline(always)]
-	fn set(&mut self, index: isize, another_wait_free_queue_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
+	fn set(&mut self, another_wait_free_queue_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
-		*(unsafe { self.0.get_unchecked_mut(index as usize) }) = another_wait_free_queue_per_hyper_thread_handle;
+		let index = self.index.post_increment();
+		
+		*(unsafe { self.per_thread_handles.get_unchecked_mut(index as usize) }) = another_wait_free_queue_per_hyper_thread_handle;
 	}
 	
 	#[inline(always)]
-	fn get(&mut self, index: isize) -> NonNull<PerHyperThreadHandle<Value>>
+	fn check(&mut self, new: &mut NonNull<Node<Value>>, old: *mut Node<Value>, old_head_of_queue_node_identifier: NodeIdentifier)
 	{
-		*unsafe { self.0.get_unchecked(index as usize) }
+		while new.identifier() > old_head_of_queue_node_identifier && self.pre_decrement_index_is_not_negative()
+		{
+			*new = self.get_hazard_pointer_identifier().check(*new, old);
+		}
+	}
+	
+	#[inline(always)]
+	fn pre_decrement_index_is_not_negative(&mut self) -> bool
+	{
+		self.index.pre_decrement() >= 0
+	}
+	
+	#[inline(always)]
+	fn get_hazard_pointer_identifier(&mut self) -> &volatile<NodePointerIdentifier>
+	{
+		let element = *unsafe { self.per_thread_handles.get_unchecked(self.index as usize) };
+		let element = unsafe { &* element.as_ptr() };
+		&element.hazard_node_pointer_identifier
 	}
 }
 
@@ -1377,7 +1414,7 @@ impl<Value> WaitFreeQueueInner<Value>
 					}
 				}
 				
-				current = check(hazard_node_pointer_identifier, current, old);
+				current = hazard_node_pointer_identifier.check(current, old);
 			}
 			
 			current
@@ -1410,8 +1447,6 @@ impl<Value> WaitFreeQueueInner<Value>
 		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
 		
 		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
-		
-		let mut index = 0;
 		do_while!
 		{
 			do
@@ -1420,21 +1455,17 @@ impl<Value> WaitFreeQueueInner<Value>
 					let reference = our_or_another_threads_per_hyper_thread_handle.reference();
 					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
 				
-					new = check(hazard_node_pointer_identifier, new, old);
+					new = hazard_node_pointer_identifier.check(new, old);
 					new = update(&reference.pointer_to_the_node_for_enqueue, new, hazard_node_pointer_identifier, old);
 					new = update(&reference.pointer_to_the_node_for_dequeue, new, hazard_node_pointer_identifier, old);
 					
-					all_per_hyper_thread_handles.set(index.post_increment(), our_or_another_threads_per_hyper_thread_handle);
+					all_per_hyper_thread_handles.set(our_or_another_threads_per_hyper_thread_handle);
 				}
 				our_or_another_threads_per_hyper_thread_handle = our_or_another_threads_per_hyper_thread_handle.reference().next.get();
 			}
 			while new.identifier() > old_head_of_queue_node_identifier && our_or_another_threads_per_hyper_thread_handle.as_ptr() != our_per_hyper_thread_handle.as_ptr()
 		}
-		
-		while new.identifier() > old_head_of_queue_node_identifier && index.pre_decrement() >= 0
-		{
-			new = check(&all_per_hyper_thread_handles.get(index).reference().hazard_node_pointer_identifier, new, old);
-		}
+		all_per_hyper_thread_handles.check(&mut new, old, old_head_of_queue_node_identifier);
 		
 		let new_head_of_queue_node_identifier = new.identifier();
 		
@@ -1495,6 +1526,22 @@ impl NodePointerIdentifier
 	fn from_node_identifier(node_identifier: NodeIdentifier) -> Self
 	{
 		NodePointerIdentifier(node_identifier.0 as usize)
+	}
+	
+	#[inline(always)]
+	fn check<Value>(self, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+	{
+		if self < current.identifier().to_node_identifier()
+		{
+			let mut node = old.to_non_null();
+			while node.identifier().to_node_identifier() < self
+			{
+				node = node.reference().next.get().to_non_null();
+			}
+			current = node;
+		}
+		
+		current
 	}
 }
 
