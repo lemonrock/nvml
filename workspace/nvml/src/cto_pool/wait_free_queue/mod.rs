@@ -494,6 +494,30 @@ impl volatile<NodePointerIdentifier>
 	}
 }
 
+impl<Value> volatile<NonNull<Node<Value>>>
+{
+	#[inline(always)]
+	fn update(&self, mut current: NonNull<Node<Value>>, hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, old: *mut Node<Value>) -> NonNull<Node<Value>>
+	{
+		let mut node = self.ACQUIRE();
+		
+		if node.identifier() < current.identifier()
+		{
+			if !self.CAScs(&mut node, current)
+			{
+				if node.identifier() < current.identifier()
+				{
+					current = node;
+				}
+			}
+			
+			current = hazard_node_pointer_identifier.check(current, old);
+		}
+		
+		current
+	}
+}
+
 impl<T: Copy> volatile<T>
 {
 	#[inline(always)]
@@ -1386,27 +1410,6 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn collect_node_garbage_after_dequeue(&self, our_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
-		#[inline(always)]
-		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut current: NonNull<Node<Value>>, hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, old: *mut Node<Value>) -> NonNull<Node<Value>>
-		{
-			let mut node = pPn.ACQUIRE();
-			
-			if node.identifier() < current.identifier()
-			{
-				if !pPn.CAScs(&mut node, current)
-				{
-					if node.identifier() < current.identifier()
-					{
-						current = node;
-					}
-				}
-				
-				current = hazard_node_pointer_identifier.check(current, old);
-			}
-			
-			current
-		}
-		
 		let mut old_head_of_queue_node_identifier = self.head_of_queue_node_identifier.ACQUIRE();
 		
 		if old_head_of_queue_node_identifier.there_is_no_garbage_to_collect()
@@ -1442,8 +1445,8 @@ impl<Value> WaitFreeQueueInner<Value>
 					let hazard_node_pointer_identifier = &reference.hazard_node_pointer_identifier;
 				
 					new = hazard_node_pointer_identifier.check(new, old);
-					new = update(&reference.pointer_to_the_node_for_enqueue, new, hazard_node_pointer_identifier, old);
-					new = update(&reference.pointer_to_the_node_for_dequeue, new, hazard_node_pointer_identifier, old);
+					new = reference.pointer_to_the_node_for_enqueue.update(new, hazard_node_pointer_identifier, old);
+					new = reference.pointer_to_the_node_for_dequeue.update(new, hazard_node_pointer_identifier, old);
 					
 					all_per_hyper_thread_handles.set(our_or_another_threads_per_hyper_thread_handle);
 				}
