@@ -744,6 +744,7 @@ impl Dequeuer
 }
 
 // `pad` is to make this structure 64 bytes, ie one cache line.
+// This structure is always initialized zeroed when creating a new node, ie all pointers are initially `null_mut()`.
 #[repr(C, align(64))]
 struct Cell<Value>
 {
@@ -916,13 +917,12 @@ struct Node<Value>
 
 impl<Value> Node<Value>
 {
-	// Result is never null
 	#[inline(always)]
-	fn new_node() -> *mut Self
+	fn new_node() -> NonNull<Self>
 	{
 		let n = page_size_align_malloc();
 		unsafe { n.as_ptr().write_bytes(0, 1) }
-		n.as_ptr()
+		n
 	}
 	
 	fn find_cell<'node>(pointer_to_node: &'node volatile<NonNull<Node<Value>>>, i: isize, mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> &'node Cell<Value>
@@ -937,14 +937,13 @@ impl<Value> Node<Value>
 			
 			if next.is_null()
 			{
-				let mut spare_node_to_use_for_next = Self::get_non_null_spare_node(per_hyper_thread_handle);
-				
+				let mut spare_node_to_use_for_next = per_hyper_thread_handle.mutable_reference().get_non_null_spare_node();
 				spare_node_to_use_for_next.mutable_reference().identifier.set(current_node_identifier.increment());
 				
 				if current.reference().next.CASra(&mut next, spare_node_to_use_for_next.as_ptr())
 				{
 					next = spare_node_to_use_for_next.as_ptr();
-					per_hyper_thread_handle.mutable_reference().spare.set(null_mut());
+					per_hyper_thread_handle.mutable_reference().set_spare_to_null();
 				}
 			}
 			
@@ -958,23 +957,6 @@ impl<Value> Node<Value>
 		let cell_index = i % Cells::<Value>::SignedNumberOfCellsInANode;
 		let borrow_checker_hack = unsafe { &*current.as_ptr() };
 		borrow_checker_hack.get_cell(cell_index)
-	}
-	
-	#[inline(always)]
-	fn get_non_null_spare_node(mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> NonNull<Node<Value>>
-	{
-		let spare = per_hyper_thread_handle.reference().spare.get();
-		let spare = if spare.is_not_null()
-		{
-			spare
-		}
-		else
-		{
-			let new_spare = Self::new_node();
-			per_hyper_thread_handle.mutable_reference().spare.set(new_spare);
-			new_spare
-		};
-		spare.to_non_null()
 	}
 	
 	#[inline(always)]
@@ -1059,7 +1041,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			let this: &mut Self = this.mutable_reference();
 			
 			this.head_of_queue_node_identifier.set(NodeIdentifier::Initial);
-			this.pointer_to_the_head_node.set(Node::new_node());
+			this.pointer_to_the_head_node.set(Node::new_node().as_ptr());
 			this.Ei.set(1);
 			this.Di.set(1);
 			write(&mut this.maximum_garbage, maximum_garbage);
@@ -1124,10 +1106,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier();
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
 		
-		if per_hyper_thread_handle.reference().spare.get().is_null()
+		if per_hyper_thread_handle.reference().spare_is_null()
 		{
 			self.collect_node_garbage_after_dequeue(per_hyper_thread_handle);
-			per_hyper_thread_handle.mutable_reference().spare.set(Node::new_node());
+			per_hyper_thread_handle.mutable_reference().set_new_spare_node();
 		}
 		
 		dequeued_value
@@ -1457,7 +1439,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			// Did not grab lock because someone else did - and they'll do the clean up.
 			return;
 		}
-		// Lock is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
+		// 'Lock' is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
+		// Once the 'lock' is released all garbage Nodes are free'd.
 		
 		let old = self.pointer_to_the_head_node.get();
 		
@@ -1472,6 +1455,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		else
 		{
 			self.pointer_to_the_head_node.set(new.as_ptr());
+			
 			self.head_of_queue_node_identifier.RELEASE(new_head_of_queue_node_identifier);
 			
 			Node::free_garbage_nodes(old, new)
@@ -1607,7 +1591,7 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			write(&mut this.Ei, 0);
 			
-			write_volatile(&mut this.spare, CacheAligned::new(Node::new_node()));
+			this.set_new_spare_node();
 			
 			let mut tail = wait_free_queue_inner.tail.get();
 			
@@ -1641,5 +1625,49 @@ impl<Value> PerHyperThreadHandle<Value>
 		}
 		
 		per_hyper_thread_handle_non_null
+	}
+	
+	#[inline(always)]
+	fn get_non_null_spare_node(&mut self) -> NonNull<Node<Value>>
+	{
+		let spare = self.spare();
+		if spare.is_not_null()
+		{
+			spare.to_non_null()
+		}
+		else
+		{
+			self.set_new_spare_node()
+		}
+	}
+	
+	// This is only the case if the spare has been assigned into the queue, in which case, there might be garbage to collect.
+	#[inline(always)]
+	fn spare_is_null(&self) -> bool
+	{
+		self.spare().is_null()
+	}
+	
+	#[inline(always)]
+	fn set_new_spare_node(&mut self) -> NonNull<Node<Value>>
+	{
+		let new_spare_node = Node::new_node();
+		self.spare.set(new_spare_node.as_ptr());
+		new_spare_node
+	}
+	
+	#[inline(always)]
+	fn set_spare_to_null(&mut self)
+	{
+		debug_assert!(self.spare.get().is_not_null(), "trying to set spare to null but self.spare is already null");
+		
+		self.spare.set(null_mut());
+	}
+	
+	// Can be null, but never for long.
+	#[inline(always)]
+	fn spare(&self) -> *mut Node<Value>
+	{
+		self.spare.get()
 	}
 }
