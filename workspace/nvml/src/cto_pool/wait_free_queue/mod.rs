@@ -982,11 +982,16 @@ struct WaitFreeQueueInner<Value>
 	head_of_queue_node_identifier: DoubleCacheAligned<volatile<NodeIdentifier>>,
 	
 	// Pointer to the head node of the queue.
-	Hp: volatile<*mut Node<Value>>,
+	// When the queue is initially created, is not null.
+	// Called in wfqueue.c code `Hp`.
+	pointer_to_the_head_node: volatile<*mut Node<Value>>,
 	
 	maximum_garbage: MaximumGarbage,
 	
 	// A singularly-linked list of per-thread handles, atomically updated.
+	// tail is only NULL before the very first PerHyperThreadHandle is created.
+	// The list follow the `.next` pointer in each PerHyperThreadHandle.
+	// The terminal PerHyperThreadHandle has a `.next` which points to itself.
 	tail: volatile<*mut PerHyperThreadHandle<Value>>,
 }
 
@@ -1003,7 +1008,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			let this: &mut Self = this.mutable_reference();
 			
 			this.head_of_queue_node_identifier.set(NodeIdentifier::Initial);
-			this.Hp.set(Node::new_node());
+			this.pointer_to_the_head_node.set(Node::new_node());
 			this.Ei.set(1);
 			this.Di.set(1);
 			write(&mut this.maximum_garbage, maximum_garbage);
@@ -1443,7 +1448,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		// Lock is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
 		
-		let old = self.Hp.get();
+		let old = self.pointer_to_the_head_node.get();
 		
 		let mut all_per_hyper_thread_handles = AllPerHyperThreadHandles::new();
 		let mut our_or_another_threads_per_hyper_thread_handle = our_per_hyper_thread_handle;
@@ -1475,7 +1480,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		else
 		{
-			self.Hp.set(new.as_ptr());
+			self.pointer_to_the_head_node.set(new.as_ptr());
 			self.head_of_queue_node_identifier.RELEASE(new_head_of_queue_node_identifier);
 			
 			Node::free_garbage_nodes(old, new)
@@ -1548,7 +1553,8 @@ impl NodePointerIdentifier
 struct PerHyperThreadHandle<Value>
 {
 	// Pointer to the next thread handle; a singularly linked list.
-	// Can pointer to self if the first item in the singularly linked list.
+	// Can pointer to self if it is the last element in the singularly linked list.
+	// The very first element in the list is pointed to be the value of `.tail` in WaitFreeQueueInner.
 	next: ExtendedNonNullAtomicPointer<PerHyperThreadHandle<Value>>,
 	
 	// Hazard pointer.
@@ -1598,10 +1604,10 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
-			this.pointer_to_the_node_for_enqueue.set(wait_free_queue_inner.Hp.get().to_non_null());
+			this.pointer_to_the_node_for_enqueue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
 			write(&mut this.enqueuer_node_pointer_identifier, this.pointer_to_the_node_for_enqueue.get().identifier().to_node_identifier());
 			
-			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.Hp.get().to_non_null());
+			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
 			write(&mut this.dequeuer_node_pointer_identifier, this.pointer_to_the_node_for_dequeue.get().identifier().to_node_identifier());
 			
 			write_volatile(&mut this.Er, CacheAligned::default());
