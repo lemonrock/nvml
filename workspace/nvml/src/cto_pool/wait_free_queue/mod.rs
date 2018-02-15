@@ -782,6 +782,12 @@ impl NodeIdentifier
 	const NoHeadOfQueue: Self = NodeIdentifier(-1);
 	
 	#[inline(always)]
+	fn to_node_identifier(self) -> NodePointerIdentifier
+	{
+		NodePointerIdentifier::from_node_identifier(self)
+	}
+	
+	#[inline(always)]
 	fn is_no_head_of_queue(&self) -> bool
 	{
 		self == &Self::NoHeadOfQueue
@@ -987,7 +993,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, id)
 		}
 		
-		per_hyper_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = NodePointerIdentifier::from_node_identifier(per_hyper_thread_handle.reference().Ep.get().reference().identifier.get());
+		per_hyper_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = per_hyper_thread_handle.reference().Ep.get().reference().identifier.get().to_node_identifier();
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null)
 	}
 	
@@ -1022,7 +1028,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			per_hyper_thread_handle.mutable_reference().Dh = per_hyper_thread_handle.reference().Dh.reference().next.get();
 		}
 		
-		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = NodePointerIdentifier::from_node_identifier(per_hyper_thread_handle.reference().Dp.get().reference().identifier.get());
+		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = per_hyper_thread_handle.reference().Dp.get().reference().identifier.get().to_node_identifier();
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare.get().is_null()
@@ -1343,10 +1349,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		{
 			let hazard_node_pointer_identifier = hazard_node_pointer_identifier.ACQUIRE();
 			
-			if hazard_node_pointer_identifier < NodePointerIdentifier::from_node_identifier(current.identifier())
+			if hazard_node_pointer_identifier < current.identifier().to_node_identifier()
 			{
 				let mut node = old.to_non_null();
-				while NodePointerIdentifier::from_node_identifier(node.identifier()) < hazard_node_pointer_identifier
+				while node.identifier().to_node_identifier() < hazard_node_pointer_identifier
 				{
 					node = node.reference().next.get().to_non_null();
 				}
@@ -1543,16 +1549,15 @@ impl<Value> PerHyperThreadHandle<Value>
 			let this: &mut PerHyperThreadHandle<Value> = per_hyper_thread_handle_non_null.mutable_reference();
 			
 			// Seems to be unnecessary as this value is always overwritten.
-			// per_hyper_thread_handle.next.set(null_mut());
+			// this.next.set(NonNull::dangling());
+			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
 			this.Ep.set(wait_free_queue_inner.Hp.get().to_non_null());
-			// enq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
-			write(&mut this.enqueuer_node_pointer_identifier, NodePointerIdentifier::from_node_identifier(this.Ep.get().identifier()));
+			write(&mut this.enqueuer_node_pointer_identifier, this.Ep.get().identifier().to_node_identifier());
 			
 			this.Dp.set(wait_free_queue_inner.Hp.get().to_non_null());
-			// deq_node_id can become a hazard node id. As such, the value can be -1 which converts to !0.
-			write(&mut this.dequeuer_node_pointer_identifier, NodePointerIdentifier::from_node_identifier(this.Dp.get().identifier()));
+			write(&mut this.dequeuer_node_pointer_identifier, this.Dp.get().identifier().to_node_identifier());
 			
 			write_volatile(&mut this.Er, CacheAligned::default());
 			
