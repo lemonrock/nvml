@@ -1387,24 +1387,6 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn collect_node_garbage_after_dequeue(&self, our_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
 		#[inline(always)]
-		fn check<Value>(hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
-		{
-			let hazard_node_pointer_identifier = hazard_node_pointer_identifier.ACQUIRE();
-			
-			if hazard_node_pointer_identifier < current.identifier().to_node_identifier()
-			{
-				let mut node = old.to_non_null();
-				while node.identifier().to_node_identifier() < hazard_node_pointer_identifier
-				{
-					node = node.reference().next.get().to_non_null();
-				}
-				current = node;
-			}
-			
-			current
-		}
-		
-		#[inline(always)]
 		fn update<Value>(pPn: &volatile<NonNull<Node<Value>>>, mut current: NonNull<Node<Value>>, hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 		{
 			let mut node = pPn.ACQUIRE();
@@ -1424,7 +1406,6 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			current
 		}
-		
 		
 		let mut old_head_of_queue_node_identifier = self.head_of_queue_node_identifier.ACQUIRE();
 		
