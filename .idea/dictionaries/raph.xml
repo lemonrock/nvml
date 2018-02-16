@@ -93,6 +93,7 @@
       <w>wakeups</w>
       <w>wcsdup</w>
       <w>werror</w>
+      <w>wfqueue</w>
       <w>whitelist</w>
       <w>writev</w>
       <w>wrlock</w>

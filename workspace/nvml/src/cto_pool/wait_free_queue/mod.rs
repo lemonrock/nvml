@@ -989,11 +989,13 @@ impl<Value> NodeNonNull<Node<Value>> for NonNull<Node<Value>>
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
 struct WaitFreeQueueInner<Value>
 {
-	// Index of the next position for enqueue.
-	Ei: DoubleCacheAligned<volatile<isize>>,
+	// Called in wfqueue.c code `Ei`.
+	// Initially 1.
+	index_of_the_next_position_for_enqueue: DoubleCacheAligned<volatile<isize>>,
 	
-	// Index of the next position for dequeue.
-	Di: DoubleCacheAligned<volatile<isize>>,
+	// Called in wfqueue.c code `Di`.
+	// Initially 1.
+	index_of_the_next_position_for_dequeue: DoubleCacheAligned<volatile<isize>>,
 	
 	// Index of the head of the queue.
 	// Used only for garbage collection of Nodes.
@@ -1018,6 +1020,8 @@ impl<Value> WaitFreeQueueInner<Value>
 {
 	const MaximumPatienceForFastPath: isize = 10;
 	
+	const InitialNextPositionIndex: isize = 1;
+	
 	pub(crate) fn new(maximum_garbage: MaximumGarbage) -> NonNull<Self>
 	{
 		let mut this = page_size_align_malloc();
@@ -1026,8 +1030,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			let this: &Self = this.reference();
 			this.head_of_queue_node_identifier.set(NodeIdentifier::Initial);
 			this.pointer_to_the_head_node.set(Node::new_node().as_ptr());
-			this.Ei.set(1);
-			this.Di.set(1);
+			this.index_of_the_next_position_for_enqueue.set(Self::InitialNextPositionIndex);
+			this.index_of_the_next_position_for_dequeue.set(Self::InitialNextPositionIndex);
 			this.tail.set(null_mut());
 		}
 		
@@ -1046,14 +1050,14 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.get());
 		
-		let mut id = unsafe { uninitialized() };
+		let mut enqueue_index = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
-		while !self.enqueue_fast_path(per_hyper_thread_handle, value_to_enqueue, &mut id) && remaining_patience_for_fast_path.post_decrement() > 0
+		while !self.enqueue_fast_path(per_hyper_thread_handle, value_to_enqueue, &mut enqueue_index) && remaining_patience_for_fast_path.post_decrement() > 0
 		{
 		}
 		if remaining_patience_for_fast_path < 0
 		{
-			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, id)
+			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, enqueue_index)
 		}
 		
 		per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier());
@@ -1104,13 +1108,13 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, id: &mut isize) -> bool
+	fn enqueue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, enqueue_index: &mut isize) -> bool
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		let i = self.Ei.FAAcs(1);
+		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.FAAcs(1);
 		
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, i, per_hyper_thread_handle);
+		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
@@ -1120,34 +1124,34 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		else
 		{
-			*id = i;
+			*enqueue_index = index_after_the_next_position_for_enqueue;
 			false
 		}
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, mut id: isize)
+	fn enqueue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>, mut enqueue_index: isize)
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		let value_to_enqueue = value_to_enqueue.as_ptr();
 		
 		let enqueuer = per_hyper_thread_handle.reference().enqueue_request.deref();
 		enqueuer.value.set(value_to_enqueue);
-		enqueuer.id.RELEASE(id);
+		enqueuer.id.RELEASE(enqueue_index);
 
 		let tail = &per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue;
-		let mut i;
+		let mut index_after_the_next_position_for_enqueue;
 		let mut cell;
 		
 		'do_while: while
 		{
-			i = self.Ei.FAA(1);
-			cell = Node::find_cell(tail, i, per_hyper_thread_handle);
-			let mut ce = <*mut Enqueuer<Value>>::Bottom;
+			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.FAA(1);
+			cell = Node::find_cell(tail, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 			
-			if cell.enqueuer.CAScs(&mut ce, enqueuer.as_ptr()) && cell.value.get().is_not_top()
+			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
+			if cell.enqueuer.CAScs(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
 			{
-				enqueuer.id.CAS(&mut id, -i);
+				enqueuer.id.CAS(&mut enqueue_index, -index_after_the_next_position_for_enqueue);
 				break 'do_while;
 			}
 			enqueuer.id.get() > 0
@@ -1155,12 +1159,12 @@ impl<Value> WaitFreeQueueInner<Value>
 		{
 		}
 		
-		id = -enqueuer.id.get();
-		cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, id, per_hyper_thread_handle);
-		if id > i
+		enqueue_index = -enqueuer.id.get();
+		cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, enqueue_index, per_hyper_thread_handle);
+		if enqueue_index > index_after_the_next_position_for_enqueue
 		{
-			let mut Ei = self.Ei.get();
-			while Ei <= id && !self.Ei.CAS(&mut Ei, id + 1)
+			let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
+			while index_of_the_next_position_for_enqueue <= enqueue_index && !self.index_of_the_next_position_for_enqueue.CAS(&mut index_of_the_next_position_for_enqueue, enqueue_index + 1)
 			{
 			}
 		}
@@ -1238,7 +1242,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueuer.is_top()
 		{
-			return if self.Ei.get() <= i
+			return if self.index_of_the_next_position_for_enqueue.get() <= i
 			{
 				<*mut Value>::Bottom
 			}
@@ -1255,7 +1259,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if ei > i
 		{
-			if cell.value.get().is_top() && self.Ei.get() <= i
+			if cell.value.get().is_top() && self.index_of_the_next_position_for_enqueue.get() <= i
 			{
 				return <*mut Value>::Bottom
 			}
@@ -1264,8 +1268,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		{
 			if (ei > 0 && enqueuer.id.CAS(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
 			{
-				let mut Ei = self.Ei.get();
-				while Ei <= i && !self.Ei.CAS(&mut Ei, i + 1)
+				let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
+				while index_of_the_next_position_for_enqueue <= i && !self.index_of_the_next_position_for_enqueue.CAS(&mut index_of_the_next_position_for_enqueue, i + 1)
 				{
 				}
 				cell.value.set(ev);
@@ -1278,9 +1282,9 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
-		let i = self.Di.FAAcs(1);
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, i, per_hyper_thread_handle);
-		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, i);
+		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.FAAcs(1);
+		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
+		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, index_after_the_next_position_for_dequeue);
 		
 		if dequeued_value.is_bottom()
 		{
@@ -1351,8 +1355,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			{
 				let cell = Node::find_cell(&h, i, per_hyper_thread_handle);
 				
-				let mut Di = self.Di.get();
-				while Di <= i && !self.Di.CAS(&mut Di, i + 1)
+				let mut index_of_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.get();
+				while index_of_the_next_position_for_dequeue <= i && !self.index_of_the_next_position_for_dequeue.CAS(&mut index_of_the_next_position_for_dequeue, i + 1)
 				{
 				}
 				
@@ -1534,6 +1538,8 @@ struct PerHyperThreadHandle<Value>
 	
 	per_hyper_thread_handle_of_next_enqueuer_to_help: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
+	// Use only by `enqueue_help()`.
+	// Compared to a value which is originally obtained, via transformations, from dequeuer.id
 	Ei: CopyCell<isize>,
 	
 	per_hyper_thread_handle_of_next_dequeuer_to_help: CopyCell<NonNull<PerHyperThreadHandle<Value>>>,
