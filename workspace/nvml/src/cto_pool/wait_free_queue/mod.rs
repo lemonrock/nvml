@@ -1198,7 +1198,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		this.set_hazard_node_pointer_identifier(this.enqueuer_node_pointer_identifier());
+		this.enter_critical_section_protected_by_hazard_pointer(this.enqueuer_node_pointer_identifier());
 		{
 			let mut enqueue_position_index = unsafe { uninitialized() };
 			let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
@@ -1212,13 +1212,13 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
 		}
-		this.rerelease_hazard_node_pointer_identifier()
+		this.exit_critical_section_protected_by_hazard_pointer()
 	}
 	
 	#[inline(always)]
 	pub(crate) fn dequeue(&self, this: &PerHyperThreadHandle<Value>) -> *mut Value
 	{
-		this.set_hazard_node_pointer_identifier(this.dequeuer_node_pointer_identifier());
+		this.enter_critical_section_protected_by_hazard_pointer(this.dequeuer_node_pointer_identifier());
 		let dequeued_value =
 		{
 			let mut dequeued_value;
@@ -1250,7 +1250,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			dequeued_value
 		};
-		this.rerelease_hazard_node_pointer_identifier();
+		this.exit_critical_section_protected_by_hazard_pointer();
 		
 		if this.spare_is_null()
 		{
@@ -1492,8 +1492,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
 		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
 		let Dp = other.pointer_to_the_node_for_dequeue.get_copy();
-		this.set_hazard_node_pointer_identifier(other.hazard_node_pointer_identifier());
+		
+		this.switch_hazard_pointer_with_critical_section(other.hazard_node_pointer_identifier());
 		sequentially_consistent_fence();
+		
 		dequeue_position_index_x = dequeuer.dequeue_position_index_x.get();
 		
 		let mut position_index = dequeue_position_index.increment();
@@ -1807,7 +1809,7 @@ impl<Value> PerHyperThreadHandle<Value>
 			// Seems to be unnecessary as this value is always overwritten by `self.add_to_singularly_linked_list_of_per_hyper_thread_handles()`
 			this.initialize_next();
 			
-			this.reset_hazard_node_pointer_identifier();
+			this.initialize_hazard_node_pointer_identifier();
 			
 			this.set_pointer_to_the_node_for_enqueue(wait_free_queue_inner.head_of_queue_node_pointer());
 			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
@@ -1887,19 +1889,33 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn rerelease_hazard_node_pointer_identifier(&self)
+	fn exit_critical_section_protected_by_hazard_pointer(&self)
 	{
 		self.hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
 	}
 	
 	#[inline(always)]
-	fn release_hazard_node_pointer_identifier(&self, node_pointer_identifier: NodePointerIdentifier)
+	fn enter_critical_section_protected_by_hazard_pointer(&self, hazard_node_pointer_identifier: NodePointerIdentifier)
 	{
-		self.hazard_node_pointer_identifier.release(node_pointer_identifier)
+		debug_assert_eq!(self.hazard_node_pointer_identifier(), NodePointerIdentifier::Null, "Hazard Pointer already taken");
+		self.set_hazard_node_pointer_identifier(hazard_node_pointer_identifier)
 	}
 	
 	#[inline(always)]
-	fn reset_hazard_node_pointer_identifier(&self)
+	fn switch_hazard_pointer_with_critical_section(&self, hazard_node_pointer_identifier: NodePointerIdentifier)
+	{
+		debug_assert_ne!(self.hazard_node_pointer_identifier(), NodePointerIdentifier::Null, "Hazard Pointer not already taken");
+		self.set_hazard_node_pointer_identifier(hazard_node_pointer_identifier)
+	}
+	
+	#[inline(always)]
+	fn release_hazard_node_pointer_identifier(&self, hazard_node_pointer_identifier: NodePointerIdentifier)
+	{
+		self.hazard_node_pointer_identifier.release(hazard_node_pointer_identifier)
+	}
+	
+	#[inline(always)]
+	fn initialize_hazard_node_pointer_identifier(&self)
 	{
 		self.set_hazard_node_pointer_identifier(NodePointerIdentifier::Null)
 	}
