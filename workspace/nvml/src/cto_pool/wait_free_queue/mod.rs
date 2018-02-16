@@ -103,7 +103,7 @@ impl<T> ExtendedNonNullAtomicPointer<T>
 	#[inline(always)]
 	fn CASra(&self, cmp: &mut NonNull<T>, val: NonNull<T>) -> bool
 	{
-		// #define CASra(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)
+		// #define CASra(ptr, cmp, val) __atomic_compare_exchange_n(ptr, cmp, val, 0, __ATOMIC_release, __ATOMIC_acquire)
 		let (value, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *cmp, val) };
 		
 		if !ok
@@ -331,51 +331,51 @@ impl<T: Copy> CacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn ACQUIRE(&self) -> T
+	pub(crate) fn acquire(&self) -> T
 	{
-		self.0.ACQUIRE()
+		self.0.acquire()
 	}
 	
 	#[inline(always)]
-	pub(crate) fn RELEASE(&self, value: T)
+	pub(crate) fn release(&self, value: T)
 	{
-		self.0.RELEASE(value)
+		self.0.release(value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn FAA(&self, increment: T) -> T
+	pub(crate) fn relaxed_fetch_and_add(&self, increment: T) -> T
 	{
-		self.0.FAA(increment)
+		self.0.relaxed_fetch_and_add(increment)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn FAAcs(&self, increment: T) -> T
+	pub(crate) fn sequentially_consistent_fetch_and_add(&self, increment: T) -> T
 	{
-		self.0.FAAcs(increment)
+		self.0.sequentially_consistent_fetch_and_add(increment)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn relaxed_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAS(compare, value)
+		self.0.relaxed_relaxed_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn sequentially_consistent_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAScs(compare, value)
+		self.0.sequentially_consistent_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn release_acquire_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASra(compare, value)
+		self.0.release_acquire_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn acquire_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASa(compare, value)
+		self.0.acquire_relaxed_compare_and_swap(compare, value)
 	}
 }
 
@@ -425,57 +425,57 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn set(&self, valueue: T)
+	pub(crate) fn set(&self, value: T)
 	{
-		self.0.set(valueue)
+		self.0.set(value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn ACQUIRE(&self) -> T
+	pub(crate) fn acquire(&self) -> T
 	{
-		self.0.ACQUIRE()
+		self.0.acquire()
 	}
 	
 	#[inline(always)]
-	pub(crate) fn RELEASE(&self, value: T)
+	pub(crate) fn release(&self, value: T)
 	{
-		self.0.RELEASE(value)
+		self.0.release(value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn FAA(&self, increment: T) -> T
+	pub(crate) fn relaxed_fetch_and_add(&self, increment: T) -> T
 	{
-		self.0.FAA(increment)
+		self.0.relaxed_fetch_and_add(increment)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn FAAcs(&self, increment: T) -> T
+	pub(crate) fn sequentially_consistent_fetch_and_add(&self, increment: T) -> T
 	{
-		self.0.FAAcs(increment)
+		self.0.sequentially_consistent_fetch_and_add(increment)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn relaxed_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAS(compare, value)
+		self.0.relaxed_relaxed_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn sequentially_consistent_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CAScs(compare, value)
+		self.0.sequentially_consistent_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn release_acquire_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASra(compare, value)
+		self.0.release_acquire_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn acquire_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		self.0.CASa(compare, value)
+		self.0.acquire_relaxed_compare_and_swap(compare, value)
 	}
 }
 
@@ -487,7 +487,7 @@ impl volatile<NodePointerIdentifier>
 	#[inline(always)]
 	fn check<Value>(&self, current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 	{
-		let hazard_node_pointer_identifier = self.ACQUIRE();
+		let hazard_node_pointer_identifier = self.acquire();
 		hazard_node_pointer_identifier.check(current, old)
 	}
 }
@@ -497,11 +497,11 @@ impl<Value> volatile<NonNull<Node<Value>>>
 	#[inline(always)]
 	fn update(&self, mut current: NonNull<Node<Value>>, hazard_node_pointer_identifier: &volatile<NodePointerIdentifier>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 	{
-		let mut node = self.ACQUIRE();
+		let mut node = self.acquire();
 		
 		if node.identifier() < current.identifier()
 		{
-			if !self.CAScs(&mut node, current)
+			if !self.sequentially_consistent_compare_and_swap(&mut node, current)
 			{
 				if node.identifier() < current.identifier()
 				{
@@ -536,30 +536,34 @@ impl<T: Copy> volatile<T>
 		unsafe { write_volatile(self.0.get(), value) }
 	}
 	
+	/// primitives.h calls this `ACQUIRE`.
 	#[inline(always)]
-	pub(crate) fn ACQUIRE(&self) -> T
+	pub(crate) fn acquire(&self) -> T
 	{
 		unsafe { atomic_load_acq(self.0.get() as *const T) }
 	}
 	
+	/// primitives.h calls this `RELEASE`.
 	#[inline(always)]
-	pub(crate) fn RELEASE(&self, value: T)
+	pub(crate) fn release(&self, value: T)
 	{
 		unsafe { atomic_store_rel(self.0.get(), value) }
 	}
 	
-	/// An atomic fetch-and-add.
+	/// An atomic fetch-and-add that is relaxed.
 	/// Returns previous value.
+	/// primitives.h calls this `FAA`.
 	#[inline(always)]
-	pub(crate) fn FAA(&self, increment: T) -> T
+	pub(crate) fn relaxed_fetch_and_add(&self, increment: T) -> T
 	{
 		unsafe { atomic_xadd_relaxed(self.0.get(), increment) }
 	}
 	
 	/// An atomic fetch-and-add that also ensures sequential consistency.
 	/// Returns previous value.
+	/// primitives.h calls this `FAAcs`.
 	#[inline(always)]
-	pub(crate) fn FAAcs(&self, increment: T) -> T
+	pub(crate) fn sequentially_consistent_fetch_and_add(&self, increment: T) -> T
 	{
 		unsafe { atomic_xadd(self.0.get(), increment) }
 	}
@@ -568,14 +572,15 @@ impl<T: Copy> volatile<T>
 	/// true if successful.
 	/// false if failed.
 	/// compare is updated if failed.
+	/// primitives.h calls this `CAS`.
 	#[inline(always)]
-	pub(crate) fn CAS(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn relaxed_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		let (valueue, ok) = unsafe { atomic_cxchg_relaxed(self.0.get(), *compare, value) };
+		let (value, ok) = unsafe { atomic_cxchg_relaxed(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*compare = valueue;
+			*compare = value;
 		}
 		ok
 	}
@@ -584,14 +589,15 @@ impl<T: Copy> volatile<T>
 	/// true if successful.
 	/// false if failed.
 	/// compare is updated if failed.
+	/// primitives.h calls this `CAScs`.
 	#[inline(always)]
-	pub(crate) fn CAScs(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn sequentially_consistent_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		let (valueue, ok) = unsafe { atomic_cxchg(self.0.get(), *compare, value) };
+		let (value, ok) = unsafe { atomic_cxchg(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*compare = valueue;
+			*compare = value;
 		}
 		ok
 	}
@@ -600,14 +606,15 @@ impl<T: Copy> volatile<T>
 	/// true if successful.
 	/// false if failed.
 	/// compare is updated if failed.
+	/// primitives.h calls this `CASra`.
 	#[inline(always)]
-	pub(crate) fn CASra(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn release_acquire_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		let (valueue, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *compare, value) };
+		let (value, ok) = unsafe { atomic_cxchg_acqrel(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*compare = valueue;
+			*compare = value;
 		}
 		ok
 	}
@@ -616,14 +623,15 @@ impl<T: Copy> volatile<T>
 	/// true if successful.
 	/// false if failed.
 	/// compare is updated if failed.
+	/// primitives.h calls this `CASa`.
 	#[inline(always)]
-	pub(crate) fn CASa(&self, compare: &mut T, value: T) -> bool
+	pub(crate) fn acquire_relaxed_compare_and_swap(&self, compare: &mut T, value: T) -> bool
 	{
-		let (valueue, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), *compare, value) };
+		let (value, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), *compare, value) };
 		
 		if !ok
 		{
-			*compare = valueue;
+			*compare = value;
 		}
 		ok
 	}
@@ -926,7 +934,7 @@ impl<Value> Node<Value>
 				let spare_node_to_use_for_next = per_hyper_thread_handle.reference().get_non_null_spare_node();
 				spare_node_to_use_for_next.reference().identifier.set(current_node_identifier.increment());
 				
-				if current.reference().next.CASra(&mut next, spare_node_to_use_for_next.as_ptr())
+				if current.reference().next.release_acquire_compare_and_swap(&mut next, spare_node_to_use_for_next.as_ptr())
 				{
 					next = spare_node_to_use_for_next.as_ptr();
 					per_hyper_thread_handle.reference().set_spare_to_null();
@@ -1022,6 +1030,12 @@ impl<Value> WaitFreeQueueInner<Value>
 	
 	const InitialNextPositionIndex: isize = 1;
 	
+	#[inline(always)]
+	fn tail(&self) -> *mut PerHyperThreadHandle<Value>
+	{
+		self.tail.get()
+	}
+	
 	pub(crate) fn new(maximum_garbage: MaximumGarbage) -> NonNull<Self>
 	{
 		let mut this = page_size_align_malloc();
@@ -1061,7 +1075,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier());
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null)
+		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
 	}
 	
 	#[inline(always)]
@@ -1096,7 +1110,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier());
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
+		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.release(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare_is_null()
 		{
@@ -1112,13 +1126,13 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.FAAcs(1);
+		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_add(1);
 		
 		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
-		if cell.value.CAS(&mut compare_to_value, value_to_enqueue.as_ptr())
+		if cell.value.relaxed_relaxed_compare_and_swap(&mut compare_to_value, value_to_enqueue.as_ptr())
 		{
 			true
 		}
@@ -1137,7 +1151,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let enqueuer = per_hyper_thread_handle.reference().enqueue_request.deref();
 		enqueuer.value.set(value_to_enqueue);
-		enqueuer.id.RELEASE(enqueue_index);
+		enqueuer.id.release(enqueue_index);
 
 		let tail = &per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue;
 		let mut index_after_the_next_position_for_enqueue;
@@ -1145,13 +1159,13 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		'do_while: while
 		{
-			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.FAA(1);
+			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.relaxed_fetch_and_add(1);
 			cell = Node::find_cell(tail, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 			
 			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
-			if cell.enqueuer.CAScs(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
+			if cell.enqueuer.sequentially_consistent_compare_and_swap(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
 			{
-				enqueuer.id.CAS(&mut enqueue_index, -index_after_the_next_position_for_enqueue);
+				enqueuer.id.relaxed_relaxed_compare_and_swap(&mut enqueue_index, -index_after_the_next_position_for_enqueue);
 				break 'do_while;
 			}
 			enqueuer.id.get() > 0
@@ -1164,7 +1178,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		if enqueue_index > index_after_the_next_position_for_enqueue
 		{
 			let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
-			while index_of_the_next_position_for_enqueue <= enqueue_index && !self.index_of_the_next_position_for_enqueue.CAS(&mut index_of_the_next_position_for_enqueue, enqueue_index + 1)
+			while index_of_the_next_position_for_enqueue <= enqueue_index && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, enqueue_index + 1)
 			{
 			}
 		}
@@ -1194,7 +1208,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let mut value = spin(&cell.value);
 		
-		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.value.CAScs(&mut value, <*mut Value>::Top) && value.is_not_top())
+		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.value.sequentially_consistent_compare_and_swap(&mut value, <*mut Value>::Top) && value.is_not_top())
 		{
 			return value;
 		}
@@ -1225,7 +1239,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				id = id2;
 			}
 			
-			if id > 0 && id <= i && !cell.enqueuer.CAS(&mut enqueuer, pe)
+			if id > 0 && id <= i && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
 			{
 				per_hyper_thread_handle.reference().set_ei(id)
 			}
@@ -1234,7 +1248,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next())
 			}
 			
-			if enqueuer.is_bottom() && cell.enqueuer.CAS(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
+			if enqueuer.is_bottom() && cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
 			{
 				enqueuer = <*mut Enqueuer<Value>>::Top
 			}
@@ -1254,8 +1268,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		let non_null_enqueuer = enqueuer.to_non_null();
 		let enqueuer = non_null_enqueuer.reference();
 		
-		let mut ei = enqueuer.id.ACQUIRE();
-		let ev = enqueuer.value.ACQUIRE();
+		let mut ei = enqueuer.id.acquire();
+		let ev = enqueuer.value.acquire();
 		
 		if ei > i
 		{
@@ -1266,10 +1280,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		else
 		{
-			if (ei > 0 && enqueuer.id.CAS(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
+			if (ei > 0 && enqueuer.id.relaxed_relaxed_compare_and_swap(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
 			{
 				let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
-				while index_of_the_next_position_for_enqueue <= i && !self.index_of_the_next_position_for_enqueue.CAS(&mut index_of_the_next_position_for_enqueue, i + 1)
+				while index_of_the_next_position_for_enqueue <= i && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, i + 1)
 				{
 				}
 				cell.value.set(ev);
@@ -1282,7 +1296,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
-		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.FAAcs(1);
+		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_add(1);
 		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
 		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, index_after_the_next_position_for_dequeue);
 		
@@ -1292,7 +1306,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		let mut cd = <*mut Dequeuer>::Bottom;
-		if dequeued_value.is_not_top() && cell.dequeuer.CAS(&mut cd, <*mut Dequeuer>::Top)
+		if dequeued_value.is_not_top() && cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, <*mut Dequeuer>::Top)
 		{
 			return dequeued_value
 		}
@@ -1305,8 +1319,8 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: isize) -> *mut Value
 	{
 		let dequeuer = per_hyper_thread_handle.reference().dequeue_request.deref();
-		dequeuer.id.RELEASE(id);
-		dequeuer.idx.RELEASE(id);
+		dequeuer.id.release(id);
+		dequeuer.idx.release(id);
 		
 		self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle);
 		let i = -dequeuer.idx.get();
@@ -1327,7 +1341,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_help(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, ph: NonNull<PerHyperThreadHandle<Value>>)
 	{
 		let dequeuer = ph.reference().dequeue_request.deref();
-		let mut idx = dequeuer.idx.ACQUIRE();
+		let mut idx = dequeuer.idx.acquire();
 		let id = dequeuer.id.get();
 		
 		if idx < id
@@ -1356,7 +1370,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				let cell = Node::find_cell(&h, i, per_hyper_thread_handle);
 				
 				let mut index_of_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.get();
-				while index_of_the_next_position_for_dequeue <= i && !self.index_of_the_next_position_for_dequeue.CAS(&mut index_of_the_next_position_for_dequeue, i + 1)
+				while index_of_the_next_position_for_dequeue <= i && !self.index_of_the_next_position_for_dequeue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_dequeue, i + 1)
 				{
 				}
 				
@@ -1367,7 +1381,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				}
 				else
 				{
-					idx = dequeuer.idx.ACQUIRE();
+					idx = dequeuer.idx.acquire();
 				}
 				
 				
@@ -1376,7 +1390,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if new_id != 0
 			{
-				if dequeuer.idx.CASra(&mut idx, new_id)
+				if dequeuer.idx.release_acquire_compare_and_swap(&mut idx, new_id)
 				{
 					idx = new_id;
 				}
@@ -1393,10 +1407,10 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			let cell = Node::find_cell(&Dp, idx, per_hyper_thread_handle);
 			let mut cd = <*mut Dequeuer>::Bottom;
-			if cell.value.get().is_top() || cell.dequeuer.CAS(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
+			if cell.value.get().is_top() || cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
 				let negative_idx = -idx;
-				dequeuer.idx.CAS(&mut idx, negative_idx);
+				dequeuer.idx.relaxed_relaxed_compare_and_swap(&mut idx, negative_idx);
 				break
 			}
 			
@@ -1411,7 +1425,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn collect_node_garbage_after_dequeue(&self, our_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
-		let mut old_head_of_queue_node_identifier = self.head_of_queue_node_identifier.ACQUIRE();
+		let mut old_head_of_queue_node_identifier = self.head_of_queue_node_identifier.acquire();
 		
 		if old_head_of_queue_node_identifier.there_is_no_garbage_to_collect()
 		{
@@ -1426,12 +1440,12 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		// Try to 'grab a lock' on the garbage nodes to collect.
-		if !self.head_of_queue_node_identifier.CASa(&mut old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
+		if !self.head_of_queue_node_identifier.acquire_relaxed_compare_and_swap(&mut old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
 		{
 			// Did not grab lock because someone else did - and they'll do the clean up.
 			return;
 		}
-		// 'Lock' is released when `self.head_of_queue_node_identifier.RELEASE()` is called below.
+		// 'Lock' is released when `self.head_of_queue_node_identifier.release()` is called below.
 		// Once the 'lock' is released all garbage Nodes are free'd.
 		
 		let old = self.pointer_to_the_head_node.get();
@@ -1442,13 +1456,13 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if new_head_of_queue_node_identifier <= old_head_of_queue_node_identifier
 		{
-			self.head_of_queue_node_identifier.RELEASE(old_head_of_queue_node_identifier);
+			self.head_of_queue_node_identifier.release(old_head_of_queue_node_identifier);
 		}
 		else
 		{
 			self.pointer_to_the_head_node.set(new.as_ptr());
 			
-			self.head_of_queue_node_identifier.RELEASE(new_head_of_queue_node_identifier);
+			self.head_of_queue_node_identifier.release(new_head_of_queue_node_identifier);
 			
 			Node::free_garbage_nodes(old, new)
 		}
@@ -1539,7 +1553,8 @@ struct PerHyperThreadHandle<Value>
 	per_hyper_thread_handle_of_next_enqueuer_to_help: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
 	// Use only by `enqueue_help()`.
-	// Compared to a value which is originally obtained, via transformations, from dequeuer.id
+	// Compared to a value which is originally obtained, via transformations, from dequeuer.id.
+	// Initially 0.
 	Ei: CopyCell<isize>,
 	
 	per_hyper_thread_handle_of_next_dequeuer_to_help: CopyCell<NonNull<PerHyperThreadHandle<Value>>>,
@@ -1592,12 +1607,12 @@ impl<Value> PerHyperThreadHandle<Value>
 	#[inline(always)]
 	fn add_to_singularly_linked_list_of_per_hyper_thread_handles(&self, wait_free_queue_inner: &WaitFreeQueueInner<Value>, per_hyper_thread_handle_non_null: NonNull<Self>)
 	{
-		let mut tail = wait_free_queue_inner.tail.get();
+		let mut tail = wait_free_queue_inner.tail();
 		
 		if tail.is_null()
 		{
 			self.set_next(per_hyper_thread_handle_non_null);
-			if wait_free_queue_inner.tail.CASra(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
+			if wait_free_queue_inner.tail.release_acquire_compare_and_swap(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
 			{
 				return
 			}
