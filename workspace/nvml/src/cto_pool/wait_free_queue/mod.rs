@@ -824,7 +824,7 @@ trait BottomAndTop
 
 impl<T> BottomAndTop for *mut T
 {
-	// Works because the initial state of a Node or Cell is zeroed.
+	// Works because the initial state of a Node and its Cells is zeroed.
 	const Bottom: Self = null_mut();
 	
 	// Works because no valid pointer can currently by 2^64 - 1 (most pointers are exhausted at 2^48 - 1).
@@ -944,7 +944,10 @@ impl<Value> Cell<Value>
 	#[inline(always)]
 	fn relaxed_relaxed_compare_and_swap_value(&self, value_to_enqueue: NonNull<Value>) -> bool
 	{
-		// <*mut Value>::Bottom works because the initial state of a Cell is zeroed (Node::new_node() does the equivalent of memset()).
+		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue can not be Top");
+		
+		// <*mut Value>::Bottom works because the initial state of a Cell is zeroed, ie null_mut().
+		// (Node::new_node() does the equivalent of memset()).
 		self.value.relaxed_relaxed_compare_and_swap(&mut <*mut Value>::Bottom, value_to_enqueue.as_ptr())
 	}
 	
@@ -1412,35 +1415,35 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueuer.is_bottom()
 		{
-			let mut ph = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
-			let (mut pe, mut id) =
+			let mut other = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
+			let (mut other_enqueuer, mut enqueue_position_index) =
 			{
-				let pe = ph.reference().enqueue_request.deref();
-				(pe.as_ptr(), pe.enqueue_position_index.get())
+				let other_enqueuer = other.reference().enqueue_request.deref();
+				(other_enqueuer.as_ptr(), other_enqueuer.enqueue_position_index.get())
 			};
 			
-			if this.enqueue_next_position_index_is_not_initial_and_is_not_id(id)
+			if this.enqueue_next_position_index_is_not_initial_and_is_not_id(enqueue_position_index)
 			{
 				this.reset_enqueue_next_position_index();
-				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next_in_singularly_linked_list_or_self_if_end_of_list());
+				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(other.reference().next_in_singularly_linked_list_or_self_if_end_of_list());
 				
-				ph = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
-				let (pe2, id2) =
+				other = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
+				let (other_enqueuer_temporary, enqueue_position_index_temporary) =
 				{
-					let pe = ph.reference().enqueue_request.deref();
-					(pe.as_ptr(), pe.enqueue_position_index.get())
+					let other_enqueuer = other.reference().enqueue_request.deref();
+					(other_enqueuer.as_ptr(), other_enqueuer.enqueue_position_index.get())
 				};
-				pe = pe2;
-				id = id2;
+				other_enqueuer = other_enqueuer_temporary;
+				enqueue_position_index = enqueue_position_index_temporary;
 			}
 			
-			if id > PositionIndex::Zero && id <= position_index && !cell.relaxed_relaxed_compare_and_swap_enqueuer(&mut enqueuer, pe)
+			if enqueue_position_index > PositionIndex::Zero && enqueue_position_index <= position_index && !cell.relaxed_relaxed_compare_and_swap_enqueuer(&mut enqueuer, other_enqueuer)
 			{
-				this.set_enqueue_next_position_index(id)
+				this.set_enqueue_next_position_index(enqueue_position_index)
 			}
 			else
 			{
-				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next_in_singularly_linked_list_or_self_if_end_of_list())
+				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(other.reference().next_in_singularly_linked_list_or_self_if_end_of_list())
 			}
 			
 			if enqueuer.is_bottom() && cell.relaxed_relaxed_compare_and_swap_enqueuer(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
