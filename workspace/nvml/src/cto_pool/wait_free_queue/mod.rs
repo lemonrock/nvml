@@ -22,6 +22,7 @@ use ::std::intrinsics::atomic_xadd_relaxed;
 use ::std::mem::uninitialized;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
+use ::std::ops::Neg;
 use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
 use ::std::ptr::read;
@@ -244,6 +245,9 @@ trait ExtendedNonNull<T>
 	
 	#[inline(always)]
 	fn mutable_reference(&mut self) -> &mut T;
+	
+	#[inline(always)]
+	fn static_reference<'long>(self) -> &'long T;
 }
 
 impl<T> ExtendedNonNull<T> for NonNull<T>
@@ -258,6 +262,12 @@ impl<T> ExtendedNonNull<T> for NonNull<T>
 	fn mutable_reference(&mut self) -> &mut T
 	{
 		unsafe { self.as_mut() }
+	}
+	
+	#[inline(always)]
+	fn static_reference<'long>(self) -> &'long T
+	{
+		unsafe { &* self.as_ptr() }
 	}
 }
 
@@ -485,20 +495,89 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 }
 
-impl DoubleCacheAligned<volatile<isize>>
+impl DoubleCacheAligned<volatile<PositionIndex>>
 {
-	const Increment: isize = 1;
+	const Increment: PositionIndex = PositionIndex(1);
 	
 	#[inline(always)]
-	pub(crate) fn relaxed_fetch_and_increment(&self) -> isize
+	pub(crate) fn relaxed_fetch_and_increment(&self) -> PositionIndex
 	{
 		self.relaxed_fetch_and_add(Self::Increment)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn sequentially_consistent_fetch_and_increment(&self) -> isize
+	pub(crate) fn sequentially_consistent_fetch_and_increment(&self) -> PositionIndex
 	{
 		self.sequentially_consistent_fetch_and_add(Self::Increment)
+	}
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+struct PositionIndex(isize);
+
+impl Neg for PositionIndex
+{
+	type Output = Self;
+	
+	#[inline(always)]
+	fn neg(self) -> Self::Output
+	{
+		debug_assert_ne!(self.0, ::std::isize::MIN, "Can not negate isize::MIN");
+		
+		PositionIndex(-self.0)
+	}
+}
+
+impl PositionIndex
+{
+	const Zero: Self = PositionIndex(0);
+	
+	const InitialNext: Self = PositionIndex(1);
+	
+	const InitialIdx: Self = PositionIndex(-1);
+	
+	const SignedNumberOfCellsInANode: isize = Cells::<()>::NumberOfCellsInANode as isize;
+	
+	#[inline(always)]
+	fn is_zero(self) -> bool
+	{
+		&self == &Self::Zero
+	}
+	
+	#[inline(always)]
+	fn is_not_zero(self) -> bool
+	{
+		&self != &Self::Zero
+	}
+	
+	#[inline(always)]
+	fn maximum_node_identifier(self) -> NodeIdentifier
+	{
+		NodeIdentifier(self.0 / Self::SignedNumberOfCellsInANode)
+	}
+	
+	#[inline(always)]
+	fn get_cell<Value>(self, node: &Node<Value>) -> &Cell<Value>
+	{
+		let cell_index = self.0 % Self::SignedNumberOfCellsInANode;
+		
+		node.get_cell(cell_index as usize)
+	}
+	
+	#[inline(always)]
+	fn increment(self) -> Self
+	{
+		debug_assert_ne!(self.0, ::std::isize::MAX, "self.0 is isize::MAX");
+		
+		PositionIndex(self.0 + 1)
+	}
+	
+	#[inline(always)]
+	fn increment_in_place(&mut self)
+	{
+		debug_assert_ne!(self.0, ::std::isize::MAX, "self.0 is isize::MAX");
+		
+		self.0 += 1
 	}
 }
 
@@ -538,12 +617,12 @@ impl<Value> volatile<NonNull<Node<Value>>>
 		current
 	}
 	
-	fn find_cell(&self, position_index: isize, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	fn find_cell(&self, at_position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
 	{
-		let mut current = unsafe { &* self.get().as_ptr() };
+		let mut current = self.get().static_reference();
 		
 		let mut current_node_identifier = current.identifier();
-		let maximum_node_identifier = NodeIdentifier(position_index / Cells::<Value>::SignedNumberOfCellsInANode);
+		let maximum_node_identifier = at_position_index.maximum_node_identifier();
 		while current_node_identifier < maximum_node_identifier
 		{
 			let mut next = current.next.get();
@@ -560,14 +639,13 @@ impl<Value> volatile<NonNull<Node<Value>>>
 				}
 			}
 			
-			current = unsafe { &* next.to_non_null().as_ptr() };
+			current = next.to_non_null().static_reference();
 			current_node_identifier.increment_in_place();
 		}
 		
 		self.set(current.to_non_null());
 		
-		let cell_index = position_index % Cells::<Value>::SignedNumberOfCellsInANode;
-		current.get_cell(cell_index)
+		at_position_index.get_cell(current)
 	}
 }
 
@@ -759,7 +837,10 @@ impl<T> BottomAndTop for *mut T
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
 struct Enqueuer<Value>
 {
-	id: volatile<isize>,
+	// Was `id`.
+	enqueue_position_index: volatile<PositionIndex>,
+	
+	// Was `val`.
 	value_to_enqueue: volatile<*mut Value>,
 }
 
@@ -768,7 +849,7 @@ impl<Value> Enqueuer<Value>
 	#[inline(always)]
 	fn initialize(&self)
 	{
-		self.id.set(0);
+		self.enqueue_position_index.set(PositionIndex::Zero);
 		self.value_to_enqueue.set(<*mut Value>::Bottom);
 	}
 	
@@ -783,8 +864,11 @@ impl<Value> Enqueuer<Value>
 #[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
 struct Dequeuer
 {
-	id: volatile<isize>,
-	idx: volatile<isize>,
+	// Was `id`.
+	dequeue_position_index: volatile<PositionIndex>,
+	
+	// Was `idx`.
+	dequeue_position_index_x: volatile<PositionIndex>,
 }
 
 impl Dequeuer
@@ -792,8 +876,8 @@ impl Dequeuer
 	#[inline(always)]
 	fn initialize(&self)
 	{
-		self.id.set(0);
-		self.idx.set(-1);
+		self.dequeue_position_index.set(PositionIndex::Zero);
+		self.dequeue_position_index_x.set(PositionIndex::InitialIdx);
 	}
 	
 	#[inline(always)]
@@ -829,14 +913,11 @@ impl<Value> Cells<Value>
 {
 	const NumberOfCellsInANode: usize = NumberOfCellsInANode;
 	
-	const SignedNumberOfCellsInANode: isize = Self::NumberOfCellsInANode as isize;
-	
 	#[inline(always)]
-	pub(crate) fn get_cell(&self, cell_index: isize) -> &Cell<Value>
+	fn get_cell(&self, cell_index: usize) -> &Cell<Value>
 	{
-		debug_assert!(cell_index >= 0, "cell_index is negative");
-		debug_assert!(cell_index < Self::SignedNumberOfCellsInANode, "cell_index is not less than SignedNumberOfCellsInANode");
-		unsafe { self.0.get_unchecked(cell_index as usize) }
+		debug_assert!(cell_index < Self::NumberOfCellsInANode, "cell_index is not less than NumberOfCellsInANode");
+		unsafe { self.0.get_unchecked(cell_index) }
 	}
 }
 
@@ -880,7 +961,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 					
 					this.set(each_threads_per_hyper_thread_handle.as_non_null());
 				}
-				each_threads_per_hyper_thread_handle = unsafe { &* each_threads_per_hyper_thread_handle.next.get().as_ptr() };
+				each_threads_per_hyper_thread_handle = each_threads_per_hyper_thread_handle.next.get().static_reference();
 			}
 			while potential_new_head_of_queue_node.reference().identifier() > old_head_of_queue_node_identifier && each_threads_per_hyper_thread_handle.as_ptr() != initial_per_hyper_thread_handle.as_ptr()
 		}
@@ -915,7 +996,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 	fn get_hazard_pointer_identifier(&mut self) -> &volatile<NodePointerIdentifier>
 	{
 		let element = *unsafe { self.per_thread_handles.get_unchecked(self.index as usize) };
-		let element = unsafe { &* element.as_ptr() };
+		let element = element.static_reference();
 		&element.hazard_node_pointer_identifier
 	}
 }
@@ -956,12 +1037,16 @@ impl NodeIdentifier
 	#[inline(always)]
 	fn increment(self) -> Self
 	{
+		debug_assert_ne!(self.0, ::std::isize::MAX, "self.0 is isize::MAX");
+		
 		NodeIdentifier(self.0 + 1)
 	}
 	
 	#[inline(always)]
 	fn increment_in_place(&mut self)
 	{
+		debug_assert_ne!(self.0, ::std::isize::MAX, "self.0 is isize::MAX");
+		
 		self.0 += 1
 	}
 }
@@ -985,7 +1070,7 @@ impl<Value> Node<Value>
 	}
 	
 	#[inline(always)]
-	fn get_cell(&self, cell_index: isize) -> &Cell<Value>
+	fn get_cell(&self, cell_index: usize) -> &Cell<Value>
 	{
 		&self.cells.get_cell(cell_index)
 	}
@@ -1008,7 +1093,7 @@ impl<Value> Node<Value>
 			}
 			
 			let node = node.to_non_null();
-			older = unsafe { &* node.as_ptr() };
+			older = node.static_reference()
 		}
 	}
 	
@@ -1037,11 +1122,11 @@ struct WaitFreeQueueInner<Value>
 {
 	// Called in wfqueue.c code `Ei`.
 	// Initially 1.
-	index_of_the_next_position_for_enqueue: DoubleCacheAligned<volatile<isize>>,
+	enqueue_next_position_index: DoubleCacheAligned<volatile<PositionIndex>>,
 	
 	// Called in wfqueue.c code `Di`.
 	// Initially 1.
-	index_of_the_next_position_for_dequeue: DoubleCacheAligned<volatile<isize>>,
+	dequeue_next_position_index: DoubleCacheAligned<volatile<PositionIndex>>,
 	
 	// Index of the head of the queue.
 	// Used only for garbage collection of Nodes.
@@ -1052,20 +1137,18 @@ struct WaitFreeQueueInner<Value>
 	// Called in wfqueue.c code `Hp`.
 	head_of_queue_node_pointer: volatile<NonNull<Node<Value>>>,
 	
-	maximum_garbage: MaximumGarbage,
-	
 	// A singularly-linked list of per-thread handles, atomically updated.
 	// tail is only NULL before the very first PerHyperThreadHandle is created.
 	// The list follow the `.next` pointer in each PerHyperThreadHandle.
 	// The terminal PerHyperThreadHandle has a `.next` which points to itself.
 	tail: volatile<*mut PerHyperThreadHandle<Value>>,
+	
+	maximum_garbage: MaximumGarbage,
 }
 
 impl<Value> WaitFreeQueueInner<Value>
 {
 	const MaximumPatienceForFastPath: isize = 10;
-	
-	const InitialNextPositionIndex: isize = 1;
 	
 	pub(crate) fn new(maximum_garbage: MaximumGarbage) -> NonNull<Self>
 	{
@@ -1073,10 +1156,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		{
 			let this: &Self = this.reference();
+			this.enqueue_next_position_index.set(PositionIndex::InitialNext);
+			this.dequeue_next_position_index.set(PositionIndex::InitialNext);
 			this.set_initial_head_of_queue_node_identifier();
 			this.set_head_of_queue_node_pointer(Node::new_node());
-			this.index_of_the_next_position_for_enqueue.set(Self::InitialNextPositionIndex);
-			this.index_of_the_next_position_for_dequeue.set(Self::InitialNextPositionIndex);
 			this.tail.set(null_mut());
 		}
 		
@@ -1154,11 +1237,11 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_fast_path(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>, enqueue_position_index: &mut isize) -> bool
+	fn enqueue_fast_path(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>, enqueue_position_index: &mut PositionIndex) -> bool
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_increment();
+		let index_after_the_next_position_for_enqueue = self.sequentially_consistent_fetch_and_increment_enqueue_next_position_index();
 		
 		let cell = this.pointer_to_the_node_for_enqueue_reference().find_cell(index_after_the_next_position_for_enqueue, this);
 		
@@ -1176,14 +1259,14 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn enqueue_slow_path(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>, mut enqueue_position_index: isize)
+	fn enqueue_slow_path(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>, mut enqueue_position_index: PositionIndex)
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		let value_to_enqueue = value_to_enqueue.as_ptr();
 		
 		let enqueuer = this.enqueue_request.deref();
 		enqueuer.value_to_enqueue.set(value_to_enqueue);
-		enqueuer.id.release(enqueue_position_index);
+		enqueuer.enqueue_position_index.release(enqueue_position_index);
 
 		let tail = this.pointer_to_the_node_for_enqueue_reference();
 		let mut index_after_the_next_position_for_enqueue;
@@ -1191,26 +1274,26 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		'do_while: while
 		{
-			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.relaxed_fetch_and_increment();
+			index_after_the_next_position_for_enqueue = self.relaxed_fetch_and_increment_enqueue_next_position_index();
 			cell = tail.find_cell(index_after_the_next_position_for_enqueue, this);
 			
 			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
 			if cell.enqueuer.sequentially_consistent_compare_and_swap(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
 			{
-				enqueuer.id.relaxed_relaxed_compare_and_swap(&mut enqueue_position_index, -index_after_the_next_position_for_enqueue);
+				enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut enqueue_position_index, -index_after_the_next_position_for_enqueue);
 				break 'do_while;
 			}
-			enqueuer.id.get() > 0
+			enqueuer.enqueue_position_index.get() > PositionIndex::Zero
 		}
 		{
 		}
 		
-		enqueue_position_index = -enqueuer.id.get();
+		enqueue_position_index = -enqueuer.enqueue_position_index.get();
 		cell = this.pointer_to_the_node_for_enqueue_reference().find_cell(enqueue_position_index, this);
 		if enqueue_position_index > index_after_the_next_position_for_enqueue
 		{
-			let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
-			while index_of_the_next_position_for_enqueue <= enqueue_position_index && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, enqueue_position_index + 1)
+			let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
+			while index_of_the_next_position_for_enqueue <= enqueue_position_index && !self.relaxed_relaxed_compare_and_swap_enqueue_next_position_index(&mut index_of_the_next_position_for_enqueue, enqueue_position_index.increment())
 			{
 			}
 		}
@@ -1219,7 +1302,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn enqueue_help(&self, this: &PerHyperThreadHandle<Value>, cell: &Cell<Value>, position_index: isize) -> *mut Value
+	fn enqueue_help(&self, this: &PerHyperThreadHandle<Value>, cell: &Cell<Value>, position_index: PositionIndex) -> *mut Value
 	{
 		#[inline(always)]
 		fn spin<Value>(value_holder: &volatile<*mut Value>) -> *mut Value
@@ -1253,7 +1336,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			let (mut pe, mut id) =
 			{
 				let pe = ph.reference().enqueue_request.deref();
-				(pe.as_ptr(), pe.id.get())
+				(pe.as_ptr(), pe.enqueue_position_index.get())
 			};
 			
 			if this.ei_is_not_initial_and_is_not_id(id)
@@ -1265,13 +1348,13 @@ impl<Value> WaitFreeQueueInner<Value>
 				let (pe2, id2) =
 				{
 					let pe = ph.reference().enqueue_request.deref();
-					(pe.as_ptr(), pe.id.get())
+					(pe.as_ptr(), pe.enqueue_position_index.get())
 				};
 				pe = pe2;
 				id = id2;
 			}
 			
-			if id > 0 && id <= position_index && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
+			if id > PositionIndex::Zero && id <= position_index && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
 			{
 				this.set_ei(id)
 			}
@@ -1288,7 +1371,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueuer.is_top()
 		{
-			return if self.index_of_the_next_position_for_enqueue.get() <= position_index
+			return if self.enqueue_next_position_index() <= position_index
 			{
 				<*mut Value>::Bottom
 			}
@@ -1300,22 +1383,22 @@ impl<Value> WaitFreeQueueInner<Value>
 		let non_null_enqueuer = enqueuer.to_non_null();
 		let enqueuer = non_null_enqueuer.reference();
 		
-		let mut ei = enqueuer.id.acquire();
+		let mut ei = enqueuer.enqueue_position_index.acquire();
 		let ev = enqueuer.value_to_enqueue.acquire();
 		
 		if ei > position_index
 		{
-			if cell.value.get().is_top() && self.index_of_the_next_position_for_enqueue.get() <= position_index
+			if cell.value.get().is_top() && self.enqueue_next_position_index() <= position_index
 			{
 				return <*mut Value>::Bottom
 			}
 		}
 		else
 		{
-			if (ei > 0 && enqueuer.id.relaxed_relaxed_compare_and_swap(&mut ei, -position_index)) || (ei == -position_index && cell.value.get().is_top())
+			if (ei > PositionIndex::Zero && enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut ei, -position_index)) || (ei == -position_index && cell.value.get().is_top())
 			{
-				let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
-				while index_of_the_next_position_for_enqueue <= position_index && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, position_index + 1)
+				let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
+				while index_of_the_next_position_for_enqueue <= position_index && !self.relaxed_relaxed_compare_and_swap_enqueue_next_position_index(&mut index_of_the_next_position_for_enqueue, position_index.increment())
 				{
 				}
 				cell.value.set(ev);
@@ -1326,9 +1409,9 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn dequeue_fast_path(&self, this: &PerHyperThreadHandle<Value>, position_index: &mut isize) -> *mut Value
+	fn dequeue_fast_path(&self, this: &PerHyperThreadHandle<Value>, position_index: &mut PositionIndex) -> *mut Value
 	{
-		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_increment();
+		let index_after_the_next_position_for_dequeue = self.sequentially_consistent_fetch_and_increment_dequeue_next_position_index();
 		let cell = this.pointer_to_the_node_for_dequeue.find_cell(index_after_the_next_position_for_dequeue, this);
 		let dequeued_value = self.enqueue_help(this, cell, index_after_the_next_position_for_dequeue);
 		
@@ -1343,19 +1426,19 @@ impl<Value> WaitFreeQueueInner<Value>
 			return dequeued_value
 		}
 		
-		*position_index = Self::InitialNextPositionIndex;
+		*position_index = index_after_the_next_position_for_dequeue;
 		<*mut Value>::Top
 	}
 	
 	#[inline(always)]
-	fn dequeue_slow_path(&self, this: &PerHyperThreadHandle<Value>, position_index: isize) -> *mut Value
+	fn dequeue_slow_path(&self, this: &PerHyperThreadHandle<Value>, position_index: PositionIndex) -> *mut Value
 	{
 		let dequeuer = this.dequeue_request.deref();
-		dequeuer.id.release(position_index);
-		dequeuer.idx.release(position_index);
+		dequeuer.dequeue_position_index.release(position_index);
+		dequeuer.dequeue_position_index_x.release(position_index);
 		
 		self.dequeue_help(this, this);
-		let position_index = -dequeuer.idx.get();
+		let position_index = -dequeuer.dequeue_position_index_x.get();
 		let cell = this.pointer_to_the_node_for_dequeue.find_cell(position_index, this);
 		let dequeued_value = cell.value.get();
 		
@@ -1373,8 +1456,8 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_help(&self, this: &PerHyperThreadHandle<Value>, other: &PerHyperThreadHandle<Value>)
 	{
 		let dequeuer = other.dequeue_request.deref();
-		let mut idx = dequeuer.idx.acquire();
-		let id = dequeuer.id.get();
+		let mut idx = dequeuer.dequeue_position_index_x.acquire();
+		let id = dequeuer.dequeue_position_index.get();
 		
 		if idx < id
 		{
@@ -1386,23 +1469,23 @@ impl<Value> WaitFreeQueueInner<Value>
 		let Dp = volatile::new(other.pointer_to_the_node_for_dequeue.get());
 		this.set_hazard_node_pointer_identifier(other.hazard_node_pointer_identifier());
 		sequentially_consistent_fence();
-		idx = dequeuer.idx.get();
+		idx = dequeuer.dequeue_position_index_x.get();
 		
-		let mut position_index = id + 1;
+		let mut position_index = id.increment();
 		let mut old_id = id;
-		let mut new_id = 0;
+		let mut new_id = PositionIndex::Zero;
 		
 		loop
 		{
 			// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
 			let h = volatile::new(Dp.get());
 			
-			while idx == old_id && new_id == 0
+			while idx == old_id && new_id.is_zero()
 			{
 				let cell = h.find_cell(position_index, this);
 				
-				let mut index_of_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.get();
-				while index_of_the_next_position_for_dequeue <= position_index && !self.index_of_the_next_position_for_dequeue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_dequeue, position_index + 1)
+				let mut index_of_the_next_position_for_dequeue = self.dequeue_next_position_index();
+				while index_of_the_next_position_for_dequeue <= position_index && !self.relaxed_relaxed_compare_and_swap_dequeue_next_position_index(&mut index_of_the_next_position_for_dequeue, position_index.increment())
 				{
 				}
 				
@@ -1413,26 +1496,26 @@ impl<Value> WaitFreeQueueInner<Value>
 				}
 				else
 				{
-					idx = dequeuer.idx.acquire();
+					idx = dequeuer.dequeue_position_index_x.acquire();
 				}
 				
 				
-				position_index.pre_increment();
+				position_index.increment_in_place();
 			}
 			
-			if new_id != 0
+			if new_id.is_not_zero()
 			{
-				if dequeuer.idx.release_acquire_compare_and_swap(&mut idx, new_id)
+				if dequeuer.dequeue_position_index_x.release_acquire_compare_and_swap(&mut idx, new_id)
 				{
 					idx = new_id;
 				}
 				if idx >= new_id
 				{
-					new_id = 0;
+					new_id = PositionIndex::Zero;
 				}
 			}
 			
-			if idx < 0 || dequeuer.id.get() != id
+			if idx < PositionIndex::Zero || dequeuer.dequeue_position_index.get() != id
 			{
 				break;
 			}
@@ -1442,14 +1525,14 @@ impl<Value> WaitFreeQueueInner<Value>
 			if cell.value.get().is_top() || cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
 				let negative_idx = -idx;
-				dequeuer.idx.relaxed_relaxed_compare_and_swap(&mut idx, negative_idx);
+				dequeuer.dequeue_position_index_x.relaxed_relaxed_compare_and_swap(&mut idx, negative_idx);
 				break
 			}
 			
 			old_id = idx;
 			if idx >= position_index
 			{
-				position_index = idx + 1;
+				position_index = idx.increment();
 			}
 		}
 	}
@@ -1498,6 +1581,48 @@ impl<Value> WaitFreeQueueInner<Value>
 		{
 			self.release_head_of_queue_node_identifier(old_head_of_queue_node_identifier)
 		}
+	}
+	
+	#[inline(always)]
+	fn enqueue_next_position_index(&self) -> PositionIndex
+	{
+		self.enqueue_next_position_index.get()
+	}
+	
+	#[inline(always)]
+	fn sequentially_consistent_fetch_and_increment_enqueue_next_position_index(&self) -> PositionIndex
+	{
+		self.enqueue_next_position_index.sequentially_consistent_fetch_and_increment()
+	}
+	
+	#[inline(always)]
+	fn relaxed_fetch_and_increment_enqueue_next_position_index(&self) -> PositionIndex
+	{
+		self.enqueue_next_position_index.relaxed_fetch_and_increment()
+	}
+	
+	#[inline(always)]
+	fn relaxed_relaxed_compare_and_swap_enqueue_next_position_index(&self, compare: &mut PositionIndex, value: PositionIndex) -> bool
+	{
+		self.enqueue_next_position_index.relaxed_relaxed_compare_and_swap(compare, value)
+	}
+	
+	#[inline(always)]
+	fn dequeue_next_position_index(&self) -> PositionIndex
+	{
+		self.dequeue_next_position_index.get()
+	}
+	
+	#[inline(always)]
+	fn sequentially_consistent_fetch_and_increment_dequeue_next_position_index(&self) -> PositionIndex
+	{
+		self.dequeue_next_position_index.sequentially_consistent_fetch_and_increment()
+	}
+	
+	#[inline(always)]
+	fn relaxed_relaxed_compare_and_swap_dequeue_next_position_index(&self, compare: &mut PositionIndex, value: PositionIndex) -> bool
+	{
+		self.dequeue_next_position_index.relaxed_relaxed_compare_and_swap(compare, value)
 	}
 	
 	#[inline(always)]
@@ -1632,9 +1757,9 @@ struct PerHyperThreadHandle<Value>
 	per_hyper_thread_handle_of_next_enqueuer_to_help: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
 	// Use only by `enqueue_help()`.
-	// Compared to a value which is originally obtained, via transformations, from dequeuer.id.
 	// Initially 0.
-	Ei: CopyCell<isize>,
+	// Was `Ei`.
+	enqueue_next_position_index: CopyCell<PositionIndex>,
 	
 	per_hyper_thread_handle_of_next_dequeuer_to_help: CopyCell<NonNull<PerHyperThreadHandle<Value>>>,
 	
@@ -1644,8 +1769,6 @@ struct PerHyperThreadHandle<Value>
 
 impl<Value> PerHyperThreadHandle<Value>
 {
-	const InitialEi: isize = 0;
-	
 	// A combination of `thread_init` and `queue_init`.
 	pub(crate) fn new(queue: NonNull<WaitFreeQueueInner<Value>>) -> NonNull<Self>
 	{
@@ -1799,22 +1922,22 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn ei_is_not_initial_and_is_not_id(&self, id: isize) -> bool
+	fn ei_is_not_initial_and_is_not_id(&self, id: PositionIndex) -> bool
 	{
-		let ei = self.Ei.get();
-		ei != Self::InitialEi && ei != id
+		let ei = self.enqueue_next_position_index.get();
+		ei != PositionIndex::Zero && ei != id
 	}
 	
 	#[inline(always)]
-	fn set_ei(&self, ei: isize)
+	fn set_ei(&self, ei: PositionIndex)
 	{
-		self.Ei.set(ei);
+		self.enqueue_next_position_index.set(ei);
 	}
 	
 	#[inline(always)]
 	fn reset_ei(&self)
 	{
-		self.Ei.set(Self::InitialEi)
+		self.enqueue_next_position_index.set(PositionIndex::Zero)
 	}
 	
 	#[inline(always)]
