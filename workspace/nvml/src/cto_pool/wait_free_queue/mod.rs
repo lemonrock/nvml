@@ -537,6 +537,39 @@ impl<Value> volatile<NonNull<Node<Value>>>
 		
 		current
 	}
+	
+	fn find_cell(&self, position_index: isize, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> &Cell<Value>
+	{
+		let mut current = self.get();
+		
+		let mut current_node_identifier = current.identifier();
+		let maximum_node_identifier = NodeIdentifier(position_index / Cells::<Value>::SignedNumberOfCellsInANode);
+		while current_node_identifier < maximum_node_identifier
+		{
+			let mut next = current.reference().next.get();
+			
+			if next.is_null()
+			{
+				let spare_node_to_use_for_next = per_hyper_thread_handle.reference().get_non_null_spare_node();
+				spare_node_to_use_for_next.reference().identifier.set(current_node_identifier.increment());
+				
+				if current.reference().next.release_acquire_compare_and_swap(&mut next, spare_node_to_use_for_next.as_ptr())
+				{
+					next = spare_node_to_use_for_next.as_ptr();
+					per_hyper_thread_handle.reference().set_spare_to_null();
+				}
+			}
+			
+			current = next.to_non_null();
+			current_node_identifier.increment_in_place();
+		}
+		
+		self.set(current);
+		
+		let cell_index = position_index % Cells::<Value>::SignedNumberOfCellsInANode;
+		let borrow_checker_hack = unsafe { &*current.as_ptr() };
+		borrow_checker_hack.get_cell(cell_index)
+	}
 }
 
 impl<T: Copy> volatile<T>
@@ -953,40 +986,6 @@ impl<Value> Node<Value>
 		n
 	}
 	
-	fn find_cell<'node>(pointer_to_node: &'node volatile<NonNull<Node<Value>>>, i: isize, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> &'node Cell<Value>
-	{
-		let mut current = pointer_to_node.get();
-		
-		let mut current_node_identifier = current.reference().identifier.get();
-		let current_maximum_node_identifier = NodeIdentifier(i / Cells::<Value>::SignedNumberOfCellsInANode);
-		while current_node_identifier < current_maximum_node_identifier
-		{
-			let mut next = current.reference().next.get();
-			
-			if next.is_null()
-			{
-				let spare_node_to_use_for_next = per_hyper_thread_handle.reference().get_non_null_spare_node();
-				spare_node_to_use_for_next.reference().identifier.set(current_node_identifier.increment());
-				
-				if current.reference().next.release_acquire_compare_and_swap(&mut next, spare_node_to_use_for_next.as_ptr())
-				{
-					next = spare_node_to_use_for_next.as_ptr();
-					per_hyper_thread_handle.reference().set_spare_to_null();
-				}
-			}
-			
-			current = next.to_non_null();
-			
-			current_node_identifier.increment_in_place();
-		}
-		
-		pointer_to_node.set(current);
-		
-		let cell_index = i % Cells::<Value>::SignedNumberOfCellsInANode;
-		let borrow_checker_hack = unsafe { &*current.as_ptr() };
-		borrow_checker_hack.get_cell(cell_index)
-	}
-	
 	#[inline(always)]
 	fn get_cell(&self, cell_index: isize) -> &Cell<Value>
 	{
@@ -1180,7 +1179,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_increment();
 		
-		let cell = Node::find_cell(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference(), index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
+		let cell = per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference().find_cell(index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
@@ -1212,7 +1211,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		'do_while: while
 		{
 			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.relaxed_fetch_and_increment();
-			cell = Node::find_cell(tail, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
+			cell = tail.find_cell(index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 			
 			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
 			if cell.enqueuer.sequentially_consistent_compare_and_swap(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
@@ -1226,7 +1225,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		enqueue_index = -enqueuer.id.get();
-		cell = Node::find_cell(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference(), enqueue_index, per_hyper_thread_handle);
+		cell = per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference().find_cell(enqueue_index, per_hyper_thread_handle);
 		if enqueue_index > index_after_the_next_position_for_enqueue
 		{
 			let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
@@ -1349,7 +1348,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
 		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_increment();
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
+		let cell = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.find_cell(index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
 		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, index_after_the_next_position_for_dequeue);
 		
 		if dequeued_value.is_bottom()
@@ -1375,8 +1374,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		dequeuer.idx.release(id);
 		
 		self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle);
-		let i = -dequeuer.idx.get();
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, i, per_hyper_thread_handle);
+		let position_index = -dequeuer.idx.get();
+		let cell = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.find_cell(position_index, per_hyper_thread_handle);
 		let dequeued_value = cell.value.get();
 		
 		if dequeued_value.is_top()
@@ -1408,7 +1407,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		FENCE();
 		idx = dequeuer.idx.get();
 		
-		let mut i = id + 1;
+		let mut position_index = id + 1;
 		let mut old_id = id;
 		let mut new_id = 0;
 		
@@ -1419,17 +1418,17 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			while idx == old_id && new_id == 0
 			{
-				let cell = Node::find_cell(&h, i, per_hyper_thread_handle);
+				let cell = h.find_cell(position_index, per_hyper_thread_handle);
 				
 				let mut index_of_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.get();
-				while index_of_the_next_position_for_dequeue <= i && !self.index_of_the_next_position_for_dequeue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_dequeue, i + 1)
+				while index_of_the_next_position_for_dequeue <= position_index && !self.index_of_the_next_position_for_dequeue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_dequeue, position_index + 1)
 				{
 				}
 				
-				let value = self.enqueue_help(per_hyper_thread_handle, cell, i);
+				let value = self.enqueue_help(per_hyper_thread_handle, cell, position_index);
 				if value.is_bottom() || (value.is_not_top() && cell.dequeuer.get().is_bottom())
 				{
-					new_id = i;
+					new_id = position_index;
 				}
 				else
 				{
@@ -1437,7 +1436,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				}
 				
 				
-				i.pre_increment();
+				position_index.pre_increment();
 			}
 			
 			if new_id != 0
@@ -1457,7 +1456,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				break;
 			}
 			
-			let cell = Node::find_cell(&Dp, idx, per_hyper_thread_handle);
+			let cell = Dp.find_cell(idx, per_hyper_thread_handle);
 			let mut cd = <*mut Dequeuer>::Bottom;
 			if cell.value.get().is_top() || cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
@@ -1467,9 +1466,9 @@ impl<Value> WaitFreeQueueInner<Value>
 			}
 			
 			old_id = idx;
-			if idx >= i
+			if idx >= position_index
 			{
-				i = idx + 1;
+				position_index = idx + 1;
 			}
 		}
 	}
