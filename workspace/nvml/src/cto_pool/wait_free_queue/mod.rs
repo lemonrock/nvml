@@ -1135,21 +1135,21 @@ impl<Value> WaitFreeQueueInner<Value>
 		per_hyper_thread_handle.reference().set_hazard_node_pointer_identifier(per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.get());
 		
 		let mut dequeued_value;
-		let mut id = unsafe { uninitialized() };
+		let mut position_index = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
 		
 		do_while!
 		{
 			do
 			{
-				dequeued_value = self.dequeue_fast_path(per_hyper_thread_handle, &mut id);
+				dequeued_value = self.dequeue_fast_path(per_hyper_thread_handle, &mut position_index);
 			}
 			while dequeued_value.is_top() && remaining_patience_for_fast_path.post_decrement() > 0
 		}
 		
 		if dequeued_value.is_top()
 		{
-			dequeued_value = self.dequeue_slow_path(per_hyper_thread_handle, id);
+			dequeued_value = self.dequeue_slow_path(per_hyper_thread_handle, position_index);
 		}
 		
 		// `EMPTY`: a value that will be returned if a `dequeue` fails.
@@ -1238,7 +1238,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn enqueue_help(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, cell: &Cell<Value>, i: isize) -> *mut Value
+	fn enqueue_help(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, cell: &Cell<Value>, position_index: isize) -> *mut Value
 	{
 		#[inline(always)]
 		fn spin<Value>(value_holder: &volatile<*mut Value>) -> *mut Value
@@ -1290,7 +1290,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				id = id2;
 			}
 			
-			if id > 0 && id <= i && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
+			if id > 0 && id <= position_index && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
 			{
 				per_hyper_thread_handle.reference().set_ei(id)
 			}
@@ -1307,7 +1307,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueuer.is_top()
 		{
-			return if self.index_of_the_next_position_for_enqueue.get() <= i
+			return if self.index_of_the_next_position_for_enqueue.get() <= position_index
 			{
 				<*mut Value>::Bottom
 			}
@@ -1322,19 +1322,19 @@ impl<Value> WaitFreeQueueInner<Value>
 		let mut ei = enqueuer.id.acquire();
 		let ev = enqueuer.value.acquire();
 		
-		if ei > i
+		if ei > position_index
 		{
-			if cell.value.get().is_top() && self.index_of_the_next_position_for_enqueue.get() <= i
+			if cell.value.get().is_top() && self.index_of_the_next_position_for_enqueue.get() <= position_index
 			{
 				return <*mut Value>::Bottom
 			}
 		}
 		else
 		{
-			if (ei > 0 && enqueuer.id.relaxed_relaxed_compare_and_swap(&mut ei, -i)) || (ei == -i && cell.value.get().is_top())
+			if (ei > 0 && enqueuer.id.relaxed_relaxed_compare_and_swap(&mut ei, -position_index)) || (ei == -position_index && cell.value.get().is_top())
 			{
 				let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
-				while index_of_the_next_position_for_enqueue <= i && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, i + 1)
+				while index_of_the_next_position_for_enqueue <= position_index && !self.index_of_the_next_position_for_enqueue.relaxed_relaxed_compare_and_swap(&mut index_of_the_next_position_for_enqueue, position_index + 1)
 				{
 				}
 				cell.value.set(ev);
@@ -1345,7 +1345,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
+	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, position_index: &mut isize) -> *mut Value
 	{
 		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_increment();
 		let cell = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.find_cell(index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
@@ -1362,16 +1362,16 @@ impl<Value> WaitFreeQueueInner<Value>
 			return dequeued_value
 		}
 		
-		*id = 1;
+		*position_index = Self::InitialNextPositionIndex;
 		<*mut Value>::Top
 	}
 	
 	#[inline(always)]
-	fn dequeue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: isize) -> *mut Value
+	fn dequeue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, position_index: isize) -> *mut Value
 	{
 		let dequeuer = per_hyper_thread_handle.reference().dequeue_request.deref();
-		dequeuer.id.release(id);
-		dequeuer.idx.release(id);
+		dequeuer.id.release(position_index);
+		dequeuer.idx.release(position_index);
 		
 		self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle);
 		let position_index = -dequeuer.idx.get();
