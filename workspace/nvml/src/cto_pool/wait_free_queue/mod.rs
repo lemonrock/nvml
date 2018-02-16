@@ -930,6 +930,47 @@ struct Cell<Value>
 impl<Value> Cell<Value>
 {
 	#[inline(always)]
+	fn set_value_to_enqueue(&self, value_to_enqueue: *mut Value)
+	{
+		self.value.set(value_to_enqueue)
+	}
+	
+	#[inline(always)]
+	fn value(&self) -> *mut Value
+	{
+		self.value.get()
+	}
+	
+	#[inline(always)]
+	fn relaxed_relaxed_compare_and_swap_value(&self, compare: &mut *mut Value, value_to_enqueue: NonNull<Value>) -> bool
+	{
+		self.value.relaxed_relaxed_compare_and_swap(compare, value_to_enqueue.as_ptr())
+	}
+	
+	#[inline(always)]
+	fn sequentially_consistent_compare_and_swap_value(&self, compare: &mut *mut Value, value_to_enqueue: *mut Value) -> bool
+	{
+		self.value.sequentially_consistent_compare_and_swap(compare, value_to_enqueue)
+	}
+	
+	#[inline(always)]
+	fn spin(&self) -> *mut Value
+	{
+		const MaximumSpinPatience: usize = 100;
+		
+		let mut patience = MaximumSpinPatience;
+		let mut value = self.value();
+		
+		while value.is_not_null() && patience.post_decrement() > 0
+		{
+			value = self.value();
+			spin_loop_hint();
+		}
+		
+		value
+	}
+	
+	#[inline(always)]
 	fn enqueuer(&self) -> *mut Enqueuer<Value>
 	{
 		self.enqueuer.get()
@@ -1301,8 +1342,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		let cell = this.pointer_to_the_node_for_enqueue_find_cell(index_after_the_next_position_for_enqueue, this);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
-		let mut compare_to_value = <*mut Value>::Bottom;
-		if cell.value.relaxed_relaxed_compare_and_swap(&mut compare_to_value, value_to_enqueue.as_ptr())
+		if cell.relaxed_relaxed_compare_and_swap_value(&mut <*mut Value>::Bottom, value_to_enqueue)
 		{
 			true
 		}
@@ -1361,28 +1401,11 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn enqueue_help(&self, this: &PerHyperThreadHandle<Value>, cell: &Cell<Value>, position_index: PositionIndex) -> *mut Value
 	{
-		#[inline(always)]
-		fn spin<Value>(value_holder: &volatile<*mut Value>) -> *mut Value
-		{
-			const MaximumSpinPatience: usize = 100;
-			
-			let mut patience = MaximumSpinPatience;
-			let mut value = value_holder.get();
-			
-			while value.is_not_null() && patience.post_decrement() > 0
-			{
-				value = value_holder.get();
-				spin_loop_hint();
-			}
-			
-			value
-		}
+		let mut value = cell.spin();
 		
-		let mut value = spin(&cell.value);
-		
-		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.value.sequentially_consistent_compare_and_swap(&mut value, <*mut Value>::Top) && value.is_not_top())
+		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.sequentially_consistent_compare_and_swap_value(&mut value, <*mut Value>::Top) && value.is_not_top())
 		{
-			return value;
+			return value
 		}
 		
 		let mut enqueuer = cell.enqueuer();
@@ -1445,24 +1468,24 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueue_position_index > position_index
 		{
-			if cell.value.get().is_top() && self.enqueue_next_position_index() <= position_index
+			if cell.value().is_top() && self.enqueue_next_position_index() <= position_index
 			{
 				return <*mut Value>::Bottom
 			}
 		}
 		else
 		{
-			if (enqueue_position_index > PositionIndex::Zero && enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut enqueue_position_index, -position_index)) || (enqueue_position_index == -position_index && cell.value.get().is_top())
+			if (enqueue_position_index > PositionIndex::Zero && enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut enqueue_position_index, -position_index)) || (enqueue_position_index == -position_index && cell.value().is_top())
 			{
 				let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
 				while index_of_the_next_position_for_enqueue <= position_index && !self.relaxed_relaxed_compare_and_swap_enqueue_next_position_index(&mut index_of_the_next_position_for_enqueue, position_index.increment())
 				{
 				}
-				cell.value.set(value_to_enqueue);
+				cell.set_value_to_enqueue(value_to_enqueue);
 			}
 		}
 		
-		cell.value.get()
+		cell.value()
 	}
 	
 	#[inline(always)]
@@ -1496,7 +1519,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		self.dequeue_help(this, this);
 		let position_index = -dequeuer.dequeue_position_index_x.get();
 		let cell = this.pointer_to_the_node_for_dequeue_find_cell(position_index, this);
-		let dequeued_value = cell.value.get();
+		let dequeued_value = cell.value();
 		
 		if dequeued_value.is_top()
 		{
@@ -1579,7 +1602,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			let cell = other_pointer_to_the_node_for_dequeue.find_cell(dequeue_position_index_x, this);
 			let mut was = <*mut Dequeuer>::Bottom;
-			if cell.value.get().is_top() || cell.relaxed_relaxed_compare_and_swap_dequeuer(&mut was, dequeuer.as_ptr()) || was == dequeuer.as_ptr()
+			if cell.value().is_top() || cell.relaxed_relaxed_compare_and_swap_dequeuer(&mut was, dequeuer.as_ptr()) || was == dequeuer.as_ptr()
 			{
 				let negative_idx = -dequeue_position_index_x;
 				dequeuer.dequeue_position_index_x.relaxed_relaxed_compare_and_swap(&mut dequeue_position_index_x, negative_idx);
