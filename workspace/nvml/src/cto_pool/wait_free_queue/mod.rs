@@ -247,7 +247,7 @@ trait ExtendedNonNull<T>
 	fn mutable_reference(&mut self) -> &mut T;
 	
 	#[inline(always)]
-	fn static_reference<'long>(self) -> &'long T;
+	fn long_rerefence<'long>(self) -> &'long T;
 }
 
 impl<T> ExtendedNonNull<T> for NonNull<T>
@@ -265,7 +265,7 @@ impl<T> ExtendedNonNull<T> for NonNull<T>
 	}
 	
 	#[inline(always)]
-	fn static_reference<'long>(self) -> &'long T
+	fn long_rerefence<'long>(self) -> &'long T
 	{
 		unsafe { &* self.as_ptr() }
 	}
@@ -619,7 +619,7 @@ impl<Value> volatile<NonNull<Node<Value>>>
 	
 	fn find_cell(&self, at_position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
 	{
-		let mut current = self.get().static_reference();
+		let mut current = self.get().long_rerefence();
 		
 		let mut current_node_identifier = current.identifier();
 		let maximum_node_identifier = at_position_index.maximum_node_identifier();
@@ -639,7 +639,7 @@ impl<Value> volatile<NonNull<Node<Value>>>
 				}
 			}
 			
-			current = next.to_non_null().static_reference();
+			current = next.to_non_null().long_rerefence();
 			current_node_identifier.increment_in_place();
 		}
 		
@@ -655,6 +655,12 @@ impl<T: Copy> volatile<T>
 	pub(crate) const fn new(value: T) -> Self
 	{
 		volatile(UnsafeCell::new(value))
+	}
+	
+	#[inline(always)]
+	pub(crate) fn get_copy(&self) -> Self
+	{
+		Self::new(self.get())
 	}
 	
 	#[inline(always)]
@@ -778,6 +784,22 @@ impl<T: Copy> volatile<T>
 	{
 		let (value, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), compare, value) };
 		ok
+	}
+}
+
+trait IsValueEmpty
+{
+	#[inline(always)]
+	fn is_not_empty(self) -> bool;
+}
+
+impl<Value> IsValueEmpty for *mut Value
+{
+	#[inline(always)]
+	fn is_not_empty(self) -> bool
+	{
+		// `wfqueue` defines `EMPTY` as equivalent to `null_mut()`.
+		self.is_not_null()
 	}
 }
 
@@ -961,7 +983,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 					
 					this.set(each_threads_per_hyper_thread_handle.as_non_null());
 				}
-				each_threads_per_hyper_thread_handle = each_threads_per_hyper_thread_handle.next.get().static_reference();
+				each_threads_per_hyper_thread_handle = each_threads_per_hyper_thread_handle.next_in_singularly_linked_list_or_self_if_end_of_list.get().long_rerefence();
 			}
 			while potential_new_head_of_queue_node.reference().identifier() > old_head_of_queue_node_identifier && each_threads_per_hyper_thread_handle.as_ptr() != initial_per_hyper_thread_handle.as_ptr()
 		}
@@ -996,7 +1018,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 	fn get_hazard_pointer_identifier(&mut self) -> &volatile<NodePointerIdentifier>
 	{
 		let element = *unsafe { self.per_thread_handles.get_unchecked(self.index as usize) };
-		let element = element.static_reference();
+		let element = element.long_rerefence();
 		&element.hazard_node_pointer_identifier
 	}
 }
@@ -1029,9 +1051,9 @@ impl NodeIdentifier
 	}
 	
 	#[inline(always)]
-	fn there_is_not_yet_enough_garbage_to_collect<Value>(&self, pointer_to_the_node_for_dequeue: NonNull<Node<Value>>, maximum_garbage: MaximumGarbage) -> bool
+	fn there_is_not_yet_enough_garbage_to_collect<Value>(&self, potential_new_head_of_queue: NonNull<Node<Value>>, maximum_garbage: MaximumGarbage) -> bool
 	{
-		(pointer_to_the_node_for_dequeue.reference().identifier().0 - self.0) < maximum_garbage.0
+		(potential_new_head_of_queue.reference().identifier().0 - self.0) < maximum_garbage.0
 	}
 	
 	#[inline(always)]
@@ -1093,7 +1115,7 @@ impl<Value> Node<Value>
 			}
 			
 			let node = node.to_non_null();
-			older = node.static_reference()
+			older = node.long_rerefence()
 		}
 	}
 	
@@ -1177,55 +1199,58 @@ impl<Value> WaitFreeQueueInner<Value>
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
 		this.set_hazard_node_pointer_identifier(this.enqueuer_node_pointer_identifier());
-		
-		let mut enqueue_position_index = unsafe { uninitialized() };
-		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
-		while !self.enqueue_fast_path(this, value_to_enqueue, &mut enqueue_position_index) && remaining_patience_for_fast_path.post_decrement() > 0
 		{
+			let mut enqueue_position_index = unsafe { uninitialized() };
+			let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
+			while !self.enqueue_fast_path(this, value_to_enqueue, &mut enqueue_position_index) && remaining_patience_for_fast_path.post_decrement() > 0
+			{
+			}
+			if remaining_patience_for_fast_path < 0
+			{
+				self.enqueue_slow_path(this, value_to_enqueue, enqueue_position_index)
+			}
+			
+			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
 		}
-		if remaining_patience_for_fast_path < 0
-		{
-			self.enqueue_slow_path(this, value_to_enqueue, enqueue_position_index)
-		}
-		
-		this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
-		
 		this.rerelease_hazard_node_pointer_identifier()
 	}
 	
 	#[inline(always)]
 	pub(crate) fn dequeue(&self, this: &PerHyperThreadHandle<Value>) -> *mut Value
 	{
-		this.set_hazard_node_pointer_identifier(this.dequeuer_node_pointer_identifier.get());
-		
-		let mut dequeued_value;
-		let mut dequeue_position_index = unsafe { uninitialized() };
-		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
-		
-		do_while!
+		this.set_hazard_node_pointer_identifier(this.dequeuer_node_pointer_identifier());
+		let dequeued_value =
 		{
-			do
+			let mut dequeued_value;
+			let mut dequeue_position_index = unsafe { uninitialized() };
+			let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
+			
+			do_while!
 			{
-				dequeued_value = self.dequeue_fast_path(this, &mut dequeue_position_index);
+				do
+				{
+					dequeued_value = self.dequeue_fast_path(this, &mut dequeue_position_index);
+				}
+				while dequeued_value.is_top() && remaining_patience_for_fast_path.post_decrement() > 0
 			}
-			while dequeued_value.is_top() && remaining_patience_for_fast_path.post_decrement() > 0
-		}
-		
-		if dequeued_value.is_top()
-		{
-			dequeued_value = self.dequeue_slow_path(this, dequeue_position_index);
-		}
-		
-		// `EMPTY`: a value that will be returned if a `dequeue` fails.
-		let EMPTY: *mut Value = 0 as *mut Value;
-		if dequeued_value != EMPTY
-		{
-			self.dequeue_help(this, this.per_hyper_thread_handle_of_next_dequeuer_to_help.get().reference());
-			this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(this.per_hyper_thread_handle_of_next_dequeuer_to_help.get().reference().next());
-		}
-		
-		this.dequeuer_node_pointer_identifier.set(this.pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_pointer_identifier());
-		this.release_hazard_node_pointer_identifier(NodePointerIdentifier::Null);
+			
+			if dequeued_value.is_top()
+			{
+				dequeued_value = self.dequeue_slow_path(this, dequeue_position_index);
+			}
+			
+			if dequeued_value.is_not_empty()
+			{
+				let next_hyper_thread_handle = this.per_hyper_thread_handle_of_next_dequeuer_to_help.get().long_rerefence();
+				self.dequeue_help(this, next_hyper_thread_handle);
+				this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(next_hyper_thread_handle.next_in_singularly_linked_list_or_self_if_end_of_list());
+			}
+			
+			this.set_dequeuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_dequeue();
+			
+			dequeued_value
+		};
+		this.rerelease_hazard_node_pointer_identifier();
 		
 		if this.spare_is_null()
 		{
@@ -1264,7 +1289,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		let value_to_enqueue = value_to_enqueue.as_ptr();
 		
-		let enqueuer = this.enqueue_request.deref();
+		let enqueuer: &Enqueuer<Value> = this.enqueue_request.deref();
 		enqueuer.value_to_enqueue.set(value_to_enqueue);
 		enqueuer.enqueue_position_index.release(enqueue_position_index);
 
@@ -1342,7 +1367,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			if this.enqueue_next_position_index_is_not_initial_and_is_not_id(id)
 			{
 				this.reset_enqueue_next_position_index();
-				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next());
+				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next_in_singularly_linked_list_or_self_if_end_of_list());
 				
 				ph = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
 				let (pe2, id2) =
@@ -1360,7 +1385,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			}
 			else
 			{
-				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next())
+				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next_in_singularly_linked_list_or_self_if_end_of_list())
 			}
 			
 			if enqueuer.is_bottom() && cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
@@ -1412,7 +1437,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_fast_path(&self, this: &PerHyperThreadHandle<Value>, position_index: &mut PositionIndex) -> *mut Value
 	{
 		let index_after_the_next_position_for_dequeue = self.sequentially_consistent_fetch_and_increment_dequeue_next_position_index();
-		let cell = this.pointer_to_the_node_for_dequeue.find_cell(index_after_the_next_position_for_dequeue, this);
+		let cell = this.pointer_to_the_node_for_dequeue_find_cell(index_after_the_next_position_for_dequeue, this);
 		let dequeued_value = self.enqueue_help(this, cell, index_after_the_next_position_for_dequeue);
 		
 		if dequeued_value.is_bottom()
@@ -1433,13 +1458,13 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_slow_path(&self, this: &PerHyperThreadHandle<Value>, position_index: PositionIndex) -> *mut Value
 	{
-		let dequeuer = this.dequeue_request.deref();
+		let dequeuer: &Dequeuer = this.dequeue_request.deref();
 		dequeuer.dequeue_position_index.release(position_index);
 		dequeuer.dequeue_position_index_x.release(position_index);
 		
 		self.dequeue_help(this, this);
 		let position_index = -dequeuer.dequeue_position_index_x.get();
-		let cell = this.pointer_to_the_node_for_dequeue.find_cell(position_index, this);
+		let cell = this.pointer_to_the_node_for_dequeue_find_cell(position_index, this);
 		let dequeued_value = cell.value.get();
 		
 		if dequeued_value.is_top()
@@ -1455,32 +1480,32 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_help(&self, this: &PerHyperThreadHandle<Value>, other: &PerHyperThreadHandle<Value>)
 	{
-		let dequeuer = other.dequeue_request.deref();
-		let mut idx = dequeuer.dequeue_position_index_x.acquire();
-		let id = dequeuer.dequeue_position_index.get();
+		let dequeuer: &Dequeuer = other.dequeue_request.deref();
+		let mut dequeue_position_index_x = dequeuer.dequeue_position_index_x.acquire();
+		let dequeue_position_index = dequeuer.dequeue_position_index.get();
 		
-		if idx < id
+		if dequeue_position_index_x < dequeue_position_index
 		{
 			return;
 		}
 		
 		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
 		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
-		let Dp = volatile::new(other.pointer_to_the_node_for_dequeue.get());
+		let Dp = other.pointer_to_the_node_for_dequeue.get_copy();
 		this.set_hazard_node_pointer_identifier(other.hazard_node_pointer_identifier());
 		sequentially_consistent_fence();
-		idx = dequeuer.dequeue_position_index_x.get();
+		dequeue_position_index_x = dequeuer.dequeue_position_index_x.get();
 		
-		let mut position_index = id.increment();
-		let mut old_id = id;
-		let mut new_id = PositionIndex::Zero;
+		let mut position_index = dequeue_position_index.increment();
+		let mut old_dequeue_position_index = dequeue_position_index;
+		let mut new_dequeue_position_index = PositionIndex::Zero;
 		
 		loop
 		{
 			// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
-			let h = volatile::new(Dp.get());
+			let h = Dp.get_copy();
 			
-			while idx == old_id && new_id.is_zero()
+			while dequeue_position_index_x == old_dequeue_position_index && new_dequeue_position_index.is_zero()
 			{
 				let cell = h.find_cell(position_index, this);
 				
@@ -1492,47 +1517,47 @@ impl<Value> WaitFreeQueueInner<Value>
 				let value = self.enqueue_help(this, cell, position_index);
 				if value.is_bottom() || (value.is_not_top() && cell.dequeuer.get().is_bottom())
 				{
-					new_id = position_index;
+					new_dequeue_position_index = position_index;
 				}
 				else
 				{
-					idx = dequeuer.dequeue_position_index_x.acquire();
+					dequeue_position_index_x = dequeuer.dequeue_position_index_x.acquire();
 				}
 				
 				
 				position_index.increment_in_place();
 			}
 			
-			if new_id.is_not_zero()
+			if new_dequeue_position_index.is_not_zero()
 			{
-				if dequeuer.dequeue_position_index_x.release_acquire_compare_and_swap(&mut idx, new_id)
+				if dequeuer.dequeue_position_index_x.release_acquire_compare_and_swap(&mut dequeue_position_index_x, new_dequeue_position_index)
 				{
-					idx = new_id;
+					dequeue_position_index_x = new_dequeue_position_index;
 				}
-				if idx >= new_id
+				if dequeue_position_index_x >= new_dequeue_position_index
 				{
-					new_id = PositionIndex::Zero;
+					new_dequeue_position_index = PositionIndex::Zero;
 				}
 			}
 			
-			if idx < PositionIndex::Zero || dequeuer.dequeue_position_index.get() != id
+			if dequeue_position_index_x < PositionIndex::Zero || dequeuer.dequeue_position_index.get() != dequeue_position_index
 			{
 				break;
 			}
 			
-			let cell = Dp.find_cell(idx, this);
+			let cell = Dp.find_cell(dequeue_position_index_x, this);
 			let mut cd = <*mut Dequeuer>::Bottom;
 			if cell.value.get().is_top() || cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
-				let negative_idx = -idx;
-				dequeuer.dequeue_position_index_x.relaxed_relaxed_compare_and_swap(&mut idx, negative_idx);
+				let negative_idx = -dequeue_position_index_x;
+				dequeuer.dequeue_position_index_x.relaxed_relaxed_compare_and_swap(&mut dequeue_position_index_x, negative_idx);
 				break
 			}
 			
-			old_id = idx;
-			if idx >= position_index
+			old_dequeue_position_index = dequeue_position_index_x;
+			if dequeue_position_index_x >= position_index
 			{
-				position_index = idx.increment();
+				position_index = dequeue_position_index_x.increment();
 			}
 		}
 	}
@@ -1547,9 +1572,9 @@ impl<Value> WaitFreeQueueInner<Value>
 			return;
 		}
 		
-		let new = this.pointer_to_the_node_for_dequeue.get();
+		let potential_new_head_of_queue = this.pointer_to_the_node_for_dequeue();
 		
-		if old_head_of_queue_node_identifier.there_is_not_yet_enough_garbage_to_collect(new, self.maximum_garbage)
+		if old_head_of_queue_node_identifier.there_is_not_yet_enough_garbage_to_collect(potential_new_head_of_queue, self.maximum_garbage)
 		{
 			return;
 		}
@@ -1566,7 +1591,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let old_head_of_queue_node = self.head_of_queue_node_pointer();
 		
-		let newer_head_of_queue_node = AllPerHyperThreadHandles::check_and_update_all_hyper_thread_handle_hazard_pointers(this, new, old_head_of_queue_node, old_head_of_queue_node_identifier);
+		let newer_head_of_queue_node = AllPerHyperThreadHandles::check_and_update_all_hyper_thread_handle_hazard_pointers(this, potential_new_head_of_queue, old_head_of_queue_node, old_head_of_queue_node_identifier);
 		let new_head_of_queue_node_identifier = newer_head_of_queue_node.reference().identifier();
 		
 		if new_head_of_queue_node_identifier > old_head_of_queue_node_identifier
@@ -1740,7 +1765,7 @@ struct PerHyperThreadHandle<Value>
 	// Pointer to the next thread handle; a singularly linked list.
 	// Can pointer to self if it is the last element in the singularly linked list.
 	// The very first element in the list is pointed to by the value of `.tail` in WaitFreeQueueInner.
-	next: ExtendedNonNullAtomicPointer<PerHyperThreadHandle<Value>>,
+	next_in_singularly_linked_list_or_self_if_end_of_list: ExtendedNonNullAtomicPointer<PerHyperThreadHandle<Value>>,
 	
 	hazard_node_pointer_identifier: volatile<NodePointerIdentifier>,
 	
@@ -1787,8 +1812,8 @@ impl<Value> PerHyperThreadHandle<Value>
 			this.set_pointer_to_the_node_for_enqueue(wait_free_queue_inner.head_of_queue_node_pointer());
 			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
 			
-			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.head_of_queue_node_pointer());
-			this.dequeuer_node_pointer_identifier.set(this.node_pointer_identifier_for_node_for_enqueue());
+			this.set_pointer_to_the_node_for_dequeue(wait_free_queue_inner.head_of_queue_node_pointer());
+			this.set_dequeuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_dequeue();
 			
 			this.enqueue_request.deref().initialize();
 			
@@ -1813,7 +1838,7 @@ impl<Value> PerHyperThreadHandle<Value>
 		
 		if tail.is_null()
 		{
-			self.set_next(per_hyper_thread_handle_non_null);
+			self.set_next_in_singularly_linked_list_or_self_if_end_of_list(per_hyper_thread_handle_non_null);
 			if wait_free_queue_inner.try_to_change_tail(&mut tail, per_hyper_thread_handle_non_null)
 			{
 				return
@@ -1823,42 +1848,42 @@ impl<Value> PerHyperThreadHandle<Value>
 		let tail_non_null = tail.to_non_null();
 		let tail = tail_non_null.reference();
 		
-		let mut next = tail.next();
+		let mut next = tail.next_in_singularly_linked_list_or_self_if_end_of_list();
 		do_while!
 		{
 			do
 			{
-				self.set_next(next)
+				self.set_next_in_singularly_linked_list_or_self_if_end_of_list(next)
 			}
-			while !tail.next.CASra(&mut next, per_hyper_thread_handle_non_null)
+			while !tail.next_in_singularly_linked_list_or_self_if_end_of_list.CASra(&mut next, per_hyper_thread_handle_non_null)
 		}
 	}
 	
 	#[inline(always)]
 	fn initialize_next(&self)
 	{
-		self.set_next(NonNull::dangling())
+		self.set_next_in_singularly_linked_list_or_self_if_end_of_list(NonNull::dangling())
 	}
 	
 	#[inline(always)]
-	fn next(&self) -> NonNull<PerHyperThreadHandle<Value>>
+	fn next_in_singularly_linked_list_or_self_if_end_of_list(&self) -> NonNull<PerHyperThreadHandle<Value>>
 	{
-		self.next.get()
+		self.next_in_singularly_linked_list_or_self_if_end_of_list.get()
 	}
 	
 	#[inline(always)]
-	fn set_next(&self, next: NonNull<PerHyperThreadHandle<Value>>)
+	fn set_next_in_singularly_linked_list_or_self_if_end_of_list(&self, next: NonNull<PerHyperThreadHandle<Value>>)
 	{
-		self.next.set(next)
+		self.next_in_singularly_linked_list_or_self_if_end_of_list.set(next)
 	}
 	
 	#[inline(always)]
 	fn initialize_next_enqueuer_and_dequeuer_to_help(&self)
 	{
-		debug_assert_ne!(self.next().as_ptr(), NonNull::dangling().as_ptr(), "self.next should have been set to something other than dangling");
+		debug_assert_ne!(self.next_in_singularly_linked_list_or_self_if_end_of_list().as_ptr(), NonNull::dangling().as_ptr(), "self.next should have been set to something other than dangling");
 		
-		self.per_hyper_thread_handle_of_next_enqueuer_to_help.set(self.next());
-		self.per_hyper_thread_handle_of_next_dequeuer_to_help.set(self.next());
+		self.per_hyper_thread_handle_of_next_enqueuer_to_help.set(self.next_in_singularly_linked_list_or_self_if_end_of_list());
+		self.per_hyper_thread_handle_of_next_dequeuer_to_help.set(self.next_in_singularly_linked_list_or_self_if_end_of_list());
 	}
 	
 	#[inline(always)]
@@ -1910,6 +1935,36 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
+	fn pointer_to_the_node_for_dequeue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	{
+		self.pointer_to_the_node_for_dequeue_reference().find_cell(position_index, this)
+	}
+	
+	#[inline(always)]
+	fn pointer_to_the_node_for_dequeue(&self) -> NonNull<Node<Value>>
+	{
+		self.pointer_to_the_node_for_dequeue_reference().get()
+	}
+	
+	#[inline(always)]
+	fn pointer_to_the_node_for_dequeue_reference(&self) -> &volatile<NonNull<Node<Value>>>
+	{
+		&self.pointer_to_the_node_for_dequeue
+	}
+	
+	#[inline(always)]
+	fn set_pointer_to_the_node_for_dequeue(&self, pointer_to_the_node_for_dequeue: NonNull<Node<Value>>)
+	{
+		self.pointer_to_the_node_for_dequeue.set(pointer_to_the_node_for_dequeue)
+	}
+	
+	#[inline(always)]
+	fn node_pointer_identifier_for_node_for_dequeue(&self) -> NodePointerIdentifier
+	{
+		self.pointer_to_the_node_for_dequeue().reference().identifier().to_node_pointer_identifier()
+	}
+	
+	#[inline(always)]
 	fn set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue(&self)
 	{
 		self.enqueuer_node_pointer_identifier.set(self.node_pointer_identifier_for_node_for_enqueue())
@@ -1919,6 +1974,18 @@ impl<Value> PerHyperThreadHandle<Value>
 	fn enqueuer_node_pointer_identifier(&self) -> NodePointerIdentifier
 	{
 		self.enqueuer_node_pointer_identifier.get()
+	}
+	
+	#[inline(always)]
+	fn set_dequeuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_dequeue(&self)
+	{
+		self.dequeuer_node_pointer_identifier.set(self.node_pointer_identifier_for_node_for_dequeue())
+	}
+	
+	#[inline(always)]
+	fn dequeuer_node_pointer_identifier(&self) -> NodePointerIdentifier
+	{
+		self.dequeuer_node_pointer_identifier.get()
 	}
 	
 	#[inline(always)]
