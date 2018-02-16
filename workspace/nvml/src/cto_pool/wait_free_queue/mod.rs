@@ -828,7 +828,7 @@ impl<T> BottomAndTop for *mut T
 	const Bottom: Self = null_mut();
 	
 	// Works because no valid pointer can currently by 2^64 - 1 (most pointers are exhausted at 2^48 - 1).
-	const Top: Self = !0 as Self;
+	const Top: Self = ::std::usize::MAX as Self;
 	
 	#[inline(always)]
 	fn is_bottom(self) -> bool
