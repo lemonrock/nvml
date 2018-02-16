@@ -1,6 +1,7 @@
 <component name="ProjectDictionaryState">
   <dictionary name="raph">
     <words>
+      <w>alloca</w>
       <w>appendv</w>
       <w>bindgen</w>
       <w>calloc</w>
@@ -60,6 +61,7 @@
       <w>musl</w>
       <w>nbyte</w>
       <w>nonoverlapping</w>
+      <w>nprocs</w>
       <w>nvml</w>
       <w>philippas</w>
       <w>pmdk</w>
