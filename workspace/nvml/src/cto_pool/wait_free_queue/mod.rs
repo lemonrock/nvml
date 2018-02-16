@@ -942,15 +942,16 @@ impl<Value> Cell<Value>
 	}
 	
 	#[inline(always)]
-	fn relaxed_relaxed_compare_and_swap_value(&self, compare: &mut *mut Value, value_to_enqueue: NonNull<Value>) -> bool
+	fn relaxed_relaxed_compare_and_swap_value(&self, value_to_enqueue: NonNull<Value>) -> bool
 	{
-		self.value.relaxed_relaxed_compare_and_swap(compare, value_to_enqueue.as_ptr())
+		// <*mut Value>::Bottom works because the initial state of a Cell is zeroed (Node::new_node() does the equivalent of memset()).
+		self.value.relaxed_relaxed_compare_and_swap(&mut <*mut Value>::Bottom, value_to_enqueue.as_ptr())
 	}
 	
 	#[inline(always)]
-	fn sequentially_consistent_compare_and_swap_value(&self, compare: &mut *mut Value, value_to_enqueue: *mut Value) -> bool
+	fn sequentially_consistent_compare_and_swap_value(&self, compare: &mut *mut Value) -> bool
 	{
-		self.value.sequentially_consistent_compare_and_swap(compare, value_to_enqueue)
+		self.value.sequentially_consistent_compare_and_swap(compare, <*mut Value>::Top)
 	}
 	
 	#[inline(always)]
@@ -1341,8 +1342,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let cell = this.pointer_to_the_node_for_enqueue_find_cell(index_after_the_next_position_for_enqueue, this);
 		
-		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
-		if cell.relaxed_relaxed_compare_and_swap_value(&mut <*mut Value>::Bottom, value_to_enqueue)
+		if cell.relaxed_relaxed_compare_and_swap_value(value_to_enqueue)
 		{
 			true
 		}
@@ -1403,7 +1403,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		let mut value = cell.spin();
 		
-		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.sequentially_consistent_compare_and_swap_value(&mut value, <*mut Value>::Top) && value.is_not_top())
+		if (value.is_not_top() && value.is_not_bottom()) || (value.is_bottom() && !cell.sequentially_consistent_compare_and_swap_value(&mut value) && value.is_not_top())
 		{
 			return value
 		}
