@@ -9,6 +9,7 @@
 
 
 use IsNotNull;
+use ::std::cell::Cell as CopyCell;
 use ::std::cell::UnsafeCell;
 use ::std::intrinsics::atomic_load_acq;
 use ::std::intrinsics::atomic_store_rel;
@@ -21,7 +22,6 @@ use ::std::intrinsics::atomic_xadd_relaxed;
 use ::std::mem::uninitialized;
 use ::std::mem::size_of;
 use ::std::ops::Deref;
-use ::std::ops::DerefMut;
 use ::std::ptr::NonNull;
 use ::std::ptr::null_mut;
 use ::std::ptr::read;
@@ -237,7 +237,7 @@ impl<T> ToNonNull<T> for *mut T
 	}
 }
 
-trait SafeNonNull<T>
+trait ExtendedNonNull<T>
 {
 	#[inline(always)]
 	fn reference(&self) -> &T;
@@ -246,7 +246,7 @@ trait SafeNonNull<T>
 	fn mutable_reference(&mut self) -> &mut T;
 }
 
-impl<T> SafeNonNull<T> for NonNull<T>
+impl<T> ExtendedNonNull<T> for NonNull<T>
 {
 	#[inline(always)]
 	fn reference(&self) -> &T
@@ -276,15 +276,6 @@ impl<T> Deref for CacheAligned<T>
 	}
 }
 
-impl<T> DerefMut for CacheAligned<T>
-{
-	#[inline(always)]
-	fn deref_mut(&mut self) -> &mut Self::Target
-	{
-		&mut self.0
-	}
-}
-
 impl<T: Default> Default for CacheAligned<T>
 {
 	#[inline(always)]
@@ -301,20 +292,27 @@ impl<T> CacheAligned<T>
 	{
 		CacheAligned(value)
 	}
+	
+	#[inline(always)]
+	fn initialize(&mut self, value: T)
+	{
+		unsafe { write(&mut self.0, value) }
+	}
 }
 
-impl<T: Copy> CacheAligned<T>
+impl<T: Copy> CacheAligned<CopyCell<T>>
 {
 	#[inline(always)]
 	pub(crate) fn get(&self) -> T
 	{
-		self.0
+		self.0.get()
 	}
 	
 	#[inline(always)]
-	pub(crate) fn set(&mut self, value: T)
+	pub(crate) fn set(&self, value: T)
 	{
-		self.0 = value
+		let pointer = self.0.as_ptr();
+		unsafe { pointer.write(value) }
 	}
 }
 
@@ -327,9 +325,9 @@ impl<T: Copy> CacheAligned<volatile<T>>
 	}
 	
 	#[inline(always)]
-	pub(crate) fn set(&self, valueue: T)
+	pub(crate) fn set(&self, value: T)
 	{
-		self.0.set(valueue)
+		self.0.set(value)
 	}
 	
 	#[inline(always)]
@@ -691,21 +689,15 @@ struct Enqueuer<Value>
 	value: volatile<*mut Value>,
 }
 
-impl<Value> Default for Enqueuer<Value>
-{
-	#[inline(always)]
-	fn default() -> Self
-	{
-		Self
-		{
-			id: volatile::new(0),
-			value: volatile::new(<*mut Value>::Bottom),
-		}
-	}
-}
-
 impl<Value> Enqueuer<Value>
 {
+	#[inline(always)]
+	fn initialize(&self)
+	{
+		self.id.set(0);
+		self.value.set(<*mut Value>::Bottom);
+	}
+	
 	#[inline(always)]
 	fn as_ptr(&self) -> *mut Self
 	{
@@ -721,21 +713,15 @@ struct Dequeuer
 	idx: volatile<isize>,
 }
 
-impl Default for Dequeuer
-{
-	#[inline(always)]
-	fn default() -> Self
-	{
-		Self
-		{
-			id: volatile::new(0),
-			idx: volatile::new(-1),
-		}
-	}
-}
-
 impl Dequeuer
 {
+	#[inline(always)]
+	fn initialize(&self)
+	{
+		self.id.set(0);
+		self.idx.set(-1);
+	}
+	
 	#[inline(always)]
 	fn as_ptr(&self) -> *mut Self
 	{
@@ -911,7 +897,7 @@ impl NodeIdentifier
 struct Node<Value>
 {
 	next: CacheAligned<volatile<*mut Node<Value>>>,
-	identifier: CacheAligned<NodeIdentifier>,
+	identifier: CacheAligned<CopyCell<NodeIdentifier>>,
 	cells: Cells<Value>,
 }
 
@@ -925,7 +911,7 @@ impl<Value> Node<Value>
 		n
 	}
 	
-	fn find_cell<'node>(pointer_to_node: &'node volatile<NonNull<Node<Value>>>, i: isize, mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> &'node Cell<Value>
+	fn find_cell<'node>(pointer_to_node: &'node volatile<NonNull<Node<Value>>>, i: isize, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> &'node Cell<Value>
 	{
 		let mut current = pointer_to_node.get();
 		
@@ -937,13 +923,13 @@ impl<Value> Node<Value>
 			
 			if next.is_null()
 			{
-				let mut spare_node_to_use_for_next = per_hyper_thread_handle.mutable_reference().get_non_null_spare_node();
-				spare_node_to_use_for_next.mutable_reference().identifier.set(current_node_identifier.increment());
+				let spare_node_to_use_for_next = per_hyper_thread_handle.reference().get_non_null_spare_node();
+				spare_node_to_use_for_next.reference().identifier.set(current_node_identifier.increment());
 				
 				if current.reference().next.CASra(&mut next, spare_node_to_use_for_next.as_ptr())
 				{
 					next = spare_node_to_use_for_next.as_ptr();
-					per_hyper_thread_handle.mutable_reference().set_spare_to_null();
+					per_hyper_thread_handle.reference().set_spare_to_null();
 				}
 			}
 			
@@ -984,7 +970,7 @@ impl<Value> Node<Value>
 	}
 }
 
-trait NodeNonNull<T>: SafeNonNull<T>
+trait NodeNonNull<T>: ExtendedNonNull<T>
 {
 	#[inline(always)]
 	fn identifier(self) -> NodeIdentifier;
@@ -1036,27 +1022,29 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		let mut this = page_size_align_malloc();
 		
-		unsafe
 		{
-			let this: &mut Self = this.mutable_reference();
-			
+			let this: &Self = this.reference();
 			this.head_of_queue_node_identifier.set(NodeIdentifier::Initial);
 			this.pointer_to_the_head_node.set(Node::new_node().as_ptr());
 			this.Ei.set(1);
 			this.Di.set(1);
-			write(&mut this.maximum_garbage, maximum_garbage);
 			this.tail.set(null_mut());
+		}
+		
+		{
+			let this: &mut Self = this.mutable_reference();
+			unsafe { write(&mut this.maximum_garbage, maximum_garbage) };
 		}
 		
 		this
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>)
+	pub(crate) fn enqueue(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, value_to_enqueue: NonNull<Value>)
 	{
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier);
+		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.get());
 		
 		let mut id = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
@@ -1068,14 +1056,14 @@ impl<Value> WaitFreeQueueInner<Value>
 			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, id)
 		}
 		
-		per_hyper_thread_handle.mutable_reference().enqueuer_node_pointer_identifier = per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier();
+		per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier());
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null)
 	}
 	
 	#[inline(always)]
-	pub(crate) fn dequeue(&self, mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> *mut Value
+	pub(crate) fn dequeue(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> *mut Value
 	{
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier);
+		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.get());
 		
 		let mut dequeued_value;
 		let mut id = unsafe { uninitialized() };
@@ -1099,17 +1087,17 @@ impl<Value> WaitFreeQueueInner<Value>
 		let EMPTY: *mut Value = 0 as *mut Value;
 		if dequeued_value != EMPTY
 		{
-			self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle.reference().Dh);
-			per_hyper_thread_handle.mutable_reference().Dh = per_hyper_thread_handle.reference().Dh.reference().next.get();
+			self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle.reference().Dh.get());
+			per_hyper_thread_handle.reference().Dh.set(per_hyper_thread_handle.reference().Dh.get().reference().next.get());
 		}
 		
-		per_hyper_thread_handle.mutable_reference().dequeuer_node_pointer_identifier = per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier();
+		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier());
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.RELEASE(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare_is_null()
 		{
 			self.collect_node_garbage_after_dequeue(per_hyper_thread_handle);
-			per_hyper_thread_handle.mutable_reference().set_new_spare_node();
+			per_hyper_thread_handle.reference().set_new_spare_node();
 		}
 		
 		dequeued_value
@@ -1143,7 +1131,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		let value_to_enqueue = value_to_enqueue.as_ptr();
 		
-		let enqueuer = &per_hyper_thread_handle.reference().Er;
+		let enqueuer = per_hyper_thread_handle.reference().Er.deref();
 		enqueuer.value.set(value_to_enqueue);
 		enqueuer.id.RELEASE(id);
 
@@ -1181,7 +1169,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	
 	// Used only when dequeue() is called.
 	#[inline(always)]
-	fn enqueue_help(&self, mut per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, cell: &Cell<Value>, i: isize) -> *mut Value
+	fn enqueue_help(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, cell: &Cell<Value>, i: isize) -> *mut Value
 	{
 		#[inline(always)]
 		fn spin<Value>(value_holder: &volatile<*mut Value>) -> *mut Value
@@ -1218,10 +1206,10 @@ impl<Value> WaitFreeQueueInner<Value>
 				(pe.as_ptr(), pe.id.get())
 			};
 			
-			if per_hyper_thread_handle.reference().Ei != 0 && per_hyper_thread_handle.reference().Ei != id
+			if per_hyper_thread_handle.reference().Ei.get() != 0 && per_hyper_thread_handle.reference().Ei.get() != id
 			{
-				per_hyper_thread_handle.mutable_reference().Ei = 0;
-				per_hyper_thread_handle.mutable_reference().Eh.set(ph.reference().next.get());
+				per_hyper_thread_handle.reference().Ei.set(0);
+				per_hyper_thread_handle.reference().Eh.set(ph.reference().next.get());
 				
 				ph = per_hyper_thread_handle.reference().Eh.get();
 				let (pe2, id2) =
@@ -1235,11 +1223,11 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if id > 0 && id <= i && !cell.enqueuer.CAS(&mut enqueuer, pe)
 			{
-				per_hyper_thread_handle.mutable_reference().Ei = id
+				per_hyper_thread_handle.reference().Ei.set(id)
 			}
 			else
 			{
-				per_hyper_thread_handle.mutable_reference().Eh.set(ph.reference().next.get())
+				per_hyper_thread_handle.reference().Eh.set(ph.reference().next.get())
 			}
 			
 			if enqueuer.is_bottom() && cell.enqueuer.CAS(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
@@ -1312,7 +1300,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_slow_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: isize) -> *mut Value
 	{
-		let dequeuer = &per_hyper_thread_handle.reference().Dr;
+		let dequeuer = per_hyper_thread_handle.reference().Dr.deref();
 		dequeuer.id.RELEASE(id);
 		dequeuer.idx.RELEASE(id);
 		
@@ -1529,7 +1517,7 @@ struct PerHyperThreadHandle<Value>
 {
 	// Pointer to the next thread handle; a singularly linked list.
 	// Can pointer to self if it is the last element in the singularly linked list.
-	// The very first element in the list is pointed to be the value of `.tail` in WaitFreeQueueInner.
+	// The very first element in the list is pointed to by the value of `.tail` in WaitFreeQueueInner.
 	next: ExtendedNonNullAtomicPointer<PerHyperThreadHandle<Value>>,
 	
 	// Hazard pointer.
@@ -1537,11 +1525,11 @@ struct PerHyperThreadHandle<Value>
 	
 	pointer_to_the_node_for_enqueue: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.pointer_to_the_node_for_enqueue.id, assigned to self.hazard_node_pointer_identifier; a kind of cache of the original value of id.
-	enqueuer_node_pointer_identifier: NodePointerIdentifier,
+	enqueuer_node_pointer_identifier: CopyCell<NodePointerIdentifier>,
 	
 	pointer_to_the_node_for_dequeue: volatile<NonNull<Node<Value>>>,
 	// Obtained originally from self.pointer_to_the_node_for_dequeue.id, assigned to self.hazard_node_pointer_identifier; a kind of cache of the original value of id.
-	dequeuer_node_pointer_identifier: NodePointerIdentifier,
+	dequeuer_node_pointer_identifier: CopyCell<NodePointerIdentifier>,
 	
 	// Enqueue request.
 	Er: CacheAligned<Enqueuer<Value>>,
@@ -1550,15 +1538,15 @@ struct PerHyperThreadHandle<Value>
 	Dr: CacheAligned<Dequeuer>,
 	
 	// Handle of the next enqueuer to help.
-	Eh: CacheAligned<NonNull<PerHyperThreadHandle<Value>>>,
+	Eh: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
-	Ei: isize,
+	Ei: CopyCell<isize>,
 	
 	// Handle of the next dequeuer to help.
-	Dh: NonNull<PerHyperThreadHandle<Value>>,
+	Dh: CopyCell<NonNull<PerHyperThreadHandle<Value>>>,
 	
 	// Pointer to a spare node to use, to speedup adding a new node.
-	spare: CacheAligned<*mut Node<Value>>,
+	spare: CacheAligned<CopyCell<*mut Node<Value>>>,
 }
 
 impl<Value> PerHyperThreadHandle<Value>
@@ -1568,28 +1556,28 @@ impl<Value> PerHyperThreadHandle<Value>
 	{
 		let wait_free_queue_inner = queue.reference();
 		
-		let mut per_hyper_thread_handle_non_null = page_size_align_malloc();
-		unsafe
+		let per_hyper_thread_handle_non_null = page_size_align_malloc();
+		
 		{
 			let this_copy_borrow_checker_hack = per_hyper_thread_handle_non_null;
-			let this: &mut PerHyperThreadHandle<Value> = per_hyper_thread_handle_non_null.mutable_reference();
+			let this: &PerHyperThreadHandle<Value> = per_hyper_thread_handle_non_null.reference();
 			
 			// Seems to be unnecessary as this value is always overwritten.
-			// this.next.set(NonNull::dangling());
+			this.next.set(NonNull::dangling());
 			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
 			this.pointer_to_the_node_for_enqueue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
-			write(&mut this.enqueuer_node_pointer_identifier, this.pointer_to_the_node_for_enqueue.get().identifier().to_node_identifier());
+			this.enqueuer_node_pointer_identifier.set(this.pointer_to_the_node_for_enqueue.get().identifier().to_node_identifier());
 			
 			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
-			write(&mut this.dequeuer_node_pointer_identifier, this.pointer_to_the_node_for_dequeue.get().identifier().to_node_identifier());
+			this.dequeuer_node_pointer_identifier.set(this.pointer_to_the_node_for_dequeue.get().identifier().to_node_identifier());
 			
-			write_volatile(&mut this.Er, CacheAligned::default());
+			this.Er.deref().initialize();
 			
-			write_volatile(&mut this.Dr, CacheAligned::default());
+			this.Dr.deref().initialize();
 			
-			write(&mut this.Ei, 0);
+			this.Ei.set(0);
 			
 			this.set_new_spare_node();
 			
@@ -1598,10 +1586,10 @@ impl<Value> PerHyperThreadHandle<Value>
 			if tail.is_null()
 			{
 				this.next.set(this_copy_borrow_checker_hack);
-				if wait_free_queue_inner.tail.CASra(&mut tail, this)
+				if wait_free_queue_inner.tail.CASra(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
 				{
 					this.Eh.set(this.next.get());
-					write(&mut this.Dh, this.next.get());
+					this.Dh.set(this.next.get());
 					return this_copy_borrow_checker_hack
 				}
 				// NOTE: tail will have been updated by CASra; queue.tail will not longer have been null, hence tail will now no longer be null, so fall through to logic below.
@@ -1621,14 +1609,14 @@ impl<Value> PerHyperThreadHandle<Value>
 			}
 			
 			this.Eh.set(this.next.get());
-			write(&mut this.Dh, this.next.get());
+			this.Dh.set(this.next.get());
 		}
 		
 		per_hyper_thread_handle_non_null
 	}
 	
 	#[inline(always)]
-	fn get_non_null_spare_node(&mut self) -> NonNull<Node<Value>>
+	fn get_non_null_spare_node(&self) -> NonNull<Node<Value>>
 	{
 		let spare = self.spare();
 		if spare.is_not_null()
@@ -1649,7 +1637,7 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn set_new_spare_node(&mut self) -> NonNull<Node<Value>>
+	fn set_new_spare_node(&self) -> NonNull<Node<Value>>
 	{
 		let new_spare_node = Node::new_node();
 		self.spare.set(new_spare_node.as_ptr());
@@ -1657,7 +1645,7 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn set_spare_to_null(&mut self)
+	fn set_spare_to_null(&self)
 	{
 		debug_assert!(self.spare.get().is_not_null(), "trying to set spare to null but self.spare is already null");
 		
