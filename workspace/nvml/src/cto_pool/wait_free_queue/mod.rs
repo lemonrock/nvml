@@ -1383,10 +1383,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		let non_null_enqueuer = enqueuer.to_non_null();
 		let enqueuer = non_null_enqueuer.reference();
 		
-		let mut ei = enqueuer.enqueue_position_index.acquire();
-		let ev = enqueuer.value_to_enqueue.acquire();
+		let mut enqueue_position_index = enqueuer.enqueue_position_index.acquire();
+		let value_to_enqueue = enqueuer.value_to_enqueue.acquire();
 		
-		if ei > position_index
+		if enqueue_position_index > position_index
 		{
 			if cell.value.get().is_top() && self.enqueue_next_position_index() <= position_index
 			{
@@ -1395,13 +1395,13 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		else
 		{
-			if (ei > PositionIndex::Zero && enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut ei, -position_index)) || (ei == -position_index && cell.value.get().is_top())
+			if (enqueue_position_index > PositionIndex::Zero && enqueuer.enqueue_position_index.relaxed_relaxed_compare_and_swap(&mut enqueue_position_index, -position_index)) || (enqueue_position_index == -position_index && cell.value.get().is_top())
 			{
 				let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
 				while index_of_the_next_position_for_enqueue <= position_index && !self.relaxed_relaxed_compare_and_swap_enqueue_next_position_index(&mut index_of_the_next_position_for_enqueue, position_index.increment())
 				{
 				}
-				cell.value.set(ev);
+				cell.value.set(value_to_enqueue);
 			}
 		}
 		
