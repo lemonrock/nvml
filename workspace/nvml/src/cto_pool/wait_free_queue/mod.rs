@@ -1210,9 +1210,9 @@ impl<Value> WaitFreeQueueInner<Value>
 				(pe.as_ptr(), pe.id.get())
 			};
 			
-			if per_hyper_thread_handle.reference().Ei.get() != 0 && per_hyper_thread_handle.reference().Ei.get() != id
+			if per_hyper_thread_handle.reference().ei_is_not_initial_and_is_not_id(id)
 			{
-				per_hyper_thread_handle.reference().Ei.set(0);
+				per_hyper_thread_handle.reference().reset_ei();
 				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next.get());
 				
 				ph = per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.get();
@@ -1227,7 +1227,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if id > 0 && id <= i && !cell.enqueuer.CAS(&mut enqueuer, pe)
 			{
-				per_hyper_thread_handle.reference().Ei.set(id)
+				per_hyper_thread_handle.reference().set_ei(id)
 			}
 			else
 			{
@@ -1550,6 +1550,8 @@ struct PerHyperThreadHandle<Value>
 
 impl<Value> PerHyperThreadHandle<Value>
 {
+	const InitialEi: isize = 0;
+	
 	// A combination of `thread_init` and `queue_init`.
 	pub(crate) fn new(queue: NonNull<WaitFreeQueueInner<Value>>) -> NonNull<Self>
 	{
@@ -1576,7 +1578,7 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.dequeue_request.deref().initialize();
 			
-			this.Ei.set(0);
+			this.reset_ei();
 			
 			this.initialize_spare_node();
 			
@@ -1612,6 +1614,25 @@ impl<Value> PerHyperThreadHandle<Value>
 		}
 		
 		per_hyper_thread_handle_non_null
+	}
+	
+	#[inline(always)]
+	fn ei_is_not_initial_and_is_not_id(&self, id: isize) -> bool
+	{
+		let ei = self.Ei.get();
+		ei != Self::InitialEi && ei != id
+	}
+	
+	#[inline(always)]
+	fn set_ei(&self, ei: isize)
+	{
+		self.Ei.set(ei);
+	}
+	
+	#[inline(always)]
+	fn reset_ei(&self)
+	{
+		self.Ei.set(Self::InitialEi)
 	}
 	
 	#[inline(always)]
