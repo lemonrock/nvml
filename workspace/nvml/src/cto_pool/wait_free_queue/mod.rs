@@ -899,7 +899,7 @@ impl NodeIdentifier
 	const NoHeadOfQueue: Self = NodeIdentifier(-1);
 	
 	#[inline(always)]
-	fn to_node_identifier(self) -> NodePointerIdentifier
+	fn to_node_pointer_identifier(self) -> NodePointerIdentifier
 	{
 		NodePointerIdentifier::from_node_identifier(self)
 	}
@@ -1090,7 +1090,9 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.get());
+		let this = per_hyper_thread_handle.reference();
+		
+		this.hazard_node_pointer_identifier.set(this.enqueuer_node_pointer_identifier());
 		
 		let mut enqueue_index = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
@@ -1102,8 +1104,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			self.enqueue_slow_path(per_hyper_thread_handle, value_to_enqueue, enqueue_index)
 		}
 		
-		per_hyper_thread_handle.reference().enqueuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue.get().reference().identifier.get().to_node_identifier());
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
+		this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
+		this.hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
 	}
 	
 	#[inline(always)]
@@ -1137,7 +1139,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.set(per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.get().reference().next());
 		}
 		
-		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier());
+		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_pointer_identifier());
 		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.release(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare_is_null()
@@ -1156,7 +1158,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_increment();
 		
-		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
+		let cell = Node::find_cell(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference(), index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
@@ -1181,7 +1183,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		enqueuer.value.set(value_to_enqueue);
 		enqueuer.id.release(enqueue_index);
 
-		let tail = &per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue;
+		let tail = per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference();
 		let mut index_after_the_next_position_for_enqueue;
 		let mut cell;
 		
@@ -1202,7 +1204,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		enqueue_index = -enqueuer.id.get();
-		cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, enqueue_index, per_hyper_thread_handle);
+		cell = Node::find_cell(per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue_reference(), enqueue_index, per_hyper_thread_handle);
 		if enqueue_index > index_after_the_next_position_for_enqueue
 		{
 			let mut index_of_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.get();
@@ -1573,10 +1575,10 @@ impl NodePointerIdentifier
 	#[inline(always)]
 	fn check<Value>(self, mut current: NonNull<Node<Value>>, old: *mut Node<Value>) -> NonNull<Node<Value>>
 	{
-		if self < current.identifier().to_node_identifier()
+		if self < current.identifier().to_node_pointer_identifier()
 		{
 			let mut node = old.to_non_null();
-			while node.identifier().to_node_identifier() < self
+			while node.identifier().to_node_pointer_identifier() < self
 			{
 				node = node.reference().next.get().to_non_null();
 			}
@@ -1638,11 +1640,11 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
-			this.pointer_to_the_node_for_enqueue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
-			this.enqueuer_node_pointer_identifier.set(this.pointer_to_the_node_for_enqueue.get().identifier().to_node_identifier());
+			this.set_pointer_to_the_node_for_enqueue(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
+			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
 			
 			this.pointer_to_the_node_for_dequeue.set(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
-			this.dequeuer_node_pointer_identifier.set(this.pointer_to_the_node_for_dequeue.get().identifier().to_node_identifier());
+			this.dequeuer_node_pointer_identifier.set(this.node_pointer_identifier_for_node_for_enqueue());
 			
 			this.enqueue_request.deref().initialize();
 			
@@ -1713,6 +1715,36 @@ impl<Value> PerHyperThreadHandle<Value>
 		
 		self.per_hyper_thread_handle_of_next_enqueuer_to_help.set(self.next());
 		self.per_hyper_thread_handle_of_next_dequeuer_to_help.set(self.next());
+	}
+	
+	#[inline(always)]
+	fn pointer_to_the_node_for_enqueue_reference(&self) -> &volatile<NonNull<Node<Value>>>
+	{
+		&self.pointer_to_the_node_for_enqueue
+	}
+	
+	#[inline(always)]
+	fn set_pointer_to_the_node_for_enqueue(&self, pointer_to_the_node_for_enqueue: NonNull<Node<Value>>)
+	{
+		self.pointer_to_the_node_for_enqueue.set(pointer_to_the_node_for_enqueue)
+	}
+	
+	#[inline(always)]
+	fn node_pointer_identifier_for_node_for_enqueue(&self) -> NodePointerIdentifier
+	{
+		self.pointer_to_the_node_for_enqueue.get().identifier().to_node_pointer_identifier()
+	}
+	
+	#[inline(always)]
+	fn set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue(&self)
+	{
+		self.enqueuer_node_pointer_identifier.set(self.node_pointer_identifier_for_node_for_enqueue())
+	}
+	
+	#[inline(always)]
+	fn enqueuer_node_pointer_identifier(&self) -> NodePointerIdentifier
+	{
+		self.enqueuer_node_pointer_identifier.get()
 	}
 	
 	#[inline(always)]
