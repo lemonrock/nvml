@@ -1092,7 +1092,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		if dequeued_value != EMPTY
 		{
 			self.dequeue_help(per_hyper_thread_handle, per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.get());
-			per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.set(per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.get().reference().next.get());
+			per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.set(per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_dequeuer_to_help.get().reference().next());
 		}
 		
 		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_identifier());
@@ -1213,7 +1213,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			if per_hyper_thread_handle.reference().ei_is_not_initial_and_is_not_id(id)
 			{
 				per_hyper_thread_handle.reference().reset_ei();
-				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next.get());
+				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next());
 				
 				ph = per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.get();
 				let (pe2, id2) =
@@ -1231,7 +1231,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			}
 			else
 			{
-				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next.get())
+				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next())
 			}
 			
 			if enqueuer.is_bottom() && cell.enqueuer.CAS(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
@@ -1560,11 +1560,10 @@ impl<Value> PerHyperThreadHandle<Value>
 		let per_hyper_thread_handle_non_null = page_size_align_malloc();
 		
 		{
-			let this_copy_borrow_checker_hack = per_hyper_thread_handle_non_null;
 			let this: &PerHyperThreadHandle<Value> = per_hyper_thread_handle_non_null.reference();
 			
-			// Seems to be unnecessary as this value is always overwritten.
-			this.next.set(NonNull::dangling());
+			// Seems to be unnecessary as this value is always overwritten by `self.add_to_singularly_linked_list_of_per_hyper_thread_handles()`
+			this.initialize_next();
 			
 			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
 			
@@ -1582,38 +1581,68 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.initialize_spare_node();
 			
-			let mut tail = wait_free_queue_inner.tail.get();
+			this.add_to_singularly_linked_list_of_per_hyper_thread_handles(wait_free_queue_inner, per_hyper_thread_handle_non_null);
 			
-			if tail.is_null()
-			{
-				this.next.set(this_copy_borrow_checker_hack);
-				if wait_free_queue_inner.tail.CASra(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
-				{
-					this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(this.next.get());
-					this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(this.next.get());
-					return this_copy_borrow_checker_hack
-				}
-				// NOTE: tail will have been updated by CASra; queue.tail will not longer have been null, hence tail will now no longer be null, so fall through to logic below.
-			}
-			let tail_non_null = tail.to_non_null();
-			
-			let tail = tail_non_null.reference();
-			let mut next = tail.next.get();
-			
-			do_while!
-			{
-				do
-				{
-					this.next.set(next)
-				}
-				while !tail.next.CASra(&mut next, this_copy_borrow_checker_hack)
-			}
-			
-			this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(this.next.get());
-			this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(this.next.get());
+			this.initialize_next_enqueuer_and_dequeuer_to_help();
 		}
 		
 		per_hyper_thread_handle_non_null
+	}
+	
+	#[inline(always)]
+	fn add_to_singularly_linked_list_of_per_hyper_thread_handles(&self, wait_free_queue_inner: &WaitFreeQueueInner<Value>, per_hyper_thread_handle_non_null: NonNull<Self>)
+	{
+		let mut tail = wait_free_queue_inner.tail.get();
+		
+		if tail.is_null()
+		{
+			self.set_next(per_hyper_thread_handle_non_null);
+			if wait_free_queue_inner.tail.CASra(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
+			{
+				return
+			}
+			// NOTE: tail will have been updated by CASra; queue.tail will not longer have been null, hence tail will now no longer be null, so fall through to logic below.
+		}
+		let tail_non_null = tail.to_non_null();
+		
+		let tail = tail_non_null.reference();
+		let mut next = tail.next();
+		
+		do_while!
+		{
+			do
+			{
+				self.set_next(next)
+			}
+			while !tail.next.CASra(&mut next, per_hyper_thread_handle_non_null)
+		}
+	}
+	
+	#[inline(always)]
+	fn initialize_next(&self)
+	{
+		self.set_next(NonNull::dangling())
+	}
+	
+	#[inline(always)]
+	fn next(&self) -> NonNull<PerHyperThreadHandle<Value>>
+	{
+		self.next.get()
+	}
+	
+	#[inline(always)]
+	fn set_next(&self, next: NonNull<PerHyperThreadHandle<Value>>)
+	{
+		self.next.set(next)
+	}
+	
+	#[inline(always)]
+	fn initialize_next_enqueuer_and_dequeuer_to_help(&self)
+	{
+		debug_assert_ne!(self.next().as_ptr(), NonNull::dangling().as_ptr(), "self.next should have been set to something other than dangling");
+		
+		self.per_hyper_thread_handle_of_next_enqueuer_to_help.set(self.next());
+		self.per_hyper_thread_handle_of_next_dequeuer_to_help.set(self.next());
 	}
 	
 	#[inline(always)]
