@@ -1199,7 +1199,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if enqueuer.is_bottom()
 		{
-			let mut ph = per_hyper_thread_handle.reference().Eh.get();
+			let mut ph = per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.get();
 			let (mut pe, mut id) =
 			{
 				let pe = ph.reference().enqueue_request.deref();
@@ -1209,9 +1209,9 @@ impl<Value> WaitFreeQueueInner<Value>
 			if per_hyper_thread_handle.reference().Ei.get() != 0 && per_hyper_thread_handle.reference().Ei.get() != id
 			{
 				per_hyper_thread_handle.reference().Ei.set(0);
-				per_hyper_thread_handle.reference().Eh.set(ph.reference().next.get());
+				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next.get());
 				
-				ph = per_hyper_thread_handle.reference().Eh.get();
+				ph = per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.get();
 				let (pe2, id2) =
 				{
 					let pe = ph.reference().enqueue_request.deref();
@@ -1227,7 +1227,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			}
 			else
 			{
-				per_hyper_thread_handle.reference().Eh.set(ph.reference().next.get())
+				per_hyper_thread_handle.reference().per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next.get())
 			}
 			
 			if enqueuer.is_bottom() && cell.enqueuer.CAS(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
@@ -1532,8 +1532,7 @@ struct PerHyperThreadHandle<Value>
 	
 	dequeue_request: CacheAligned<Dequeuer>,
 	
-	// Handle of the next enqueuer to help.
-	Eh: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
+	per_hyper_thread_handle_of_next_enqueuer_to_help: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
 	Ei: CopyCell<isize>,
 	
@@ -1582,7 +1581,7 @@ impl<Value> PerHyperThreadHandle<Value>
 				this.next.set(this_copy_borrow_checker_hack);
 				if wait_free_queue_inner.tail.CASra(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
 				{
-					this.Eh.set(this.next.get());
+					this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(this.next.get());
 					this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(this.next.get());
 					return this_copy_borrow_checker_hack
 				}
@@ -1602,7 +1601,7 @@ impl<Value> PerHyperThreadHandle<Value>
 				while !tail.next.CASra(&mut next, this_copy_borrow_checker_hack)
 			}
 			
-			this.Eh.set(this.next.get());
+			this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(this.next.get());
 			this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(this.next.get());
 		}
 		
