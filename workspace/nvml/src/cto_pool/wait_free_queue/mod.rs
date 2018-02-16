@@ -824,8 +824,8 @@ trait BottomAndTop
 
 impl<T> BottomAndTop for *mut T
 {
-	// Works because the initial state of a Node or Cell is zeroed
-	const Bottom: Self = 0 as Self;
+	// Works because the initial state of a Node or Cell is zeroed.
+	const Bottom: Self = null_mut();
 	
 	// Works because no valid pointer can currently by 2^64 - 1 (most pointers are exhausted at 2^48 - 1).
 	const Top: Self = !0 as Self;
@@ -833,13 +833,13 @@ impl<T> BottomAndTop for *mut T
 	#[inline(always)]
 	fn is_bottom(self) -> bool
 	{
-		self == Self::Bottom
+		self.is_null()
 	}
 	
 	#[inline(always)]
 	fn is_not_bottom(self) -> bool
 	{
-		self != Self::Bottom
+		self.is_not_null()
 	}
 	
 	#[inline(always)]
