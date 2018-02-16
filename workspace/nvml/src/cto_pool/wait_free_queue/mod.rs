@@ -477,6 +477,12 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	{
 		self.0.acquire_relaxed_compare_and_swap(compare, value)
 	}
+	
+	#[inline(always)]
+	pub(crate) fn acquire_relaxed_compare_and_swap_do_not_mutate_compare(&self, compare: T, value: T) -> bool
+	{
+		self.0.acquire_relaxed_compare_and_swap_do_not_mutate_compare(compare, value)
+	}
 }
 
 impl DoubleCacheAligned<volatile<isize>>
@@ -650,6 +656,17 @@ impl<T: Copy> volatile<T>
 		{
 			*compare = value;
 		}
+		ok
+	}
+	
+	/// An atomic compare-and-swap that ensures acquire semantic when succeed or relaxed semantic when failed.
+	/// true if successful.
+	/// false if failed.
+	/// compare is left unchanged.
+	#[inline(always)]
+	pub(crate) fn acquire_relaxed_compare_and_swap_do_not_mutate_compare(&self, compare: T, value: T) -> bool
+	{
+		let (value, ok) = unsafe { atomic_cxchg_acq_failrelaxed(self.0.get(), compare, value) };
 		ok
 	}
 }
@@ -1487,9 +1504,9 @@ impl<Value> WaitFreeQueueInner<Value>
 	}
 	
 	#[inline(always)]
-	fn return_true_if_could_not_grab_head_of_queue_node_identifier(&self, mut old_head_of_queue_node_identifier: NodeIdentifier) -> bool
+	fn return_true_if_could_not_grab_head_of_queue_node_identifier(&self, old_head_of_queue_node_identifier: NodeIdentifier) -> bool
 	{
-		!self.head_of_queue_node_identifier.acquire_relaxed_compare_and_swap(&mut old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
+		!self.head_of_queue_node_identifier.acquire_relaxed_compare_and_swap_do_not_mutate_compare(old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
 	}
 	
 	#[inline(always)]
