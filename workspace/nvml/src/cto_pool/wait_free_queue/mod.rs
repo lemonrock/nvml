@@ -1339,9 +1339,9 @@ impl<Value> WaitFreeQueueInner<Value>
 				(pe.as_ptr(), pe.enqueue_position_index.get())
 			};
 			
-			if this.ei_is_not_initial_and_is_not_id(id)
+			if this.enqueue_next_position_index_is_not_initial_and_is_not_id(id)
 			{
-				this.reset_ei();
+				this.reset_enqueue_next_position_index();
 				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next());
 				
 				ph = this.per_hyper_thread_handle_of_next_enqueuer_to_help.get();
@@ -1356,7 +1356,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if id > PositionIndex::Zero && id <= position_index && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
 			{
-				this.set_ei(id)
+				this.set_enqueue_next_position_index(id)
 			}
 			else
 			{
@@ -1794,7 +1794,7 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.dequeue_request.deref().initialize();
 			
-			this.reset_ei();
+			this.reset_enqueue_next_position_index();
 			
 			this.initialize_spare_node();
 			
@@ -1922,20 +1922,20 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn ei_is_not_initial_and_is_not_id(&self, id: PositionIndex) -> bool
+	fn enqueue_next_position_index_is_not_initial_and_is_not_id(&self, id: PositionIndex) -> bool
 	{
-		let ei = self.enqueue_next_position_index.get();
-		ei != PositionIndex::Zero && ei != id
+		let enqueue_next_position_index = self.enqueue_next_position_index.get();
+		enqueue_next_position_index != PositionIndex::Zero && enqueue_next_position_index != id
 	}
 	
 	#[inline(always)]
-	fn set_ei(&self, ei: PositionIndex)
+	fn set_enqueue_next_position_index(&self, enqueue_next_position_index: PositionIndex)
 	{
-		self.enqueue_next_position_index.set(ei);
+		self.enqueue_next_position_index.set(enqueue_next_position_index);
 	}
 	
 	#[inline(always)]
-	fn reset_ei(&self)
+	fn reset_enqueue_next_position_index(&self)
 	{
 		self.enqueue_next_position_index.set(PositionIndex::Zero)
 	}
