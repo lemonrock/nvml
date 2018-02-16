@@ -479,6 +479,23 @@ impl<T: Copy> DoubleCacheAligned<volatile<T>>
 	}
 }
 
+impl DoubleCacheAligned<volatile<isize>>
+{
+	const Increment: isize = 1;
+	
+	#[inline(always)]
+	pub(crate) fn relaxed_fetch_and_increment(&self) -> isize
+	{
+		self.relaxed_fetch_and_add(Self::Increment)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn sequentially_consistent_fetch_and_increment(&self) -> isize
+	{
+		self.sequentially_consistent_fetch_and_add(Self::Increment)
+	}
+}
+
 #[derive(Debug)]
 pub(crate) struct volatile<T: Copy>(UnsafeCell<T>);
 
@@ -1126,7 +1143,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	{
 		debug_assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
-		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_add(1);
+		let index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.sequentially_consistent_fetch_and_increment();
 		
 		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_enqueue, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 		
@@ -1159,7 +1176,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		'do_while: while
 		{
-			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.relaxed_fetch_and_add(1);
+			index_after_the_next_position_for_enqueue = self.index_of_the_next_position_for_enqueue.relaxed_fetch_and_increment();
 			cell = Node::find_cell(tail, index_after_the_next_position_for_enqueue, per_hyper_thread_handle);
 			
 			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
@@ -1296,7 +1313,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn dequeue_fast_path(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>, id: &mut isize) -> *mut Value
 	{
-		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_add(1);
+		let index_after_the_next_position_for_dequeue = self.index_of_the_next_position_for_dequeue.sequentially_consistent_fetch_and_increment();
 		let cell = Node::find_cell(&per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue, index_after_the_next_position_for_dequeue, per_hyper_thread_handle);
 		let dequeued_value = self.enqueue_help(per_hyper_thread_handle, cell, index_after_the_next_position_for_dequeue);
 		
