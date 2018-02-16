@@ -1436,7 +1436,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	#[inline(always)]
 	fn collect_node_garbage_after_dequeue(&self, our_per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>)
 	{
-		let mut old_head_of_queue_node_identifier = self.head_of_queue_node_identifier.acquire();
+		let old_head_of_queue_node_identifier = self.acquire_head_of_queue_node_identifier();
 		
 		if old_head_of_queue_node_identifier.there_is_no_garbage_to_collect()
 		{
@@ -1451,13 +1451,14 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		// Try to 'grab a lock' on the garbage nodes to collect.
-		if !self.head_of_queue_node_identifier.acquire_relaxed_compare_and_swap(&mut old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
+		// This isn't a lock as such, but sets a special sentinel value (`NodeIdentifier::NoHeadOfQueue`) that tells other threads there is no garbage to collect (see `old_head_of_queue_node_identifier.there_is_no_garbage_to_collect()` above).
+		if self.return_true_if_could_not_grab_head_of_queue_node_identifier(old_head_of_queue_node_identifier)
 		{
-			// Did not grab lock because someone else did - and they'll do the clean up.
+			// Did not grab lock because someone else did - and they'll collect the node garbage.
 			return;
 		}
-		// 'Lock' is released when `self.head_of_queue_node_identifier.release()` is called below.
-		// Once the 'lock' is released all garbage Nodes are free'd.
+		// Once the 'lock' (sentinel) is released all garbage Nodes are free'd.
+		// The 'lock' (sentinel) is released when `self.release_head_of_queue_node_identifier()` is called below.
 		
 		let old = self.pointer_to_the_head_node.get();
 		
@@ -1467,16 +1468,34 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		if new_head_of_queue_node_identifier <= old_head_of_queue_node_identifier
 		{
-			self.head_of_queue_node_identifier.release(old_head_of_queue_node_identifier);
+			self.release_head_of_queue_node_identifier(old_head_of_queue_node_identifier);
 		}
 		else
 		{
 			self.pointer_to_the_head_node.set(new.as_ptr());
 			
-			self.head_of_queue_node_identifier.release(new_head_of_queue_node_identifier);
+			self.release_head_of_queue_node_identifier(new_head_of_queue_node_identifier);
 			
 			Node::free_garbage_nodes(old, new)
 		}
+	}
+	
+	#[inline(always)]
+	fn acquire_head_of_queue_node_identifier(&self) -> NodeIdentifier
+	{
+		self.head_of_queue_node_identifier.acquire()
+	}
+	
+	#[inline(always)]
+	fn return_true_if_could_not_grab_head_of_queue_node_identifier(&self, mut old_head_of_queue_node_identifier: NodeIdentifier) -> bool
+	{
+		!self.head_of_queue_node_identifier.acquire_relaxed_compare_and_swap(&mut old_head_of_queue_node_identifier, NodeIdentifier::NoHeadOfQueue)
+	}
+	
+	#[inline(always)]
+	fn release_head_of_queue_node_identifier(&self, node_identifier: NodeIdentifier)
+	{
+		self.head_of_queue_node_identifier.release(node_identifier)
 	}
 	
 	#[inline(always)]
