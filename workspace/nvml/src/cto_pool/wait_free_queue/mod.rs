@@ -1268,7 +1268,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let index_after_the_next_position_for_enqueue = self.sequentially_consistent_fetch_and_increment_enqueue_next_position_index();
 		
-		let cell = this.pointer_to_the_node_for_enqueue_reference().find_cell(index_after_the_next_position_for_enqueue, this);
+		let cell = this.pointer_to_the_node_for_enqueue_find_cell(index_after_the_next_position_for_enqueue, this);
 		
 		// Works because the initial state of a Cell is zeroed (Node::new_node() does write_bytes).
 		let mut compare_to_value = <*mut Value>::Bottom;
@@ -1292,8 +1292,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		let enqueuer: &Enqueuer<Value> = this.enqueue_request.deref();
 		enqueuer.value_to_enqueue.set(value_to_enqueue);
 		enqueuer.enqueue_position_index.release(enqueue_position_index);
-
-		let tail = this.pointer_to_the_node_for_enqueue_reference();
+		
+		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
+		// NOTE: `tail` is internally mutable, and calls to `find_cell` will mutate it.
+		let tail = this.pointer_to_the_node_for_enqueue_reference().get_copy();
 		let mut index_after_the_next_position_for_enqueue;
 		let mut cell;
 		
@@ -1314,7 +1316,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		enqueue_position_index = -enqueuer.enqueue_position_index.get();
-		cell = this.pointer_to_the_node_for_enqueue_reference().find_cell(enqueue_position_index, this);
+		cell = this.pointer_to_the_node_for_enqueue_find_cell(enqueue_position_index, this);
 		if enqueue_position_index > index_after_the_next_position_for_enqueue
 		{
 			let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
@@ -1490,11 +1492,10 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
-		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
-		let Dp = other.pointer_to_the_node_for_dequeue.get_copy();
+		// NOTE: `other_pointer_to_the_node_for_dequeue` is internally mutable, and calls to `find_cell` will mutate it.
+		let other_pointer_to_the_node_for_dequeue = other.pointer_to_the_node_for_dequeue.get_copy();
 		
 		this.switch_hazard_pointer_with_critical_section(other.hazard_node_pointer_identifier());
-		sequentially_consistent_fence();
 		
 		dequeue_position_index_x = dequeuer.dequeue_position_index_x.get();
 		
@@ -1504,8 +1505,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		loop
 		{
-			// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
-			let h = Dp.get_copy();
+			// NOTE: `h` is internally mutable, and calls to `find_cell` will mutate it.
+			let h = other_pointer_to_the_node_for_dequeue.get_copy();
 			
 			while dequeue_position_index_x == old_dequeue_position_index && new_dequeue_position_index.is_zero()
 			{
@@ -1547,7 +1548,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				break;
 			}
 			
-			let cell = Dp.find_cell(dequeue_position_index_x, this);
+			let cell = other_pointer_to_the_node_for_dequeue.find_cell(dequeue_position_index_x, this);
 			let mut cd = <*mut Dequeuer>::Bottom;
 			if cell.value.get().is_top() || cell.dequeuer.relaxed_relaxed_compare_and_swap(&mut cd, dequeuer.as_ptr()) || cd == dequeuer.as_ptr()
 			{
@@ -1767,20 +1768,27 @@ struct PerHyperThreadHandle<Value>
 	// Pointer to the next thread handle; a singularly linked list.
 	// Can pointer to self if it is the last element in the singularly linked list.
 	// The very first element in the list is pointed to by the value of `.tail` in WaitFreeQueueInner.
+	// Was `next`.
 	next_in_singularly_linked_list_or_self_if_end_of_list: ExtendedNonNullAtomicPointer<PerHyperThreadHandle<Value>>,
 	
+	// Was `hzd_node_id`.
 	hazard_node_pointer_identifier: volatile<NodePointerIdentifier>,
 	
+	// Was `Ep` and `enq_node_id`.
 	pointer_to_the_node_for_enqueue: volatile<NonNull<Node<Value>>>,
 	enqueuer_node_pointer_identifier: CopyCell<NodePointerIdentifier>,
 	
+	// Was `Dp` and `deq_node_id`.
 	pointer_to_the_node_for_dequeue: volatile<NonNull<Node<Value>>>,
 	dequeuer_node_pointer_identifier: CopyCell<NodePointerIdentifier>,
 	
+	// Was `Er`.
 	enqueue_request: CacheAligned<Enqueuer<Value>>,
 	
+	// Was `Dr`.
 	dequeue_request: CacheAligned<Dequeuer>,
 	
+	// Was `Eh`.
 	per_hyper_thread_handle_of_next_enqueuer_to_help: CacheAligned<CopyCell<NonNull<PerHyperThreadHandle<Value>>>>,
 	
 	// Use only by `enqueue_help()`.
@@ -1788,9 +1796,11 @@ struct PerHyperThreadHandle<Value>
 	// Was `Ei`.
 	enqueue_next_position_index: CopyCell<PositionIndex>,
 	
+	// Was `Dh`.
 	per_hyper_thread_handle_of_next_dequeuer_to_help: CopyCell<NonNull<PerHyperThreadHandle<Value>>>,
 	
 	// Pointer to a spare node to use, to speedup adding a new node.
+	// When null after a dequeue, used as a signal to collect garbage.
 	spare: CacheAligned<CopyCell<*mut Node<Value>>>,
 }
 
@@ -1905,7 +1915,10 @@ impl<Value> PerHyperThreadHandle<Value>
 	fn switch_hazard_pointer_with_critical_section(&self, hazard_node_pointer_identifier: NodePointerIdentifier)
 	{
 		debug_assert_ne!(self.hazard_node_pointer_identifier(), NodePointerIdentifier::Null, "Hazard Pointer not already taken");
-		self.set_hazard_node_pointer_identifier(hazard_node_pointer_identifier)
+		self.set_hazard_node_pointer_identifier(hazard_node_pointer_identifier);
+		
+		// Replicates a sequentially-consistent store in the the line above (`set_hazard_node_pointer_identifier()`)
+		sequentially_consistent_fence()
 	}
 	
 	#[inline(always)]
@@ -1948,6 +1961,12 @@ impl<Value> PerHyperThreadHandle<Value>
 	fn node_pointer_identifier_for_node_for_enqueue(&self) -> NodePointerIdentifier
 	{
 		self.pointer_to_the_node_for_enqueue.get().reference().identifier().to_node_pointer_identifier()
+	}
+	
+	#[inline(always)]
+	fn pointer_to_the_node_for_enqueue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	{
+		self.pointer_to_the_node_for_enqueue_reference().find_cell(position_index, this)
 	}
 	
 	#[inline(always)]
