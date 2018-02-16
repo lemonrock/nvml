@@ -909,19 +909,37 @@ impl Dequeuer
 	}
 }
 
-// `pad` is to make this structure 64 bytes, ie one cache line.
 // This structure is always initialized zeroed when creating a new node, ie all pointers are initially `null_mut()`.
 #[repr(C, align(64))]
 struct Cell<Value>
 {
+	// Was `val`.
 	value: volatile<*mut Value>,
+	
+	// Was `enq`.
 	enqueuer: volatile<*mut Enqueuer<Value>>,
+	
+	// Was `deq`.
 	dequeuer: volatile<*mut Dequeuer>,
+	
+	// `pad` is to make this structure 64 bytes, ie one cache line.
+	// It does not seem particularly necessary, because the Cell struct is `repr(align(64))`.
 	_pad: [*mut (); 5],
 }
 
 impl<Value> Cell<Value>
 {
+	#[inline(always)]
+	fn enqueuer(&self) -> *mut Enqueuer<Value>
+	{
+		self.enqueuer.get()
+	}
+	
+	#[inline(always)]
+	fn relaxed_relaxed_compare_and_swap_enqueuer(&self, compare: &mut *mut Enqueuer<Value>, value: *mut Enqueuer<Value>) -> bool
+	{
+		self.enqueuer.relaxed_relaxed_compare_and_swap(compare, value)
+	}
 }
 
 // 1022
@@ -1355,7 +1373,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			return value;
 		}
 		
-		let mut enqueuer = cell.enqueuer.get();
+		let mut enqueuer = cell.enqueuer();
 		
 		if enqueuer.is_bottom()
 		{
@@ -1381,7 +1399,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				id = id2;
 			}
 			
-			if id > PositionIndex::Zero && id <= position_index && !cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, pe)
+			if id > PositionIndex::Zero && id <= position_index && !cell.relaxed_relaxed_compare_and_swap_enqueuer(&mut enqueuer, pe)
 			{
 				this.set_enqueue_next_position_index(id)
 			}
@@ -1390,7 +1408,7 @@ impl<Value> WaitFreeQueueInner<Value>
 				this.per_hyper_thread_handle_of_next_enqueuer_to_help.set(ph.reference().next_in_singularly_linked_list_or_self_if_end_of_list())
 			}
 			
-			if enqueuer.is_bottom() && cell.enqueuer.relaxed_relaxed_compare_and_swap(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
+			if enqueuer.is_bottom() && cell.relaxed_relaxed_compare_and_swap_enqueuer(&mut enqueuer, <*mut Enqueuer<Value>>::Top)
 			{
 				enqueuer = <*mut Enqueuer<Value>>::Top
 			}
