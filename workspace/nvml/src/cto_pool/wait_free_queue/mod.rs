@@ -1047,12 +1047,6 @@ impl<Value> WaitFreeQueueInner<Value>
 	
 	const InitialNextPositionIndex: isize = 1;
 	
-	#[inline(always)]
-	fn tail(&self) -> *mut PerHyperThreadHandle<Value>
-	{
-		self.tail.get()
-	}
-	
 	pub(crate) fn new(maximum_garbage: MaximumGarbage) -> NonNull<Self>
 	{
 		let mut this = page_size_align_malloc();
@@ -1484,6 +1478,18 @@ impl<Value> WaitFreeQueueInner<Value>
 			Node::free_garbage_nodes(old, new)
 		}
 	}
+	
+	#[inline(always)]
+	fn tail(&self) -> *mut PerHyperThreadHandle<Value>
+	{
+		self.tail.get()
+	}
+	
+	#[inline(always)]
+	fn try_to_change_tail(&self, tail: &mut *mut PerHyperThreadHandle<Value>, per_hyper_thread_handle_non_null: NonNull<PerHyperThreadHandle<Value>>) -> bool
+	{
+		self.tail.release_acquire_compare_and_swap(tail, per_hyper_thread_handle_non_null.as_ptr())
+	}
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -1521,10 +1527,7 @@ struct NodePointerIdentifier(usize);
 impl NodePointerIdentifier
 {
 	const Null: NodePointerIdentifier = NodePointerIdentifier(!0);
-}
-
-impl NodePointerIdentifier
-{
+	
 	#[inline(always)]
 	fn from_node_identifier(node_identifier: NodeIdentifier) -> Self
 	{
@@ -1629,17 +1632,16 @@ impl<Value> PerHyperThreadHandle<Value>
 		if tail.is_null()
 		{
 			self.set_next(per_hyper_thread_handle_non_null);
-			if wait_free_queue_inner.tail.release_acquire_compare_and_swap(&mut tail, per_hyper_thread_handle_non_null.as_ptr())
+			if wait_free_queue_inner.try_to_change_tail(&mut tail, per_hyper_thread_handle_non_null)
 			{
 				return
 			}
 			// NOTE: tail will have been updated by CASra; queue.tail will not longer have been null, hence tail will now no longer be null, so fall through to logic below.
 		}
 		let tail_non_null = tail.to_non_null();
-		
 		let tail = tail_non_null.reference();
-		let mut next = tail.next();
 		
+		let mut next = tail.next();
 		do_while!
 		{
 			do
