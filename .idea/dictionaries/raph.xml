@@ -79,6 +79,7 @@
       <w>rdseed</w>
       <w>recurses</w>
       <w>repr</w>
+      <w>rerelease</w>
       <w>rpmem</w>
       <w>rwlock</w>
       <w>setjmp</w>

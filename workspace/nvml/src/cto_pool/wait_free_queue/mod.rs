@@ -1092,7 +1092,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let this = per_hyper_thread_handle.reference();
 		
-		this.hazard_node_pointer_identifier.set(this.enqueuer_node_pointer_identifier());
+		this.set_hazard_node_pointer_identifier(this.enqueuer_node_pointer_identifier());
 		
 		let mut enqueue_index = unsafe { uninitialized() };
 		let mut remaining_patience_for_fast_path = Self::MaximumPatienceForFastPath;
@@ -1105,13 +1105,14 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
-		this.hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
+		
+		this.rerelease_hazard_node_pointer_identifier()
 	}
 	
 	#[inline(always)]
 	pub(crate) fn dequeue(&self, per_hyper_thread_handle: NonNull<PerHyperThreadHandle<Value>>) -> *mut Value
 	{
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.get());
+		per_hyper_thread_handle.reference().set_hazard_node_pointer_identifier(per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.get());
 		
 		let mut dequeued_value;
 		let mut id = unsafe { uninitialized() };
@@ -1140,7 +1141,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		per_hyper_thread_handle.reference().dequeuer_node_pointer_identifier.set(per_hyper_thread_handle.reference().pointer_to_the_node_for_dequeue.get().reference().identifier.get().to_node_pointer_identifier());
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.release(NodePointerIdentifier::Null);
+		per_hyper_thread_handle.reference().release_hazard_node_pointer_identifier(NodePointerIdentifier::Null);
 		
 		if per_hyper_thread_handle.reference().spare_is_null()
 		{
@@ -1382,7 +1383,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		// ie, Read the value, then construct a new volatile reference used for `find_cell`.
 		// NOTE: This is internally mutable, and calls to `find_cell` will mutate it.
 		let Dp = volatile::new(ph.reference().pointer_to_the_node_for_dequeue.get());
-		per_hyper_thread_handle.reference().hazard_node_pointer_identifier.set(ph.reference().hazard_node_pointer_identifier.get());
+		per_hyper_thread_handle.reference().set_hazard_node_pointer_identifier(ph.reference().hazard_node_pointer_identifier());
 		FENCE();
 		idx = dequeuer.idx.get();
 		
@@ -1638,7 +1639,7 @@ impl<Value> PerHyperThreadHandle<Value>
 			// Seems to be unnecessary as this value is always overwritten by `self.add_to_singularly_linked_list_of_per_hyper_thread_handles()`
 			this.initialize_next();
 			
-			this.hazard_node_pointer_identifier.set(NodePointerIdentifier::Null);
+			this.reset_hazard_node_pointer_identifier();
 			
 			this.set_pointer_to_the_node_for_enqueue(wait_free_queue_inner.pointer_to_the_head_node.get().to_non_null());
 			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
@@ -1715,6 +1716,36 @@ impl<Value> PerHyperThreadHandle<Value>
 		
 		self.per_hyper_thread_handle_of_next_enqueuer_to_help.set(self.next());
 		self.per_hyper_thread_handle_of_next_dequeuer_to_help.set(self.next());
+	}
+	
+	#[inline(always)]
+	fn rerelease_hazard_node_pointer_identifier(&self)
+	{
+		self.hazard_node_pointer_identifier.release(NodePointerIdentifier::Null)
+	}
+	
+	#[inline(always)]
+	fn release_hazard_node_pointer_identifier(&self, node_pointer_identifier: NodePointerIdentifier)
+	{
+		self.hazard_node_pointer_identifier.release(node_pointer_identifier)
+	}
+	
+	#[inline(always)]
+	fn reset_hazard_node_pointer_identifier(&self)
+	{
+		self.set_hazard_node_pointer_identifier(NodePointerIdentifier::Null)
+	}
+	
+	#[inline(always)]
+	fn set_hazard_node_pointer_identifier(&self, node_pointer_identifier: NodePointerIdentifier)
+	{
+		self.hazard_node_pointer_identifier.set(node_pointer_identifier)
+	}
+	
+	#[inline(always)]
+	fn hazard_node_pointer_identifier(&self) -> NodePointerIdentifier
+	{
+		self.hazard_node_pointer_identifier.get()
 	}
 	
 	#[inline(always)]
