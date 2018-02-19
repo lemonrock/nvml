@@ -105,7 +105,7 @@ impl<T> FreeListElement<T>
 	{
 		unsafe { drop_in_place(&mut self.value) };
 		
-		cto_pool_arc.pool_pointer().free(self);
+		cto_pool_arc.free_pointer(self);
 	}
 	
 	#[inline(always)]

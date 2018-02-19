@@ -51,7 +51,8 @@ impl<T> Drop for FreeList<T>
 			unsafe { &mut * free_list_element_to_clean_up }.free_list_is_being_dropped_or_was_never_pushed_ever_so_free(&self.cto_pool_arc);
 		}
 		
-		self.cto_pool_arc.pool_pointer().free(self);
+		let cto_pool_arc = self.cto_pool_arc.clone();
+		cto_pool_arc.free_pointer(self);
 	}
 }
 

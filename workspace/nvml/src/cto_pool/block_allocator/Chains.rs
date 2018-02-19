@@ -20,7 +20,8 @@ impl<B: Block> Drop for Chains<B>
 			head.recycle_chains_into_block_allocator(self.block_allocator.as_ref(), self.head_of_chains_linked_list);
 		}
 		
-		self.block_allocator.cto_pool_arc.pool_pointer().free(self)
+		let cto_pool_arc = self.block_allocator.cto_pool_arc.clone();
+		cto_pool_arc.free_pointer(self)
 	}
 }
 

@@ -107,9 +107,12 @@ use ::object_pool::ObjectPoolsConfiguration;
 use ::rust_extra::unlikely;
 use ::std::collections::HashMap;
 use ::std::path::Path;
+use ::std::ptr::NonNull;
 
 
 include!("Configuration.rs");
+include!("ExtendedNonNull.rs");
 include!("IsNotNull.rs");
 include!("initialise_memory_functions.rs");
 include!("Pools.rs");
+include!("ToNonNull.rs");

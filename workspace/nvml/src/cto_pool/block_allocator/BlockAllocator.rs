@@ -24,9 +24,10 @@ impl<B: Block> Drop for BlockAllocator<B>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		self.cto_pool_arc.pool_pointer().free(self.memory_base_pointer.as_ptr());
+		self.cto_pool_arc.free_pointer(self.memory_base_pointer.as_ptr());
 		
-		self.cto_pool_arc.pool_pointer().free(self);
+		let cto_pool_arc = self.cto_pool_arc.clone();
+		cto_pool_arc.free_pointer(self);
 	}
 }
 

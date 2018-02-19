@@ -29,34 +29,10 @@ use ::std::ptr::read;
 use ::std::ptr::read_volatile;
 use ::std::ptr::write;
 use ::std::ptr::write_volatile;
+use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::fence;
 use ::std::sync::atomic::Ordering::SeqCst;
 use ::std::sync::atomic::spin_loop_hint;
-
-
-
-
-
-#[inline(always)]
-fn free<T>(pointer: NonNull<T>)
-{
-	unimplemented!()
-}
-
-#[inline(always)]
-fn page_size_align_malloc<T>() -> NonNull<T>
-{
-	#[inline(always)]
-	fn align_malloc<T>(alignment: usize, size: usize) -> NonNull<T>
-	{
-		unimplemented!()
-	}
-	
-	const PAGE_SIZE: usize = 4096;
-	align_malloc(PAGE_SIZE, size_of::<T>())
-}
-
-
 
 macro_rules! do_while
 {
@@ -113,10 +89,6 @@ impl<T> ExtendedNonNullAtomicPointer<T>
 		}
 		ok
 	}
-}
-
-enum void
-{
 }
 
 trait PreFixOperators
@@ -218,56 +190,6 @@ impl PostFixOperators for usize
 		debug_assert_ne!(old_value, ::std::usize::MAX, "old_value was usize::MAX");
 		*self = old_value + 1;
 		old_value
-	}
-}
-
-trait ToNonNull<T>
-{
-	#[inline(always)]
-	fn to_non_null(self) -> NonNull<T>;
-}
-
-impl<T> ToNonNull<T> for *mut T
-{
-	#[inline(always)]
-	fn to_non_null(self) -> NonNull<T>
-	{
-		debug_assert!(self.is_not_null(), "self is null");
-		
-		unsafe { NonNull::new_unchecked(self) }
-	}
-}
-
-trait ExtendedNonNull<T>
-{
-	#[inline(always)]
-	fn reference(&self) -> &T;
-	
-	#[inline(always)]
-	fn mutable_reference(&mut self) -> &mut T;
-	
-	#[inline(always)]
-	fn long_rerefence<'long>(self) -> &'long T;
-}
-
-impl<T> ExtendedNonNull<T> for NonNull<T>
-{
-	#[inline(always)]
-	fn reference(&self) -> &T
-	{
-		unsafe { self.as_ref() }
-	}
-	
-	#[inline(always)]
-	fn mutable_reference(&mut self) -> &mut T
-	{
-		unsafe { self.as_mut() }
-	}
-	
-	#[inline(always)]
-	fn long_rerefence<'long>(self) -> &'long T
-	{
-		unsafe { &* self.as_ptr() }
 	}
 }
 
@@ -617,9 +539,11 @@ impl<Value> volatile<NonNull<Node<Value>>>
 		current
 	}
 	
-	fn find_cell(&self, at_position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	// We almost want a 'reserve' for memory allocation, so that this thread can at least always populate a find_cell request
+	// Theoretical reserve limit of nodes is (maximum_node_identifier - current_node_identifier) - (if thread handle self has a spare already)
+	fn find_cell(&self, at_position_index: PositionIndex, this: &PerHyperThreadHandle<Value>, cto_pool_arc: &CtoPoolArc) -> Result<&Cell<Value>, PmdkError>
 	{
-		let mut current = self.get().long_rerefence();
+		let mut current = self.get().long_reference();
 		
 		let mut current_node_identifier = current.identifier();
 		let maximum_node_identifier = at_position_index.maximum_node_identifier();
@@ -629,7 +553,7 @@ impl<Value> volatile<NonNull<Node<Value>>>
 			
 			if next.is_null()
 			{
-				let spare_node_to_use_for_next = this.get_non_null_spare_node();
+				let spare_node_to_use_for_next = this.get_non_null_spare_node(cto_pool_arc)?;
 				spare_node_to_use_for_next.reference().identifier.set(current_node_identifier.increment());
 				
 				if current.next.release_acquire_compare_and_swap(&mut next, spare_node_to_use_for_next.as_ptr())
@@ -639,13 +563,13 @@ impl<Value> volatile<NonNull<Node<Value>>>
 				}
 			}
 			
-			current = next.to_non_null().long_rerefence();
+			current = next.to_non_null().long_reference();
 			current_node_identifier.increment_in_place();
 		}
 		
 		self.set(current.to_non_null());
 		
-		at_position_index.get_cell(current)
+		Ok(at_position_index.get_cell(current))
 	}
 }
 
@@ -1058,7 +982,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 					
 					this.set(each_threads_per_hyper_thread_handle.as_non_null());
 				}
-				each_threads_per_hyper_thread_handle = each_threads_per_hyper_thread_handle.next_in_singularly_linked_list_or_self_if_end_of_list.get().long_rerefence();
+				each_threads_per_hyper_thread_handle = each_threads_per_hyper_thread_handle.next_in_singularly_linked_list_or_self_if_end_of_list.get().long_reference();
 			}
 			while potential_new_head_of_queue_node.reference().identifier() > old_head_of_queue_node_identifier && each_threads_per_hyper_thread_handle.as_ptr() != initial_per_hyper_thread_handle.as_ptr()
 		}
@@ -1093,7 +1017,7 @@ impl<Value> AllPerHyperThreadHandles<Value>
 	fn get_hazard_pointer_identifier(&mut self) -> &volatile<NodePointerIdentifier>
 	{
 		let element = *unsafe { self.per_thread_handles.get_unchecked(self.index as usize) };
-		let element = element.long_rerefence();
+		let element = element.long_reference();
 		&element.hazard_node_pointer_identifier
 	}
 }
@@ -1159,11 +1083,11 @@ struct Node<Value>
 impl<Value> Node<Value>
 {
 	#[inline(always)]
-	fn new_node() -> NonNull<Self>
+	fn new_node(cto_pool_arc: &CtoPoolArc) -> Result<NonNull<Self>, PmdkError>
 	{
-		let n = page_size_align_malloc();
-		unsafe { n.as_ptr().write_bytes(0, 1) }
-		n
+		let node = cto_pool_arc.page_aligned_allocate()?;
+		unsafe { node.as_ptr().write_bytes(0, 1) }
+		Ok(node)
 	}
 	
 	#[inline(always)]
@@ -1173,7 +1097,7 @@ impl<Value> Node<Value>
 	}
 	
 	#[inline(always)]
-	fn free_garbage_nodes_excluding_upto(&self, newer_exclusive: NonNull<Self>)
+	fn free_garbage_nodes_excluding_upto(&self, newer_exclusive: NonNull<Self>, cto_pool_arc: &CtoPoolArc)
 	{
 		let mut older = self;
 	
@@ -1181,7 +1105,7 @@ impl<Value> Node<Value>
 		{
 			let node = older.next.get();
 			
-			free(older.to_non_null());
+			cto_pool_arc.free_pointer(older.as_ptr());
 			
 			// TODO: Confirm this is actually possible?
 			if node.is_null()
@@ -1190,7 +1114,7 @@ impl<Value> Node<Value>
 			}
 			
 			let node = node.to_non_null();
-			older = node.long_rerefence()
+			older = node.long_reference()
 		}
 	}
 	
@@ -1215,7 +1139,7 @@ impl<Value> Node<Value>
 
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-struct WaitFreeQueueInner<Value>
+struct WaitFreeQueue<Value>
 {
 	// Called in wfqueue.c code `Ei`.
 	// Initially 1.
@@ -1241,35 +1165,117 @@ struct WaitFreeQueueInner<Value>
 	tail: volatile<*mut PerHyperThreadHandle<Value>>,
 	
 	maximum_garbage: MaximumGarbage,
+	
+	reference_counter: AtomicUsize,
+	
+	cto_pool_arc: CtoPoolArc,
 }
 
-impl<Value> WaitFreeQueueInner<Value>
+impl<Value> CtoSafe for WaitFreeQueue<Value>
+{
+	#[inline(always)]
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
+	{
+		// self.reference_counter is left as-is
+		cto_pool_arc.write(&mut self.cto_pool_arc);
+		
+		xxxx: Overwrite all nodes, Overwrite the single-linked list of per-hyper-thread handles
+		
+		xxxx: Look at FreeList
+		
+		xxxx: What about *mut Value?
+	}
+}
+
+impl<Value> Drop for WaitFreeQueue<Value>
+{
+	#[inline(always)]
+	fn drop(&mut self)
+	{
+		xxxx: Look at FreeList
+		
+		// Clean up any remaining nodes
+		// Free any remaining *mut Value pointers (drop_in_place)
+		
+		let tail = self.tail();
+		if tail.is_not_null()
+		{
+			tail.to_non_null().mutable_reference().drop_like(&self.cto_pool_arc);
+		}
+	}
+}
+
+impl<Value> CtoStrongArcInner for WaitFreeQueue<Value>
+{
+	#[inline(always)]
+	fn reference_counter(&self) -> &AtomicUsize
+	{
+		&self.reference_counter
+	}
+}
+
+impl<Value> WaitFreeQueue<Value>
 {
 	const MaximumPatienceForFastPath: isize = 10;
 	
-	pub(crate) fn new(maximum_garbage: MaximumGarbage) -> NonNull<Self>
+	#[inline(always)]
+	pub fn new(cto_pool_arc: &CtoPoolArc, number_of_threads: NumberOfHyperThreads) -> Result<(CtoStrongArc<Self>, [NonNull<PerHyperThreadHandle<Value>>; Self::InclusiveMaximumNumberOfHyperThreads]), PmdkError>
 	{
-		let mut this = page_size_align_malloc();
+		xxxx: Rather than using CtoPoolArc, use a free list, as Node, WaitFreeQueue and PerHyperThreadHandle are all 4096 bytes.
+	
+		xxxx: Make PerHTHandles part of the queue? And let threads find them using a simple index? (then a queue isn't the same size as a 4096 byte free list block)
+		
+		let mut this = cto_pool_arc.page_size_align_malloc()?;
+		let head_node = match Node::new_node(cto_pool_arc)
+		{
+			Err(pmdk_error) =>
+			{
+				cto_pool_arc.free_pointer(this.as_ptr());
+				return Err(pmdk_error)
+			}
+			Ok(head_node) => head_node,
+		};
 		
 		{
 			let this: &Self = this.reference();
 			this.enqueue_next_position_index.set(PositionIndex::InitialNext);
 			this.dequeue_next_position_index.set(PositionIndex::InitialNext);
 			this.set_initial_head_of_queue_node_identifier();
-			this.set_head_of_queue_node_pointer(Node::new_node());
+			this.set_head_of_queue_node_pointer(head_node);
 			this.tail.set(null_mut());
 		}
 		
 		{
 			let this: &mut Self = this.mutable_reference();
-			unsafe { write(&mut this.maximum_garbage, maximum_garbage) };
+			unsafe
+			{
+				write(&mut this.maximum_garbage, number_of_threads.maximum_garbage());
+				write(&mut this.reference_counter, Self::new_reference_counter());
+				write(&mut this.cto_pool_arc, cto_pool_arc.clone())
+			};
 		}
 		
-		this
+		let thread_handles =
+		{
+			let this: &Self = this.reference();
+			match number_of_threads.allocate_per_hyper_thread_handles(this)
+			{
+				Err(pmdk_error) =>
+				{
+					// free self.tail (look at drop)
+					// free head_node
+					// free this
+					xxxxx xxxx
+				}
+				Ok(thread_handles) => thread_handles
+			}
+		};
+		
+		Ok((CtoStrongArc::new(this), thread_handles))
 	}
 	
 	#[inline(always)]
-	pub(crate) fn enqueue(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>)
+	pub fn enqueue(&self, this: &PerHyperThreadHandle<Value>, value_to_enqueue: NonNull<Value>)
 	{
 		assert!(value_to_enqueue.as_ptr().is_not_top(), "value_to_enqueue is not allowed to be top");
 		
@@ -1290,8 +1296,9 @@ impl<Value> WaitFreeQueueInner<Value>
 		this.exit_critical_section_protected_by_hazard_pointer()
 	}
 	
+	/// Returns None if there is no value.
 	#[inline(always)]
-	pub(crate) fn dequeue(&self, this: &PerHyperThreadHandle<Value>) -> *mut Value
+	pub fn dequeue(&self, this: &PerHyperThreadHandle<Value>) -> Option<NonNull<Value>>
 	{
 		this.enter_critical_section_protected_by_hazard_pointer(this.dequeuer_node_pointer_identifier());
 		let dequeued_value =
@@ -1316,7 +1323,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			if dequeued_value.is_not_empty()
 			{
-				let next_hyper_thread_handle = this.per_hyper_thread_handle_of_next_dequeuer_to_help.get().long_rerefence();
+				let next_hyper_thread_handle = this.per_hyper_thread_handle_of_next_dequeuer_to_help.get().long_reference();
 				self.dequeue_help(this, next_hyper_thread_handle);
 				this.per_hyper_thread_handle_of_next_dequeuer_to_help.set(next_hyper_thread_handle.next_in_singularly_linked_list_or_self_if_end_of_list());
 			}
@@ -1330,10 +1337,12 @@ impl<Value> WaitFreeQueueInner<Value>
 		if this.spare_is_null()
 		{
 			self.collect_node_garbage_after_dequeue(this);
-			this.set_new_spare_node();
+			this.set_new_spare_node(&self.cto_pool_arc); // Failing to set the spare due to being out-of-memory is non-fatal but worrisome.
 		}
 		
-		dequeued_value
+		debug_assert!(dequeued_value.is_not_top(), "dequeued_value was top");
+		
+		NonNull::new(dequeued_value)
 	}
 	
 	#[inline(always)]
@@ -1343,7 +1352,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		let index_after_the_next_position_for_enqueue = self.sequentially_consistent_fetch_and_increment_enqueue_next_position_index();
 		
-		let cell = this.pointer_to_the_node_for_enqueue_find_cell(index_after_the_next_position_for_enqueue, this);
+		// Out of memory - can we fallback to slow path?
+		let cell = this.pointer_to_the_node_for_enqueue_find_cell(index_after_the_next_position_for_enqueue, this, &self.cto_pool_arc)?;
 		
 		if cell.relaxed_relaxed_compare_and_swap_value(value_to_enqueue)
 		{
@@ -1375,7 +1385,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		'do_while: while
 		{
 			index_after_the_next_position_for_enqueue = self.relaxed_fetch_and_increment_enqueue_next_position_index();
-			cell = tail.find_cell(index_after_the_next_position_for_enqueue, this);
+			// Out of memory - must retry?
+			cell = tail.find_cell(index_after_the_next_position_for_enqueue, this, &self.cto_pool_arc);
 			
 			let mut expected_enqueuer = <*mut Enqueuer<Value>>::Bottom;
 			if cell.enqueuer.sequentially_consistent_compare_and_swap(&mut expected_enqueuer, enqueuer.as_ptr()) && cell.value.get().is_not_top()
@@ -1389,7 +1400,8 @@ impl<Value> WaitFreeQueueInner<Value>
 		}
 		
 		enqueue_position_index = -enqueuer.enqueue_position_index.get();
-		cell = this.pointer_to_the_node_for_enqueue_find_cell(enqueue_position_index, this);
+		// Out of memory - must retry?
+		cell = this.pointer_to_the_node_for_enqueue_find_cell(enqueue_position_index, this, &self.cto_pool_arc);
 		if enqueue_position_index > index_after_the_next_position_for_enqueue
 		{
 			let mut index_of_the_next_position_for_enqueue = self.enqueue_next_position_index();
@@ -1397,7 +1409,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			{
 			}
 		}
-		cell.value.set(value_to_enqueue);
+		cell.value.set(value_to_enqueue)
 	}
 	
 	// Used only when dequeue() is called.
@@ -1495,7 +1507,7 @@ impl<Value> WaitFreeQueueInner<Value>
 	fn dequeue_fast_path(&self, this: &PerHyperThreadHandle<Value>, position_index: &mut PositionIndex) -> *mut Value
 	{
 		let index_after_the_next_position_for_dequeue = self.sequentially_consistent_fetch_and_increment_dequeue_next_position_index();
-		let cell = this.pointer_to_the_node_for_dequeue_find_cell(index_after_the_next_position_for_dequeue, this);
+		let cell = this.pointer_to_the_node_for_dequeue_find_cell(index_after_the_next_position_for_dequeue, this, &self.cto_pool_arc);
 		let dequeued_value = self.enqueue_help(this, cell, index_after_the_next_position_for_dequeue);
 		
 		if dequeued_value.is_bottom()
@@ -1521,7 +1533,7 @@ impl<Value> WaitFreeQueueInner<Value>
 		
 		self.dequeue_help(this, this);
 		let position_index = -dequeuer.dequeue_position_index_x.get();
-		let cell = this.pointer_to_the_node_for_dequeue_find_cell(position_index, this);
+		let cell = this.pointer_to_the_node_for_dequeue_find_cell(position_index, this, &self.cto_pool_arc);
 		let dequeued_value = cell.value();
 		
 		if dequeued_value.is_top()
@@ -1565,7 +1577,8 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			while dequeue_position_index_x == old_dequeue_position_index && new_dequeue_position_index.is_zero()
 			{
-				let cell = h.find_cell(position_index, this);
+				// Out of memory - now what?
+				let cell = h.find_cell(position_index, this, &self.cto_pool_arc);
 				
 				let mut index_of_the_next_position_for_dequeue = self.dequeue_next_position_index();
 				while index_of_the_next_position_for_dequeue <= position_index && !self.relaxed_relaxed_compare_and_swap_dequeue_next_position_index(&mut index_of_the_next_position_for_dequeue, position_index.increment())
@@ -1603,7 +1616,8 @@ impl<Value> WaitFreeQueueInner<Value>
 				break;
 			}
 			
-			let cell = other_pointer_to_the_node_for_dequeue.find_cell(dequeue_position_index_x, this);
+			// Out of memory - now what?
+			let cell = other_pointer_to_the_node_for_dequeue.find_cell(dequeue_position_index_x, this, &self.cto_pool_arc);
 			let mut was = <*mut Dequeuer>::Bottom;
 			if cell.value().is_top() || cell.relaxed_relaxed_compare_and_swap_dequeuer(&mut was, dequeuer.as_ptr()) || was == dequeuer.as_ptr()
 			{
@@ -1658,7 +1672,7 @@ impl<Value> WaitFreeQueueInner<Value>
 			
 			self.release_head_of_queue_node_identifier(new_head_of_queue_node_identifier);
 			
-			old_head_of_queue_node.reference().free_garbage_nodes_excluding_upto(newer_head_of_queue_node)
+			old_head_of_queue_node.reference().free_garbage_nodes_excluding_upto(newer_head_of_queue_node, &self.cto_pool_arc)
 		}
 		else
 		{
@@ -1781,6 +1795,26 @@ impl NumberOfHyperThreads
 		debug_assert!(maximum_garbage <= ::std::isize::MAX as usize, "maximum_garbage exceeds isize::MAX");
 		MaximumGarbage(maximum_garbage as isize)
 	}
+	
+	#[inline(always)]
+	pub(crate) fn allocate_per_hyper_thread_handles<Value>(&self, wait_free_queue: &WaitFreeQueue<Value>) -> Result<[NonNull<PerHyperThreadHandle<Value>>; Self::InclusiveMaximumNumberOfHyperThreads], PmdkError>
+	{
+		let mut per_hyper_thread_handles = unsafe { uninitialized() };
+		
+		let mut index = 0;
+		while index < self.0
+		{
+			match PerHyperThreadHandle::new(wait_free_queue)
+			{
+				Ok(per_hyper_thread_handle) => *unsafe { per_hyper_thread_handles.get_unchecked_mut(index as usize) } = per_hyper_thread_handle,
+				Err(pmdk_error) => return Err(pmdk_error),
+			}
+			
+			index += 1;
+		}
+		
+		Ok(per_hyper_thread_handles)
+	}
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -1861,12 +1895,36 @@ struct PerHyperThreadHandle<Value>
 
 impl<Value> PerHyperThreadHandle<Value>
 {
-	// A combination of `thread_init` and `queue_init`.
-	pub(crate) fn new(queue: NonNull<WaitFreeQueueInner<Value>>) -> NonNull<Self>
+	pub(crate) fn drop_like(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		let wait_free_queue_inner = queue.reference();
+		let next = self.next_in_singularly_linked_list_or_self_if_end_of_list();
+		if self.as_ptr() != next.as_ptr()
+		{
+			next.reference().drop_like(cto_pool_arc);
+		}
+		let spare = self.spare();
+		if spare.is_not_null()
+		{
+			cto_pool_arc.free_pointer(spare)
+		}
+		cto_pool_arc.free_pointer(self.as_ptr())
+	}
+	
+	// A combination of `thread_init` and `queue_init`.
+	pub(crate) fn new(wait_free_queue: &WaitFreeQueue<Value>) -> Result<NonNull<Self>, PmdkError>
+	{
+		let cto_pool_arc = &wait_free_queue.cto_pool_arc;
+		let per_hyper_thread_handle_non_null = cto_pool_arc.page_aligned_allocate()?;
 		
-		let per_hyper_thread_handle_non_null = page_size_align_malloc();
+		let spare_node = match cto_pool_arc.page_aligned_allocate()
+		{
+			Err(pmdk_error) =>
+			{
+				cto_pool_arc.free_pointer(per_hyper_thread_handle_non_null.as_ptr());
+				return Err(pmdk_error)
+			},
+			Ok(spare_node) => spare_node,
+		};
 		
 		{
 			let this: &PerHyperThreadHandle<Value> = per_hyper_thread_handle_non_null.reference();
@@ -1876,10 +1934,10 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.initialize_hazard_node_pointer_identifier();
 			
-			this.set_pointer_to_the_node_for_enqueue(wait_free_queue_inner.head_of_queue_node_pointer());
+			this.set_pointer_to_the_node_for_enqueue(wait_free_queue.head_of_queue_node_pointer());
 			this.set_enqueuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_enqueue();
 			
-			this.set_pointer_to_the_node_for_dequeue(wait_free_queue_inner.head_of_queue_node_pointer());
+			this.set_pointer_to_the_node_for_dequeue(wait_free_queue.head_of_queue_node_pointer());
 			this.set_dequeuer_node_pointer_identifier_using_value_of_node_pointer_identifier_for_node_for_dequeue();
 			
 			this.enqueue_request.deref().initialize();
@@ -1888,9 +1946,9 @@ impl<Value> PerHyperThreadHandle<Value>
 			
 			this.reset_enqueue_next_position_index();
 			
-			this.initialize_spare_node();
+			this.initialize_spare_node(spare_node);
 			
-			this.add_to_singularly_linked_list_of_per_hyper_thread_handles(wait_free_queue_inner, per_hyper_thread_handle_non_null);
+			this.add_to_singularly_linked_list_of_per_hyper_thread_handles(wait_free_queue, per_hyper_thread_handle_non_null);
 			
 			this.initialize_next_enqueuer_and_dequeuer_to_help();
 		}
@@ -1899,7 +1957,7 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn add_to_singularly_linked_list_of_per_hyper_thread_handles(&self, wait_free_queue_inner: &WaitFreeQueueInner<Value>, per_hyper_thread_handle_non_null: NonNull<Self>)
+	fn add_to_singularly_linked_list_of_per_hyper_thread_handles(&self, wait_free_queue_inner: &WaitFreeQueue<Value>, per_hyper_thread_handle_non_null: NonNull<Self>)
 	{
 		let mut tail = wait_free_queue_inner.tail();
 		
@@ -2019,15 +2077,15 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn pointer_to_the_node_for_enqueue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	fn pointer_to_the_node_for_enqueue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>, cto_pool_arc: &CtoPoolArc) -> Result<&Cell<Value>, PmdkError>
 	{
-		self.pointer_to_the_node_for_enqueue_reference().find_cell(position_index, this)
+		self.pointer_to_the_node_for_enqueue_reference().find_cell(position_index, this, cto_pool_arc)
 	}
 	
 	#[inline(always)]
-	fn pointer_to_the_node_for_dequeue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>) -> &Cell<Value>
+	fn pointer_to_the_node_for_dequeue_find_cell(&self, position_index: PositionIndex, this: &PerHyperThreadHandle<Value>, cto_pool_arc: &CtoPoolArc) -> Result<&Cell<Value>, PmdkError>
 	{
-		self.pointer_to_the_node_for_dequeue_reference().find_cell(position_index, this)
+		self.pointer_to_the_node_for_dequeue_reference().find_cell(position_index, this, cto_pool_arc)
 	}
 	
 	#[inline(always)]
@@ -2098,16 +2156,16 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn get_non_null_spare_node(&self) -> NonNull<Node<Value>>
+	fn get_non_null_spare_node(&self, cto_pool_arc: &CtoPoolArc) -> Result<NonNull<Node<Value>>, PmdkError>
 	{
 		let spare = self.spare();
 		if spare.is_not_null()
 		{
-			spare.to_non_null()
+			Ok(spare.to_non_null())
 		}
 		else
 		{
-			self.set_new_spare_node()
+			self.set_new_spare_node(cto_pool_arc)
 		}
 	}
 	
@@ -2119,21 +2177,19 @@ impl<Value> PerHyperThreadHandle<Value>
 	}
 	
 	#[inline(always)]
-	fn initialize_spare_node(&self)
+	fn initialize_spare_node(&self, spare_node: NonNull<Node<Value>>)
 	{
-		self.spare.set(null_mut());
-		self.set_new_spare_node();
+		self.spare.set(spare_node.as_ptr());
 	}
 	
 	#[inline(always)]
-	fn set_new_spare_node(&self) -> NonNull<Node<Value>>
+	fn set_new_spare_node(&self, cto_pool_arc: &CtoPoolArc) -> Result<NonNull<Node<Value>>, PmdkError>
 	{
-		// self.spare should be null EXCEPT when initially allocating.
 		debug_assert!(self.spare_is_null(), "trying to set spare to a new node but self.spare is not null");
 		
-		let new_spare_node = Node::new_node();
+		let new_spare_node = Node::new_node(cto_pool_arc)?;
 		self.spare.set(new_spare_node.as_ptr());
-		new_spare_node
+		Ok(new_spare_node)
 	}
 	
 	#[inline(always)]

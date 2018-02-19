@@ -67,6 +67,14 @@ pub mod boxed;
 /// Collections
 pub mod collections;
 
+/// A fetch-and-add array queue (`FAAArrayQueue`) by Pedro Ramalhete & Andreia Correia of Concurrency Freaks
+/// See https://github.com/pramalhe/ConcurrencyFreaks/blob/master/CPP/queues/array/FAAArrayQueue.hpp and the Concurrency Freaks blog.
+pub mod fetch_and_add_array_queue;
+
+/// A non-blocking free list that is persistent.
+/// Start with `CtoFreeListArc`.
+pub mod free_list;
+
 /// Extensions and wrapper to make use of parking lot's excellent synchronisation primitives.
 pub mod parking_lot_ext;
 
@@ -79,11 +87,8 @@ pub mod synchronisation;
 /// A String like that in regular Rust's stdlib.
 pub mod string;
 
-/// A non-blocking free list that is persistent.
-/// Start with `CtoFreeListArc`.
-pub mod free_list;
-
-mod wait_free_queue;
+// /// A wait-free queue based on Yang-Crummey
+// pub mod wait_free_queue;
 
 include!("Allocator.rs");
 include!("CtoPool.rs");

@@ -7,7 +7,6 @@ use super::CtoPoolArc;
 use super::CtoSafe;
 use super::arc::CtoStrongArc;
 use super::arc::CtoStrongArcInner;
-use super::PMEMctopoolExt;
 #[cfg(not(all(target_feature = "rdrnd", any(target_arch = "x86", target_arch = "x86_64"))))] use ::rand::Rng;
 #[cfg(not(all(target_feature = "rdrnd", any(target_arch = "x86", target_arch = "x86_64"))))] use ::rand::thread_rng;
 use ::spin_locks::BestSpinLockForCompilationTarget;
