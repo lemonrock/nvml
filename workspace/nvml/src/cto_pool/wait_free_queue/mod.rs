@@ -1796,6 +1796,7 @@ impl NumberOfHyperThreads
 		MaximumGarbage(maximum_garbage as isize)
 	}
 	
+	xxxx; // the resultant array is subject to false (cache line) sharing, as each handle is 8 bytes and a cache line is 64 bytes.
 	#[inline(always)]
 	pub(crate) fn allocate_per_hyper_thread_handles<Value>(&self, wait_free_queue: &WaitFreeQueue<Value>) -> Result<[NonNull<PerHyperThreadHandle<Value>>; Self::InclusiveMaximumNumberOfHyperThreads], PmdkError>
 	{

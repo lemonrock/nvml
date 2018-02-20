@@ -8,6 +8,25 @@
 #[derive(Debug)]
 pub struct OwnedFreeListElement<T>(NonNull<FreeListElement<T>>);
 
+impl<T> PartialEq for OwnedFreeListElement<T>
+{
+	#[inline(always)]
+	fn eq(&self, other: &Self) -> bool
+	{
+		self.0.as_ptr() == other.0.as_ptr()
+	}
+	
+	#[inline(always)]
+	fn ne(&self, other: &Self) -> bool
+	{
+		self.0.as_ptr() == other.0.as_ptr()
+	}
+}
+
+impl<T> Eq for OwnedFreeListElement<T>
+{
+}
+
 impl<T> Deref for OwnedFreeListElement<T>
 {
 	type Target = FreeListElement<T>;
@@ -49,10 +68,20 @@ impl<T> OwnedFreeListElement<T>
 	}
 	
 	#[inline(always)]
-	fn from_non_null_pointer(free_list_element: *mut FreeListElement<T>) -> Self
+	pub(crate) fn from_non_null(free_list_element: NonNull<FreeListElement<T>>) -> Self
 	{
-		debug_assert!(free_list_element.is_not_null(), "free_list_element was null");
-		
-		OwnedFreeListElement(unsafe { NonNull::new_unchecked(free_list_element) })
+		OwnedFreeListElement(free_list_element)
+	}
+	
+	#[inline(always)]
+	pub(crate) fn from_non_null_pointer(free_list_element: *mut FreeListElement<T>) -> Self
+	{
+		OwnedFreeListElement(free_list_element.to_non_null())
+	}
+	
+	#[inline(always)]
+	pub(crate) fn as_ptr(&self) -> *mut FreeListElement<T>
+	{
+		self.0.as_ptr()
 	}
 }

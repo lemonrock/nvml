@@ -14,6 +14,26 @@ pub struct FreeListElement<T>
 	value: T,
 }
 
+impl<T> Deref for FreeListElement<T>
+{
+	type Target = T;
+	
+	#[inline(always)]
+	fn deref(&self) -> &Self::Target
+	{
+		self.value()
+	}
+}
+
+impl<T> DerefMut for FreeListElement<T>
+{
+	#[inline(always)]
+	fn deref_mut(&mut self) -> &mut Self::Target
+	{
+		self.value_mut()
+	}
+}
+
 impl<T> CtoSafe for FreeListElement<T>
 {
 	#[inline(always)]
@@ -79,7 +99,7 @@ impl<T> FreeListElement<T>
 	/// Read-only reference to value.
 	/// Useful if value represents an `UnsafeCell` or `RefCell`.
 	#[inline(always)]
-	pub fn value(&mut self) -> &T
+	pub fn value(&self) -> &T
 	{
 		&self.value
 	}
