@@ -583,7 +583,13 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	pub fn dequeue(&self, _hyper_thread_index: usize) -> Option<Value>
+	pub fn enqueue(&self, _hyper_thread_index: usize, _item: *mut Value)
+	{
+		unimplemented!();
+	}
+	
+	#[inline(always)]
+	pub fn dequeue(&self, _hyper_thread_index: usize) -> Option<*mut Value>
 	{
 		unimplemented!();
 	}
