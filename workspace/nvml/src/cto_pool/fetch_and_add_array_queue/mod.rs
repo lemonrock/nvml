@@ -620,10 +620,10 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	{
 		loop
 		{
-			let tail = self.protect(hyper_thread_index, &self.tail);
-			let tail_non_null = tail.to_non_null();
-			let tail_reference = tail_non_null.reference();
-			let next_enqueue_index = tail_reference.fetch_then_increment_enqueue_index_in_items();
+			let tail_non_null = self.protect(hyper_thread_index, &self.tail);
+			let tail = tail_non_null.reference();
+			
+			let next_enqueue_index = tail.fetch_then_increment_enqueue_index_in_items();
 			
 			if Node::<Value>::is_node_full(next_enqueue_index)
 			{
@@ -632,14 +632,14 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 					continue;
 				}
 				
-				let next = tail_reference.next();
+				let next = tail.next();
 				if next.is_null()
 				{
 					// TODO: Handle out-of-memory
 					let mut new_node = self.free_list.pop().expect("OUT OF MEMORY");
 					new_node.initialize_for_next(item);
 					let new_node_pointer = new_node.as_ptr();
-					if tail_reference.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node_pointer)
+					if tail.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node_pointer)
 					{
 						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_node_pointer);
 						self.clear(hyper_thread_index);
@@ -654,7 +654,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 				continue
 			}
 			
-			if tail_reference.compare_and_swap_strong_sequentially_consistent_item(next_enqueue_index, item)
+			if tail.compare_and_swap_strong_sequentially_consistent_item(next_enqueue_index, item)
 			{
 				self.clear(hyper_thread_index);
 				return
@@ -668,20 +668,19 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	{
 		loop
 		{
-			let head = self.protect(hyper_thread_index, &self.head);
-			let head_non_null = head.to_non_null();
-			let head_reference = head_non_null.reference();
+			let head_non_null = self.protect(hyper_thread_index, &self.head);
+			let head = head_non_null.reference();
 			
-			if head_reference.dequeue_index_in_items() >= head_reference.enqueue_index_in_items() && head_reference.next().is_null()
+			if head.dequeue_index_in_items() >= head.enqueue_index_in_items() && head.next().is_null()
 			{
 				break
 			}
 			
-			let next_dequeue_index = head_reference.fetch_then_increment_dequeue_index_in_items();
+			let next_dequeue_index = head.fetch_then_increment_dequeue_index_in_items();
 			if Node::<Value>::is_node_drained(next_dequeue_index)
 			{
 				// This node has been drained: check if there is another one.
-				let next = head_reference.next();
+				let next = head.next();
 				if next.is_null()
 				{
 					break
@@ -695,7 +694,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 				continue
 			}
 			
-			let item = head_reference.swap_item_for_taken(next_dequeue_index);
+			let item = head.swap_item_for_taken(next_dequeue_index);
 			
 			if item.is_not_null()
 			{
@@ -715,9 +714,9 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	fn protect(&self, hyper_thread_index: usize, atom: &AtomicPtr<FreeListElement<Node<Value>>>) -> *mut FreeListElement<Node<Value>>
+	fn protect(&self, hyper_thread_index: usize, atom: &AtomicPtr<FreeListElement<Node<Value>>>) -> NonNull<FreeListElement<Node<Value>>>
 	{
-		self.hazard_pointers.protect(hyper_thread_index, atom)
+		self.hazard_pointers.protect(hyper_thread_index, atom).to_non_null()
 	}
 	
 	#[inline(always)]
@@ -739,15 +738,15 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	fn head_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn head_compare_and_swap_strong_sequentially_consistent(&self, head_was: &FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
 	{
-		self.head.compare_and_swap_strong_sequentially_consistent(compare, value)
+		self.head.compare_and_swap_strong_sequentially_consistent(head_was as *const _ as *mut _, value)
 	}
 	
 	#[inline(always)]
-	fn tail_is_no_longer(&self, tail: *mut FreeListElement<Node<Value>>) -> bool
+	fn tail_is_no_longer(&self, original_tail: &FreeListElement<Node<Value>>) -> bool
 	{
-		tail != self.tail()
+		(original_tail as *const _ as *mut _) != self.tail()
 	}
 	
 	#[inline(always)]
@@ -757,8 +756,8 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	fn tail_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn tail_compare_and_swap_strong_sequentially_consistent(&self, tail_was: &FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
 	{
-		self.tail.compare_and_swap_strong_sequentially_consistent(compare, value)
+		self.tail.compare_and_swap_strong_sequentially_consistent(tail_was as *const _ as *mut _, value)
 	}
 }
