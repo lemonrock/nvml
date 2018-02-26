@@ -148,16 +148,16 @@ const MaximumSupportedHyperThreads: usize = 256;
 // Implementation based on the paper (Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects)[http://web.cecs.pdx.edu/~walpole/class/cs510/papers/11.pdf] by Maged M Michael.
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-pub(crate) struct HazardPointerPerHyperThread<Value: CtoSafe>
+pub(crate) struct HazardPointerPerHyperThread<Hazardous: CtoSafe>
 {
 	// Cache alignment here of an 8 byte pointer to 128 bytes to try to eliminate 'false sharing'.
-	hazard_pointer_per_hyper_thread: [DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>; MaximumSupportedHyperThreads],
+	hazard_pointer_per_hyper_thread: [DoubleCacheAligned<AtomicPtr<FreeListElement<Hazardous>>>; MaximumSupportedHyperThreads],
 	
 	// Cache alignment here to try to eliminate 'false sharing'.
-	retired_lists_per_hyper_thread: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Node<Value>>>>>; MaximumSupportedHyperThreads],
+	retired_lists_per_hyper_thread: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Hazardous>>>>; MaximumSupportedHyperThreads],
 }
 
-impl<Value: CtoSafe> Debug for HazardPointerPerHyperThread<Value>
+impl<Hazardous: CtoSafe> Debug for HazardPointerPerHyperThread<Hazardous>
 {
 	#[inline(always)]
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result
@@ -166,7 +166,7 @@ impl<Value: CtoSafe> Debug for HazardPointerPerHyperThread<Value>
 	}
 }
 
-impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
+impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 {
 	const MaximumSupportedHyperThreads: usize = MaximumSupportedHyperThreads;
 	
@@ -177,7 +177,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	// MUST be called when queues are quiescent to clean-out any retired objects.
 	// This design is not particularly safe, and will cause memory to be 'lost' in the event of a power outage.
 	#[inline(always)]
-	pub(crate) fn shutdown(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>)
+	pub(crate) fn shutdown(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>)
 	{
 		let slice = &mut self.retired_lists_per_hyper_thread[.. maximum_hyper_threads];
 		for retired_list_for_hyper_thread in slice.iter_mut()
@@ -199,7 +199,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 				hazard_pointer_per_hyper_thread: unsafe { zeroed() },
 				retired_lists_per_hyper_thread: unsafe
 				{
-					let mut array: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Node<Value>>>>>; MaximumSupportedHyperThreads] = uninitialized();
+					let mut array: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Hazardous>>>>; MaximumSupportedHyperThreads] = uninitialized();
 					for element in array.iter_mut()
 					{
 						// TODO: Eliminate Vec, move to a fixed-size array?
@@ -215,7 +215,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	
 	// Progress Condition: lock-free.
 	#[inline(always)]
-	pub(crate) fn protect(&self, hyper_thread_index: usize, atom: &AtomicPtr<FreeListElement<Node<Value>>>) -> *mut FreeListElement<Node<Value>>
+	pub(crate) fn protect(&self, hyper_thread_index: usize, atom: &AtomicPtr<FreeListElement<Hazardous>>) -> *mut FreeListElement<Hazardous>
 	{
 		let hazard_pointer_for_thread = self.hazard_pointer_for_hyper_thread(hyper_thread_index);
 		
@@ -247,7 +247,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	
 	// Progress Condition: wait-free bounded (by the number of threads squared).
 	#[inline(always)]
-	pub(crate) fn retire(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Node<Value>>>)
+	pub(crate) fn retire(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
 	{
 		let length =
 		{
@@ -263,7 +263,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	}
 	
 	#[inline(always)]
-	fn reclaim(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>, hyper_thread_index: usize, original_length: usize)
+	fn reclaim(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, original_length: usize)
 	{
 		// Similar to Vec.retain() but changes particularly include truncate() replaced with logic to push to a free list.
 		
@@ -295,7 +295,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 			}
 			
 			let new_length = original_length - deletion_count;
-			let mut retired_list_for_hyper_thread = self.retired_list_for_hyper_thread_mut(hyper_thread_index);
+			let retired_list_for_hyper_thread = self.retired_list_for_hyper_thread_mut(hyper_thread_index);
 			unsafe { retired_list_for_hyper_thread.set_len(new_length) }
 			
 			// Reclaim memory.
@@ -307,7 +307,7 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	}
 	
 	#[inline(always)]
-	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, maximum_hyper_threads: usize, our_retired_object: NonNull<FreeListElement<Node<Value>>>) -> bool
+	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, maximum_hyper_threads: usize, our_retired_object: NonNull<FreeListElement<Hazardous>>) -> bool
 	{
 		let our_retired_object = our_retired_object.as_ptr();
 		
@@ -326,19 +326,19 @@ impl<Value: CtoSafe> HazardPointerPerHyperThread<Value>
 	}
 	
 	#[inline(always)]
-	fn hazard_pointer_for_hyper_thread(&self, hyper_thread_index: usize) -> &AtomicPtr<FreeListElement<Node<Value>>>
+	fn hazard_pointer_for_hyper_thread(&self, hyper_thread_index: usize) -> &AtomicPtr<FreeListElement<Hazardous>>
 	{
 		unsafe { self.hazard_pointer_per_hyper_thread.get_unchecked(hyper_thread_index) }
 	}
 	
 	#[inline(always)]
-	fn retired_list_for_hyper_thread(&self, hyper_thread_index: usize) -> &Vec<NonNull<FreeListElement<Node<Value>>>>
+	fn retired_list_for_hyper_thread(&self, hyper_thread_index: usize) -> &Vec<NonNull<FreeListElement<Hazardous>>>
 	{
 		unsafe { self.retired_lists_per_hyper_thread.get_unchecked(hyper_thread_index) }.deref()
 	}
 	
 	#[inline(always)]
-	fn retired_list_for_hyper_thread_mut(&mut self, hyper_thread_index: usize) -> &mut Vec<NonNull<FreeListElement<Node<Value>>>>
+	fn retired_list_for_hyper_thread_mut(&mut self, hyper_thread_index: usize) -> &mut Vec<NonNull<FreeListElement<Hazardous>>>
 	{
 		unsafe { self.retired_lists_per_hyper_thread.get_unchecked_mut(hyper_thread_index) }.deref_mut()
 	}
@@ -385,7 +385,7 @@ impl<Value: CtoSafe> CtoSafe for Node<Value>
 			dequeue_index_in_items += 1
 		}
 		
-		let next = self.next.load(Relaxed);
+		let next = self.next_relaxed();
 		if next.is_not_null()
 		{
 			OwnedFreeListElement::from_non_null_pointer(next).cto_pool_opened(cto_pool_arc)
@@ -397,10 +397,14 @@ impl<Value: CtoSafe> Node<Value>
 {
 	const ExclusiveMaximumNumberOfItems: usize = ExclusiveMaximumNumberOfItems;
 	
+	const MaximumIndex: u32 = (Self::ExclusiveMaximumNumberOfItems - 1) as u32;
+	
 	// Starts with the first entry pre-filled and enqidx at 1.
 	#[inline(always)]
 	fn initialize(&mut self, item: *mut Value)
 	{
+		debug_assert_ne!(Self::ExclusiveMaximumNumberOfItems, 0, "ExclusiveMaximumNumberOfItems should not be zero");
+		
 		self.dequeue_index_in_items.initialize(0);
 		self.enqueue_index_in_items.initialize(1);
 		self.next.initialize(null_mut());
@@ -416,6 +420,30 @@ impl<Value: CtoSafe> Node<Value>
 	}
 	
 	#[inline(always)]
+	fn is_node_full(next_enqueue_index: u32) -> bool
+	{
+		next_enqueue_index > Self::MaximumIndex
+	}
+	
+	#[inline(always)]
+	fn is_node_drained(next_dequeue_index: u32) -> bool
+	{
+		next_dequeue_index > Self::MaximumIndex
+	}
+	
+	#[inline(always)]
+	fn next(&self) -> *mut FreeListElement<Self>
+	{
+		self.next.load(SeqCst)
+	}
+	
+	#[inline(always)]
+	fn next_relaxed(&self) -> *mut FreeListElement<Self>
+	{
+		self.next.load(Relaxed)
+	}
+	
+	#[inline(always)]
 	fn cas_next(&self, compare: &mut *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
 	{
 		self.next.compare_and_swap_strong_sequentially_consistent(compare, value)
@@ -424,15 +452,16 @@ impl<Value: CtoSafe> Node<Value>
 	#[inline(always)]
 	fn relaxed_store_of_item(&self, item_index: usize, item: *mut Value)
 	{
-		self.item(item_index).store(item, Relaxed);
+		debug_assert!(item_index <= ::std::u32::MAX as usize, "item_index exceeds u32::MAX");
+		self.item(item_index as u32).store(item, Relaxed);
 	}
 	
 	#[inline(always)]
-	fn item(&self, item_index: usize) -> &AtomicPtr<Value>
+	fn item(&self, item_index: u32) -> &AtomicPtr<Value>
 	{
-		debug_assert!(item_index < Self::ExclusiveMaximumNumberOfItems, "item_index '{}' exceeds Self::ExclusiveMaximumNumberOfItems '{}'", item_index, Self::ExclusiveMaximumNumberOfItems);
+		debug_assert!((item_index as usize) < Self::ExclusiveMaximumNumberOfItems, "item_index '{}' exceeds Self::ExclusiveMaximumNumberOfItems '{}'", item_index, Self::ExclusiveMaximumNumberOfItems);
 		
-		unsafe { self.items.get_unchecked(item_index) }
+		unsafe { self.items.get_unchecked(item_index as usize) }
 	}
 }
 
@@ -445,8 +474,6 @@ struct FetchAndAddArrayQueue<Value: CtoSafe>
 	tail: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
 	maximum_hyper_threads: usize,
 	hazard_pointers: Box<HazardPointerPerHyperThread<Node<Value>>>,
-	kHpTail: i32,
-	kHpHead: i32,
 	free_list: CtoStrongArc<FreeList<Node<Value>>>,
 	reference_counter: AtomicUsize,
 	cto_pool_arc: CtoPoolArc,
@@ -524,6 +551,8 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 {
 	const MaximumSupportedHyperThreads: usize = MaximumSupportedHyperThreads;
 	
+	const TakenSentinel: *mut Value = !0 as *mut Value;
+	
 	#[inline(always)]
 	fn cas_tail(&self, compare: &mut *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
 	{
@@ -563,8 +592,6 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 			let this = this.mutable_reference();
 			write(&mut this.maximum_hyper_threads, maximum_hyper_threads);
 			this.reinitialize_hazard_pointers();
-			write(&mut this.kHpTail, 0);
-			write(&mut this.kHpHead, 0);
 			
 			let pointer = sentinel_owned_free_list_element.as_ptr();
 			let sentinel_node = sentinel_owned_free_list_element.deref_mut().deref_mut();
@@ -583,20 +610,125 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	pub fn enqueue(&self, _hyper_thread_index: usize, _item: *mut Value)
+	pub fn enqueue(&self, hyper_thread_index: usize, item: NonNull<Value>)
 	{
-		unimplemented!();
+		let item = item.as_ptr();
+		assert_ne!(item, Self::TakenSentinel, "item pointer can not be the TakenSentinel '0x{:X}'", Self::TakenSentinel as usize);
+		
+		loop
+		{
+			let mut tail = self.protect(hyper_thread_index, &self.tail);
+			let tail_non_null = tail.to_non_null();
+			let tail_reference = tail_non_null.reference();
+			let next_enqueue_index = tail_reference.enqueue_index_in_items.fetch_add(1, SeqCst);
+			
+			if Node::<Value>::is_node_full(next_enqueue_index)
+			{
+				if tail != self.tail.load(SeqCst)
+				{
+					continue;
+				}
+				
+				let next = tail_reference.next();
+				if next.is_null()
+				{
+					// TODO: Handle out-of-memory
+					let mut new_node = self.free_list.pop().expect("OUT OF MEMORY");
+					new_node.initialize(item);
+					// TODO: Don't care about null_mut()
+					let new_node_pointer = new_node.as_ptr();
+					if tail_reference.cas_next(&mut null_mut(), new_node_pointer)
+					{
+						// TODO: Don't care about tail
+						self.cas_tail(&mut tail, new_node_pointer);
+						self.clear(hyper_thread_index);
+						return
+					}
+					self.free_list.push(new_node)
+				}
+				else
+				{
+					// TODO: Don't care about tail
+					self.cas_tail(&mut tail, next);
+				}
+				continue
+			}
+			
+			if tail_reference.item(next_enqueue_index).compare_and_swap_strong_sequentially_consistent(&mut null_mut(), item)
+			{
+				self.clear(hyper_thread_index);
+				return
+			}
+		}
 	}
 	
 	#[inline(always)]
-	pub fn dequeue(&self, _hyper_thread_index: usize) -> Option<*mut Value>
+	pub fn dequeue(&mut self, hyper_thread_index: usize) -> Option<NonNull<Value>>
 	{
-		unimplemented!();
+		loop
+		{
+			let mut head = self.protect(hyper_thread_index, &self.head);
+			let head_non_null = head.to_non_null();
+			let head_reference = head_non_null.reference();
+			
+			if head_reference.dequeue_index_in_items.load(SeqCst) >= head_reference.enqueue_index_in_items.load(SeqCst) && head_reference.next().is_null()
+			{
+				break
+			}
+			
+			let next_dequeue_index = head_reference.dequeue_index_in_items.fetch_add(1, SeqCst);
+			if Node::<Value>::is_node_drained(next_dequeue_index)
+			{
+				// This node has been drained: check if there is another one.
+				let next = head_reference.next();
+				if next.is_null()
+				{
+					break
+				}
+				
+				if self.cas_head(&mut head, next)
+				{
+					self.retire(hyper_thread_index, head_non_null)
+				}
+				
+				continue
+			}
+			
+			let item = head_reference.item(next_dequeue_index).swap(Self::TakenSentinel, SeqCst);
+			debug_assert_ne!(item, Self::TakenSentinel, "dequeued item should never be the TakenSentinel");
+			
+			if item.is_not_null()
+			{
+				self.clear(hyper_thread_index);
+				return Some(item.to_non_null())
+			}
+		}
+		
+		self.clear(hyper_thread_index);
+		None
 	}
 	
 	#[inline(always)]
 	fn reinitialize_hazard_pointers(&mut self)
 	{
 		unsafe { write(&mut self.hazard_pointers, HazardPointerPerHyperThread::new()) }
+	}
+	
+	#[inline(always)]
+	fn protect(&self, hyper_thread_index: usize, atom: &AtomicPtr<FreeListElement<Node<Value>>>) -> *mut FreeListElement<Node<Value>>
+	{
+		self.hazard_pointers.protect(hyper_thread_index, atom)
+	}
+	
+	#[inline(always)]
+	fn clear(&self, hyper_thread_index: usize)
+	{
+		self.hazard_pointers.clear(hyper_thread_index);
+	}
+	
+	#[inline(always)]
+	fn retire(&mut self, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Node<Value>>>)
+	{
+		self.hazard_pointers.retire(self.maximum_hyper_threads, &self.free_list, hyper_thread_index, retire_this_object)
 	}
 }
