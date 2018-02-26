@@ -678,37 +678,44 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			
 			if head.dequeue_index_in_items() >= head.enqueue_index_in_items() && head.next().is_null()
 			{
-				break
+				return self.release_hazard_pointer_and_return_dequeued_item(hyper_thread_index, None)
 			}
 			
 			let next_dequeue_index = head.fetch_then_increment_dequeue_index_in_items();
 			if Node::<Value>::is_node_drained(next_dequeue_index)
 			{
-				// This node has been drained: check if there is another one.
 				let next = head.next();
+				
+				// There isn't another node after this one, ie the queue is completely empty.
 				if next.is_null()
 				{
-					break
+					return self.release_hazard_pointer_and_return_dequeued_item(hyper_thread_index, None)
 				}
 				
+				// There is another node after this one.
+				// Retire this one.
 				if self.head_compare_and_swap_strong_sequentially_consistent(head, next.to_non_null())
 				{
 					self.retire(hyper_thread_index, head_non_null)
 				}
 				
+				continue
 			}
 			
 			let item = head.swap_item_for_taken(next_dequeue_index);
 			
 			if item.is_not_null()
 			{
-				self.clear(hyper_thread_index);
-				return Some(item.to_non_null())
+				return self.release_hazard_pointer_and_return_dequeued_item(hyper_thread_index, Some(item.to_non_null()))
 			}
 		}
-		
+	}
+	
+	#[inline(always)]
+	fn release_hazard_pointer_and_return_dequeued_item(&self, hyper_thread_index: usize, dequeued_item: Option<NonNull<Value>>) -> Option<NonNull<Value>>
+	{
 		self.clear(hyper_thread_index);
-		None
+		dequeued_item
 	}
 	
 	#[inline(always)]
