@@ -136,10 +136,10 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	// MUST be called when queues are quiescent to clean-out any retired objects.
 	// This design is not particularly safe, and will cause memory to be 'lost' in the event of a power outage.
 	#[inline(always)]
-	pub(crate) fn shutdown(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>)
+	pub(crate) fn shutdown(&self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>)
 	{
 		let mut hyper_thread_index = 0;
-		while hyper_thread_index < self.retired_lists_per_hyper_thread.len()
+		while hyper_thread_index < maximum_hyper_threads
 		{
 			for retired_object in self.retired_list_for_hyper_thread_mut(hyper_thread_index).drain(..)
 			{
@@ -207,7 +207,7 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	
 	// Progress Condition: wait-free bounded (by the number of threads squared).
 	#[inline(always)]
-	pub(crate) fn retire(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
+	pub(crate) fn retire(&self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
 	{
 		let length =
 		{
@@ -218,12 +218,12 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 		
 		if length >= Self::ReclamationThreshold
 		{
-			self.reclaim(free_list, hyper_thread_index, length)
+			self.reclaim(maximum_hyper_threads, free_list, hyper_thread_index, length)
 		}
 	}
 	
 	#[inline(always)]
-	fn reclaim(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, original_length: usize)
+	fn reclaim(&self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, original_length: usize)
 	{
 		// Similar to Vec.retain() but changes particularly include truncate() replaced with logic to push to a free list.
 		
@@ -232,7 +232,7 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 			for index in 0 .. original_length
 			{
 				let our_retired_object = unsafe { *self.retired_list_for_hyper_thread(hyper_thread_index).get_unchecked(index) };
-				let delete = self.scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(our_retired_object);
+				let delete = self.scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(maximum_hyper_threads,our_retired_object);
 				
 				if delete
 				{
@@ -267,12 +267,12 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	}
 	
 	#[inline(always)]
-	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, our_retired_object: NonNull<FreeListElement<Hazardous>>) -> bool
+	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, maximum_hyper_threads: usize, our_retired_object: NonNull<FreeListElement<Hazardous>>) -> bool
 	{
 		let our_retired_object = our_retired_object.as_ptr();
 		
 		let mut other_hyper_thread_index = 0;
-		while other_hyper_thread_index < self.hazard_pointer_per_hyper_thread.len()
+		while other_hyper_thread_index < maximum_hyper_threads
 		{
 			if self.hazard_pointer_for_hyper_thread(other_hyper_thread_index).load(SeqCst) == our_retired_object
 			{
@@ -521,7 +521,7 @@ impl<Value: CtoSafe> CtoSafe for PersistentFetchAndAddArrayQueue<Value>
 		self.reinitialize_hazard_pointers();
 		
 		// head is never null.
-		OwnedFreeListElement::from_non_null_pointer(self.head()).cto_pool_opened(cto_pool_arc);
+		OwnedFreeListElement::from_non_null(self.head()).cto_pool_opened(cto_pool_arc);
 		
 		// We do not need to the same as above from tail, as tail should be reachable from head via .next on Node instances.
 	}
@@ -540,7 +540,7 @@ impl<Value: CtoSafe> Drop for PersistentFetchAndAddArrayQueue<Value>
 		}
 		
 		// Destroy the last node; the head always has a value.
-		self.free_list.push(OwnedFreeListElement::from_non_null_pointer(self.head()));
+		self.free_list.push(OwnedFreeListElement::from_non_null(self.head()));
 		
 		// Destroy ourselves
 		let cto_pool_arc = self.cto_pool_arc.clone();
@@ -588,22 +588,24 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 		
 		unsafe
 		{
-			let this = this.mutable_reference();
-			write(&mut this.maximum_hyper_threads, maximum_hyper_threads);
-			this.reinitialize_hazard_pointers();
-			
-			{
-				let initial_free_list_element_pointer = initial_free_list_element.as_ptr();
-				this.head.store(initial_free_list_element_pointer, Relaxed);
-				this.tail.store(initial_free_list_element_pointer, Relaxed);
-			}
-			
-			write(&mut this.free_list, free_list.clone());
-			write(&mut this.reference_counter, Self::new_reference_counter());
-			write(&mut this.cto_pool_arc, cto_pool_arc.clone());
+			this.mutable_reference().initialize(maximum_hyper_threads, free_list, cto_pool_arc, initial_free_list_element)
 		}
 		
 		Ok(CtoStrongArc::new(this))
+	}
+	
+	#[inline(always)]
+	unsafe fn initialize(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>, cto_pool_arc: &CtoPoolArc, initial_free_list_element: OwnedFreeListElement<Node<Value>>)
+	{
+		write(&mut self.maximum_hyper_threads, maximum_hyper_threads);
+		self.reinitialize_hazard_pointers();
+		
+		self.head_initialize(initial_free_list_element.to_non_null());
+		self.tail_initialize(initial_free_list_element.to_non_null());
+		
+		write(&mut self.free_list, free_list.clone());
+		write(&mut self.reference_counter, Self::new_reference_counter());
+		write(&mut self.cto_pool_arc, cto_pool_arc.clone());
 	}
 	
 	/// MUST be called when queues are quiescent to clean-out any retired objects.
@@ -611,13 +613,15 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	#[inline(always)]
 	pub fn shutdown(&mut self)
 	{
-		self.hazard_pointers.shutdown(&self.free_list)
+		self.hazard_pointers.shutdown(self.maximum_hyper_threads, &self.free_list)
 	}
 	
 	/// Enqueue an item.
 	#[inline(always)]
 	pub fn enqueue(&self, hyper_thread_index: usize, item: NonNull<Value>)
 	{
+		debug_assert!(hyper_thread_index < self.maximum_hyper_threads, "hyper_thread_index is too large");
+		
 		loop
 		{
 			let tail_non_null = self.protect(hyper_thread_index, &self.tail);
@@ -627,7 +631,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			
 			if Node::<Value>::is_node_full(next_enqueue_index)
 			{
-				if self.tail_is_no_longer(tail)
+				if self.tail_is_no_longer(tail_non_null)
 				{
 					continue;
 				}
@@ -638,10 +642,9 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 					// TODO: Handle out-of-memory
 					let mut new_node = self.free_list.pop().expect("OUT OF MEMORY");
 					new_node.initialize_for_next(item);
-					let new_node_pointer = new_node.as_ptr();
-					if tail.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node_pointer)
+					if tail.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node.as_ptr())
 					{
-						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_node_pointer);
+						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_node.to_non_null());
 						self.clear(hyper_thread_index);
 						return
 					}
@@ -649,7 +652,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 				}
 				else
 				{
-					self.tail_compare_and_swap_strong_sequentially_consistent(tail, next);
+					self.tail_compare_and_swap_strong_sequentially_consistent(tail, next.to_non_null());
 				}
 				continue
 			}
@@ -666,6 +669,8 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	#[inline(always)]
 	pub fn dequeue(&self, hyper_thread_index: usize) -> Option<NonNull<Value>>
 	{
+		debug_assert!(hyper_thread_index < self.maximum_hyper_threads, "hyper_thread_index is too large");
+		
 		loop
 		{
 			let head_non_null = self.protect(hyper_thread_index, &self.head);
@@ -686,12 +691,11 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 					break
 				}
 				
-				if self.head_compare_and_swap_strong_sequentially_consistent(head, next)
+				if self.head_compare_and_swap_strong_sequentially_consistent(head, next.to_non_null())
 				{
 					self.retire(hyper_thread_index, head_non_null)
 				}
 				
-				continue
 			}
 			
 			let item = head.swap_item_for_taken(next_dequeue_index);
@@ -728,36 +732,48 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	#[inline(always)]
 	fn retire(&self, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Node<Value>>>)
 	{
-		self.hazard_pointers.retire(&self.free_list, hyper_thread_index, retire_this_object)
+		self.hazard_pointers.retire(self.maximum_hyper_threads,&self.free_list, hyper_thread_index, retire_this_object)
 	}
 	
 	#[inline(always)]
-	fn head(&self) -> *mut FreeListElement<Node<Value>>
+	fn head_initialize(&self, initial_value: NonNull<FreeListElement<Node<Value>>>)
 	{
-		self.head.load(SeqCst)
+		self.head.store(initial_value.as_ptr(), Relaxed)
 	}
 	
 	#[inline(always)]
-	fn head_compare_and_swap_strong_sequentially_consistent(&self, head_was: &FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn head(&self) -> NonNull<FreeListElement<Node<Value>>>
 	{
-		self.head.compare_and_swap_strong_sequentially_consistent(head_was as *const _ as *mut _, value)
+		self.head.load(SeqCst).to_non_null()
 	}
 	
 	#[inline(always)]
-	fn tail_is_no_longer(&self, original_tail: &FreeListElement<Node<Value>>) -> bool
+	fn head_compare_and_swap_strong_sequentially_consistent(&self, head_was: &FreeListElement<Node<Value>>, next: NonNull<FreeListElement<Node<Value>>>) -> bool
 	{
-		(original_tail as *const _ as *mut _) != self.tail()
+		self.head.compare_and_swap_strong_sequentially_consistent(head_was as *const _ as *mut _, next.as_ptr())
 	}
 	
 	#[inline(always)]
-	fn tail(&self) -> *mut FreeListElement<Node<Value>>
+	fn tail_is_no_longer(&self, original_tail: NonNull<FreeListElement<Node<Value>>>) -> bool
 	{
-		self.tail.load(SeqCst)
+		original_tail.as_ptr() != self.tail().as_ptr()
 	}
 	
 	#[inline(always)]
-	fn tail_compare_and_swap_strong_sequentially_consistent(&self, tail_was: &FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn tail_initialize(&self, initial_value: NonNull<FreeListElement<Node<Value>>>)
 	{
-		self.tail.compare_and_swap_strong_sequentially_consistent(tail_was as *const _ as *mut _, value)
+		self.tail.store(initial_value.as_ptr(), Relaxed)
+	}
+	
+	#[inline(always)]
+	fn tail(&self) -> NonNull<FreeListElement<Node<Value>>>
+	{
+		self.tail.load(SeqCst).to_non_null()
+	}
+	
+	#[inline(always)]
+	fn tail_compare_and_swap_strong_sequentially_consistent(&self, tail_was: &FreeListElement<Node<Value>>, value: NonNull<FreeListElement<Node<Value>>>) -> bool
+	{
+		self.tail.compare_and_swap_strong_sequentially_consistent(tail_was as *const _ as *mut _, value.as_ptr())
 	}
 }

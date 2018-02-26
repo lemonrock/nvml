@@ -80,6 +80,12 @@ impl<T> OwnedFreeListElement<T>
 	}
 	
 	#[inline(always)]
+	pub(crate) fn to_non_null(&self) -> NonNull<FreeListElement<T>>
+	{
+		self.0
+	}
+	
+	#[inline(always)]
 	pub(crate) fn as_ptr(&self) -> *mut FreeListElement<T>
 	{
 		self.0.as_ptr()
