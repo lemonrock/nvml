@@ -10,6 +10,7 @@ use super::arc::CtoStrongArcInner;
 use super::free_list::FreeList;
 use super::free_list::FreeListElement;
 use super::free_list::OwnedFreeListElement;
+use ::std::cell::UnsafeCell;
 use ::std::cmp::min;
 use ::std::fmt;
 use ::std::fmt::Debug;
@@ -33,7 +34,7 @@ trait ExtendedAtomic<T>
 	fn initialize(&mut self, initial_value: T);
 	
 	#[inline(always)]
-	fn compare_and_swap_strong_sequentially_consistent(&self, compare: &mut T, value: T) -> bool;
+	fn compare_and_swap_strong_sequentially_consistent(&self, compare: T, value: T) -> bool;
 }
 
 impl ExtendedAtomic<u32> for AtomicU32
@@ -45,17 +46,9 @@ impl ExtendedAtomic<u32> for AtomicU32
 	}
 	
 	#[inline(always)]
-	fn compare_and_swap_strong_sequentially_consistent(&self, compare: &mut u32, value: u32) -> bool
+	fn compare_and_swap_strong_sequentially_consistent(&self, compare: u32, value: u32) -> bool
 	{
-		match self.compare_exchange(*compare, value, SeqCst, SeqCst)
-		{
-			Ok(_) => true,
-			Err(updated) =>
-			{
-				*compare = updated;
-				false
-			}
-		}
+		self.compare_exchange(compare, value, SeqCst, SeqCst).is_ok()
 	}
 }
 
@@ -68,43 +61,9 @@ impl<T> ExtendedAtomic<*mut T> for AtomicPtr<T>
 	}
 	
 	#[inline(always)]
-	fn compare_and_swap_strong_sequentially_consistent(&self, compare: &mut *mut T, value: *mut T) -> bool
+	fn compare_and_swap_strong_sequentially_consistent(&self, compare: *mut T, value: *mut T) -> bool
 	{
-		match self.compare_exchange(*compare, value, SeqCst, SeqCst)
-		{
-			Ok(_) => true,
-			Err(updated) =>
-			{
-				*compare = updated;
-				false
-			}
-		}
-	}
-}
-
-
-#[cfg_attr(target_pointer_width = "32", repr(C, align(32)))]
-#[cfg_attr(target_pointer_width = "64", repr(C, align(64)))]
-#[derive(Debug)]
-pub(crate) struct CacheAligned<T>(T);
-
-impl<T> Deref for CacheAligned<T>
-{
-	type Target = T;
-	
-	#[inline(always)]
-	fn deref(&self) -> &Self::Target
-	{
-		&self.0
-	}
-}
-
-impl<T> CacheAligned<T>
-{
-	#[inline(always)]
-	pub(crate) const fn new(value: T) -> Self
-	{
-		CacheAligned(value)
+		self.compare_exchange(compare, value, SeqCst, SeqCst).is_ok()
 	}
 }
 
@@ -154,7 +113,7 @@ pub(crate) struct HazardPointerPerHyperThread<Hazardous: CtoSafe>
 	hazard_pointer_per_hyper_thread: [DoubleCacheAligned<AtomicPtr<FreeListElement<Hazardous>>>; MaximumSupportedHyperThreads],
 	
 	// Cache alignment here to try to eliminate 'false sharing'.
-	retired_lists_per_hyper_thread: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Hazardous>>>>; MaximumSupportedHyperThreads],
+	retired_lists_per_hyper_thread: [DoubleCacheAligned<UnsafeCell<Vec<NonNull<FreeListElement<Hazardous>>>>>; MaximumSupportedHyperThreads],
 }
 
 impl<Hazardous: CtoSafe> Debug for HazardPointerPerHyperThread<Hazardous>
@@ -177,15 +136,16 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	// MUST be called when queues are quiescent to clean-out any retired objects.
 	// This design is not particularly safe, and will cause memory to be 'lost' in the event of a power outage.
 	#[inline(always)]
-	pub(crate) fn shutdown(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>)
+	pub(crate) fn shutdown(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>)
 	{
-		let slice = &mut self.retired_lists_per_hyper_thread[.. maximum_hyper_threads];
-		for retired_list_for_hyper_thread in slice.iter_mut()
+		let mut hyper_thread_index = 0;
+		while hyper_thread_index < self.retired_lists_per_hyper_thread.len()
 		{
-			for retired_object in retired_list_for_hyper_thread.drain(..)
+			for retired_object in self.retired_list_for_hyper_thread_mut(hyper_thread_index).drain(..)
 			{
 				free_list.push(OwnedFreeListElement::from_non_null(retired_object))
 			}
+			hyper_thread_index += 1;
 		}
 	}
 	
@@ -199,13 +159,13 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 				hazard_pointer_per_hyper_thread: unsafe { zeroed() },
 				retired_lists_per_hyper_thread: unsafe
 				{
-					let mut array: [DoubleCacheAligned<Vec<NonNull<FreeListElement<Hazardous>>>>; MaximumSupportedHyperThreads] = uninitialized();
+					let mut array: [DoubleCacheAligned<UnsafeCell<Vec<NonNull<FreeListElement<Hazardous>>>>>; MaximumSupportedHyperThreads] = uninitialized();
 					for element in array.iter_mut()
 					{
 						// TODO: Eliminate Vec, move to a fixed-size array?
 						// Costly: A list can grow as long as the number of hyper threads, but performance will be increased. In exchange for much, much higher memory usage (but memory usage that is fixed at allocation time, so can not run out).
 						// Current estimate is 512Kb+ per queue for 256 hyper threads.
-						write(element, DoubleCacheAligned::new(Vec::with_capacity(Self::ReclamationThreshold)))
+						write(element, DoubleCacheAligned::new(UnsafeCell::new(Vec::with_capacity(Self::ReclamationThreshold))))
 					}
 					array
 				},
@@ -247,7 +207,7 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	
 	// Progress Condition: wait-free bounded (by the number of threads squared).
 	#[inline(always)]
-	pub(crate) fn retire(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
+	pub(crate) fn retire(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
 	{
 		let length =
 		{
@@ -258,12 +218,12 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 		
 		if length >= Self::ReclamationThreshold
 		{
-			self.reclaim(maximum_hyper_threads, free_list, hyper_thread_index, length)
+			self.reclaim(free_list, hyper_thread_index, length)
 		}
 	}
 	
 	#[inline(always)]
-	fn reclaim(&mut self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, original_length: usize)
+	fn reclaim(&self, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, original_length: usize)
 	{
 		// Similar to Vec.retain() but changes particularly include truncate() replaced with logic to push to a free list.
 		
@@ -272,7 +232,7 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 			for index in 0 .. original_length
 			{
 				let our_retired_object = unsafe { *self.retired_list_for_hyper_thread(hyper_thread_index).get_unchecked(index) };
-				let delete = self.scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(maximum_hyper_threads, our_retired_object);
+				let delete = self.scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(our_retired_object);
 				
 				if delete
 				{
@@ -307,12 +267,12 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	}
 	
 	#[inline(always)]
-	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, maximum_hyper_threads: usize, our_retired_object: NonNull<FreeListElement<Hazardous>>) -> bool
+	fn scan_all_hyper_threads_to_see_if_they_are_still_using_a_reference_to_our_retired_object_and_if_not_delete_it(&self, our_retired_object: NonNull<FreeListElement<Hazardous>>) -> bool
 	{
 		let our_retired_object = our_retired_object.as_ptr();
 		
 		let mut other_hyper_thread_index = 0;
-		while other_hyper_thread_index < maximum_hyper_threads
+		while other_hyper_thread_index < self.hazard_pointer_per_hyper_thread.len()
 		{
 			if self.hazard_pointer_for_hyper_thread(other_hyper_thread_index).load(SeqCst) == our_retired_object
 			{
@@ -334,13 +294,13 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	#[inline(always)]
 	fn retired_list_for_hyper_thread(&self, hyper_thread_index: usize) -> &Vec<NonNull<FreeListElement<Hazardous>>>
 	{
-		unsafe { self.retired_lists_per_hyper_thread.get_unchecked(hyper_thread_index) }.deref()
+		unsafe { &* self.retired_lists_per_hyper_thread.get_unchecked(hyper_thread_index).deref().get() }
 	}
 	
 	#[inline(always)]
-	fn retired_list_for_hyper_thread_mut(&mut self, hyper_thread_index: usize) -> &mut Vec<NonNull<FreeListElement<Hazardous>>>
+	fn retired_list_for_hyper_thread_mut(&self, hyper_thread_index: usize) -> &mut Vec<NonNull<FreeListElement<Hazardous>>>
 	{
-		unsafe { self.retired_lists_per_hyper_thread.get_unchecked_mut(hyper_thread_index) }.deref_mut()
+		unsafe { &mut * self.retired_lists_per_hyper_thread.get_unchecked(hyper_thread_index).deref().get() }
 	}
 }
 
@@ -371,13 +331,13 @@ impl<Value: CtoSafe> CtoSafe for Node<Value>
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		let mut dequeue_index_in_items = self.dequeue_index_in_items.load(Relaxed) as usize;
-		let enqueue_index_in_items = self.dequeue_index_in_items.load(Relaxed) as usize;
-		let maximum = min(ExclusiveMaximumNumberOfItems, enqueue_index_in_items + 1);
+		let mut dequeue_index_in_items = self.dequeue_index_in_items();
+		let enqueue_index_in_items = self.dequeue_index_in_items();
+		let maximum = min(Self::ExclusiveMaximumNumberOfItems as u32, enqueue_index_in_items + 1);
 		
 		while dequeue_index_in_items < maximum
 		{
-			let item = unsafe { self.items.get_unchecked(dequeue_index_in_items) }.load(Relaxed);
+			let item = self.item(dequeue_index_in_items).load(Relaxed);
 			if item.is_not_null()
 			{
 				item.to_non_null().mutable_reference().cto_pool_opened(cto_pool_arc)
@@ -385,7 +345,7 @@ impl<Value: CtoSafe> CtoSafe for Node<Value>
 			dequeue_index_in_items += 1
 		}
 		
-		let next = self.next_relaxed();
+		let next = self.next();
 		if next.is_not_null()
 		{
 			OwnedFreeListElement::from_non_null_pointer(next).cto_pool_opened(cto_pool_arc)
@@ -399,22 +359,38 @@ impl<Value: CtoSafe> Node<Value>
 	
 	const MaximumIndex: u32 = (Self::ExclusiveMaximumNumberOfItems - 1) as u32;
 	
-	// Starts with the first entry pre-filled and enqidx at 1.
+	const TakenSentinel: *mut Value = !0 as *mut Value;
+	
+	// Starts with the first entry pre-filled and enqueue_index_in_items at 1.
 	#[inline(always)]
-	fn initialize(&mut self, item: *mut Value)
+	fn initialize_for_next(&mut self, item: NonNull<Value>)
 	{
-		debug_assert_ne!(Self::ExclusiveMaximumNumberOfItems, 0, "ExclusiveMaximumNumberOfItems should not be zero");
+		self.initialize_internal(item.as_ptr(), 1)
+	}
+	
+	// Starts with no first entry pre-filled and enqueue_index_in_items at 0.
+	#[inline(always)]
+	fn initialize_for_initial(&mut self)
+	{
+		self.initialize_internal(null_mut(), 0)
+	}
+	
+	#[inline(always)]
+	fn initialize_internal(&mut self, item: *mut Value, enqueue_index_in_items: u32)
+	{
+		debug_assert_ne!(item, Self::TakenSentinel, "item pointer can not be the TakenSentinel '0x{:X}'", Self::TakenSentinel as usize);
 		
 		self.dequeue_index_in_items.initialize(0);
-		self.enqueue_index_in_items.initialize(1);
+		self.enqueue_index_in_items.initialize(enqueue_index_in_items);
 		self.next.initialize(null_mut());
 		
-		self.relaxed_store_of_item(0, item);
+		debug_assert_ne!(Self::ExclusiveMaximumNumberOfItems, 0, "ExclusiveMaximumNumberOfItems should not be zero");
+		self.store_relaxed_item(0, item);
 		
 		let mut item_index = 1;
-		while item_index < Self::ExclusiveMaximumNumberOfItems
+		while item_index < (Self::ExclusiveMaximumNumberOfItems as u32)
 		{
-			self.relaxed_store_of_item(item_index, null_mut());
+			self.store_relaxed_item(item_index, null_mut());
 			item_index += 1;
 		}
 	}
@@ -432,28 +408,61 @@ impl<Value: CtoSafe> Node<Value>
 	}
 	
 	#[inline(always)]
+	fn enqueue_index_in_items(&self) -> u32
+	{
+		self.enqueue_index_in_items.load(SeqCst)
+	}
+	
+	#[inline(always)]
+	fn fetch_then_increment_enqueue_index_in_items(&self) -> u32
+	{
+		self.enqueue_index_in_items.fetch_add(1, SeqCst)
+	}
+	
+	#[inline(always)]
+	fn dequeue_index_in_items(&self) -> u32
+	{
+		self.dequeue_index_in_items.load(SeqCst)
+	}
+	
+	#[inline(always)]
+	fn fetch_then_increment_dequeue_index_in_items(&self) -> u32
+	{
+		self.dequeue_index_in_items.fetch_add(1, SeqCst)
+	}
+	
+	#[inline(always)]
 	fn next(&self) -> *mut FreeListElement<Self>
 	{
 		self.next.load(SeqCst)
 	}
 	
 	#[inline(always)]
-	fn next_relaxed(&self) -> *mut FreeListElement<Self>
-	{
-		self.next.load(Relaxed)
-	}
-	
-	#[inline(always)]
-	fn cas_next(&self, compare: &mut *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn next_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
 	{
 		self.next.compare_and_swap_strong_sequentially_consistent(compare, value)
 	}
 	
 	#[inline(always)]
-	fn relaxed_store_of_item(&self, item_index: usize, item: *mut Value)
+	fn store_relaxed_item(&self, next_enqueue_index: u32, item: *mut Value)
 	{
-		debug_assert!(item_index <= ::std::u32::MAX as usize, "item_index exceeds u32::MAX");
-		self.item(item_index as u32).store(item, Relaxed);
+		self.item(next_enqueue_index).store(item, Relaxed);
+	}
+	
+	#[inline(always)]
+	fn compare_and_swap_strong_sequentially_consistent_item(&self, next_enqueue_index: u32, item: NonNull<Value>) -> bool
+	{
+		let item = item.as_ptr();
+		debug_assert_ne!(item, Self::TakenSentinel, "item pointer can not be the TakenSentinel '0x{:X}'", Self::TakenSentinel as usize);
+		self.item(next_enqueue_index).compare_and_swap_strong_sequentially_consistent(null_mut(), item)
+	}
+	
+	#[inline(always)]
+	fn swap_item_for_taken(&self, next_dequeue_index: u32) -> *mut Value
+	{
+		let item = self.item(next_dequeue_index).swap(Self::TakenSentinel, SeqCst);
+		debug_assert_ne!(item, Self::TakenSentinel, "item pointer can not be the TakenSentinel '0x{:X}'", Self::TakenSentinel as usize);
+		item
 	}
 	
 	#[inline(always)]
@@ -462,67 +471,6 @@ impl<Value: CtoSafe> Node<Value>
 		debug_assert!((item_index as usize) < Self::ExclusiveMaximumNumberOfItems, "item_index '{}' exceeds Self::ExclusiveMaximumNumberOfItems '{}'", item_index, Self::ExclusiveMaximumNumberOfItems);
 		
 		unsafe { self.items.get_unchecked(item_index as usize) }
-	}
-}
-
-#[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
-#[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-struct FetchAndAddArrayQueue<Value: CtoSafe>
-{
-	// head and tail should never be null.
-	head: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
-	tail: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
-	maximum_hyper_threads: usize,
-	hazard_pointers: Box<HazardPointerPerHyperThread<Node<Value>>>,
-	free_list: CtoStrongArc<FreeList<Node<Value>>>,
-	reference_counter: AtomicUsize,
-	cto_pool_arc: CtoPoolArc,
-}
-
-impl<Value: CtoSafe> CtoSafe for FetchAndAddArrayQueue<Value>
-{
-	#[inline(always)]
-	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
-	{
-		self.free_list.cto_pool_opened(cto_pool_arc);
-		cto_pool_arc.write(&mut self.cto_pool_arc);
-		
-		self.reinitialize_hazard_pointers();
-		
-		// head is never null.
-		OwnedFreeListElement::from_non_null_pointer(self.head.load(Relaxed)).cto_pool_opened(cto_pool_arc);
-		
-		// We do not need to the same as above from tail, as tail should be reachable from head via .next on Node instances.
-	}
-}
-
-impl<Value: CtoSafe> Drop for FetchAndAddArrayQueue<Value>
-{
-	#[inline(always)]
-	fn drop(&mut self)
-	{
-		const ArbitraryHyperThreadIndex: usize = 0;
-		
-		// Drain the queue.
-		while self.dequeue(ArbitraryHyperThreadIndex).is_some()
-		{
-		}
-		
-		// Destroy the last node; the head always has a value.
-		self.free_list.push(OwnedFreeListElement::from_non_null_pointer(self.head.load(SeqCst)));
-		
-		// Destroy ourselves
-		let cto_pool_arc = self.cto_pool_arc.clone();
-		cto_pool_arc.free_pointer(self)
-	}
-}
-
-impl<Value: CtoSafe> CtoStrongArcInner for FetchAndAddArrayQueue<Value>
-{
-	#[inline(always)]
-	fn reference_counter(&self) -> &AtomicUsize
-	{
-		&self.reference_counter
 	}
 }
 
@@ -547,41 +495,92 @@ quick_error!
 	}
 }
 
-impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
+/// Rust implementation of a persistent variant of <https://github.com/pramalhe/ConcurrencyFreaks/blob/master/CPP/queues/array/FAAArrayQueue.hpp>.
+#[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
+#[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
+pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe>
 {
-	const MaximumSupportedHyperThreads: usize = MaximumSupportedHyperThreads;
-	
-	const TakenSentinel: *mut Value = !0 as *mut Value;
-	
+	// head and tail should never be null.
+	head: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
+	tail: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
+	maximum_hyper_threads: usize,
+	hazard_pointers: Box<HazardPointerPerHyperThread<Node<Value>>>,
+	free_list: CtoStrongArc<FreeList<Node<Value>>>,
+	reference_counter: AtomicUsize,
+	cto_pool_arc: CtoPoolArc,
+}
+
+impl<Value: CtoSafe> CtoSafe for PersistentFetchAndAddArrayQueue<Value>
+{
 	#[inline(always)]
-	fn cas_tail(&self, compare: &mut *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		self.tail.compare_and_swap_strong_sequentially_consistent(compare, value)
+		self.free_list.cto_pool_opened(cto_pool_arc);
+		cto_pool_arc.write(&mut self.cto_pool_arc);
+		
+		self.reinitialize_hazard_pointers();
+		
+		// head is never null.
+		OwnedFreeListElement::from_non_null_pointer(self.head()).cto_pool_opened(cto_pool_arc);
+		
+		// We do not need to the same as above from tail, as tail should be reachable from head via .next on Node instances.
 	}
-	
+}
+
+impl<Value: CtoSafe> Drop for PersistentFetchAndAddArrayQueue<Value>
+{
 	#[inline(always)]
-	fn cas_head(&self, compare: &mut *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn drop(&mut self)
 	{
-		self.head.compare_and_swap_strong_sequentially_consistent(compare, value)
+		const ArbitraryHyperThreadIndex: usize = 0;
+		
+		// Drain the queue.
+		while self.dequeue(ArbitraryHyperThreadIndex).is_some()
+		{
+		}
+		
+		// Destroy the last node; the head always has a value.
+		self.free_list.push(OwnedFreeListElement::from_non_null_pointer(self.head()));
+		
+		// Destroy ourselves
+		let cto_pool_arc = self.cto_pool_arc.clone();
+		cto_pool_arc.free_pointer(self)
 	}
-	
+}
+
+impl<Value: CtoSafe> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value>
+{
+	#[inline(always)]
+	fn reference_counter(&self) -> &AtomicUsize
+	{
+		&self.reference_counter
+	}
+}
+
+impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
+{
+	/// Creates a new instance.
 	#[inline(always)]
 	pub fn new(maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>, cto_pool_arc: &CtoPoolArc) -> Result<CtoStrongArc<Self>, OutOfMemoryError>
 	{
 		debug_assert_ne!(maximum_hyper_threads, 0);
 		debug_assert!(maximum_hyper_threads <= HazardPointerPerHyperThread::<Value>::MaximumSupportedHyperThreads);
 		
-		let mut sentinel_owned_free_list_element = match free_list.pop()
+		let initial_free_list_element = match free_list.pop()
 		{
 			None => return Err(OutOfMemoryError::FreeList),
-			Some(free_list_element) => free_list_element,
+			Some(mut initial_free_list_element) =>
+			{
+				initial_free_list_element.initialize_for_initial();
+				initial_free_list_element
+			},
 		};
 		
 		let mut this = match cto_pool_arc.pool_pointer().malloc::<Self>()
 		{
 			Err(pmdk_error) =>
 			{
-				free_list.push(sentinel_owned_free_list_element);
+				free_list.push(initial_free_list_element);
 				return Err(OutOfMemoryError::CtoPoolArc(pmdk_error))
 			},
 			Ok(pointer) => pointer.to_non_null(),
@@ -593,13 +592,11 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 			write(&mut this.maximum_hyper_threads, maximum_hyper_threads);
 			this.reinitialize_hazard_pointers();
 			
-			let pointer = sentinel_owned_free_list_element.as_ptr();
-			let sentinel_node = sentinel_owned_free_list_element.deref_mut().deref_mut();
-			
-			sentinel_node.initialize(null_mut());
-			sentinel_node.enqueue_index_in_items.store(0, Relaxed);
-			this.head.store(pointer, Relaxed);
-			this.tail.store(pointer, Relaxed);
+			{
+				let initial_free_list_element_pointer = initial_free_list_element.as_ptr();
+				this.head.store(initial_free_list_element_pointer, Relaxed);
+				this.tail.store(initial_free_list_element_pointer, Relaxed);
+			}
 			
 			write(&mut this.free_list, free_list.clone());
 			write(&mut this.reference_counter, Self::new_reference_counter());
@@ -609,22 +606,28 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 		Ok(CtoStrongArc::new(this))
 	}
 	
+	/// MUST be called when queues are quiescent to clean-out any retired objects.
+	/// This design is not particularly safe, and will cause memory to be 'lost' in the event of a power outage.
+	#[inline(always)]
+	pub fn shutdown(&mut self)
+	{
+		self.hazard_pointers.shutdown(&self.free_list)
+	}
+	
+	/// Enqueue an item.
 	#[inline(always)]
 	pub fn enqueue(&self, hyper_thread_index: usize, item: NonNull<Value>)
 	{
-		let item = item.as_ptr();
-		assert_ne!(item, Self::TakenSentinel, "item pointer can not be the TakenSentinel '0x{:X}'", Self::TakenSentinel as usize);
-		
 		loop
 		{
-			let mut tail = self.protect(hyper_thread_index, &self.tail);
+			let tail = self.protect(hyper_thread_index, &self.tail);
 			let tail_non_null = tail.to_non_null();
 			let tail_reference = tail_non_null.reference();
-			let next_enqueue_index = tail_reference.enqueue_index_in_items.fetch_add(1, SeqCst);
+			let next_enqueue_index = tail_reference.fetch_then_increment_enqueue_index_in_items();
 			
 			if Node::<Value>::is_node_full(next_enqueue_index)
 			{
-				if tail != self.tail.load(SeqCst)
+				if self.tail_is_no_longer(tail)
 				{
 					continue;
 				}
@@ -634,13 +637,11 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 				{
 					// TODO: Handle out-of-memory
 					let mut new_node = self.free_list.pop().expect("OUT OF MEMORY");
-					new_node.initialize(item);
-					// TODO: Don't care about null_mut()
+					new_node.initialize_for_next(item);
 					let new_node_pointer = new_node.as_ptr();
-					if tail_reference.cas_next(&mut null_mut(), new_node_pointer)
+					if tail_reference.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node_pointer)
 					{
-						// TODO: Don't care about tail
-						self.cas_tail(&mut tail, new_node_pointer);
+						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_node_pointer);
 						self.clear(hyper_thread_index);
 						return
 					}
@@ -648,13 +649,12 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 				}
 				else
 				{
-					// TODO: Don't care about tail
-					self.cas_tail(&mut tail, next);
+					self.tail_compare_and_swap_strong_sequentially_consistent(tail, next);
 				}
 				continue
 			}
 			
-			if tail_reference.item(next_enqueue_index).compare_and_swap_strong_sequentially_consistent(&mut null_mut(), item)
+			if tail_reference.compare_and_swap_strong_sequentially_consistent_item(next_enqueue_index, item)
 			{
 				self.clear(hyper_thread_index);
 				return
@@ -662,21 +662,22 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 		}
 	}
 	
+	/// Dequeue an item.
 	#[inline(always)]
-	pub fn dequeue(&mut self, hyper_thread_index: usize) -> Option<NonNull<Value>>
+	pub fn dequeue(&self, hyper_thread_index: usize) -> Option<NonNull<Value>>
 	{
 		loop
 		{
-			let mut head = self.protect(hyper_thread_index, &self.head);
+			let head = self.protect(hyper_thread_index, &self.head);
 			let head_non_null = head.to_non_null();
 			let head_reference = head_non_null.reference();
 			
-			if head_reference.dequeue_index_in_items.load(SeqCst) >= head_reference.enqueue_index_in_items.load(SeqCst) && head_reference.next().is_null()
+			if head_reference.dequeue_index_in_items() >= head_reference.enqueue_index_in_items() && head_reference.next().is_null()
 			{
 				break
 			}
 			
-			let next_dequeue_index = head_reference.dequeue_index_in_items.fetch_add(1, SeqCst);
+			let next_dequeue_index = head_reference.fetch_then_increment_dequeue_index_in_items();
 			if Node::<Value>::is_node_drained(next_dequeue_index)
 			{
 				// This node has been drained: check if there is another one.
@@ -686,7 +687,7 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 					break
 				}
 				
-				if self.cas_head(&mut head, next)
+				if self.head_compare_and_swap_strong_sequentially_consistent(head, next)
 				{
 					self.retire(hyper_thread_index, head_non_null)
 				}
@@ -694,8 +695,7 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 				continue
 			}
 			
-			let item = head_reference.item(next_dequeue_index).swap(Self::TakenSentinel, SeqCst);
-			debug_assert_ne!(item, Self::TakenSentinel, "dequeued item should never be the TakenSentinel");
+			let item = head_reference.swap_item_for_taken(next_dequeue_index);
 			
 			if item.is_not_null()
 			{
@@ -727,8 +727,38 @@ impl<Value: CtoSafe> FetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	fn retire(&mut self, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Node<Value>>>)
+	fn retire(&self, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Node<Value>>>)
 	{
-		self.hazard_pointers.retire(self.maximum_hyper_threads, &self.free_list, hyper_thread_index, retire_this_object)
+		self.hazard_pointers.retire(&self.free_list, hyper_thread_index, retire_this_object)
+	}
+	
+	#[inline(always)]
+	fn head(&self) -> *mut FreeListElement<Node<Value>>
+	{
+		self.head.load(SeqCst)
+	}
+	
+	#[inline(always)]
+	fn head_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	{
+		self.head.compare_and_swap_strong_sequentially_consistent(compare, value)
+	}
+	
+	#[inline(always)]
+	fn tail_is_no_longer(&self, tail: *mut FreeListElement<Node<Value>>) -> bool
+	{
+		tail != self.tail()
+	}
+	
+	#[inline(always)]
+	fn tail(&self) -> *mut FreeListElement<Node<Value>>
+	{
+		self.tail.load(SeqCst)
+	}
+	
+	#[inline(always)]
+	fn tail_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	{
+		self.tail.compare_and_swap_strong_sequentially_consistent(compare, value)
 	}
 }

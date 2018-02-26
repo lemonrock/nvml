@@ -48,8 +48,6 @@ impl Clone for CtoPoolArc
 
 impl CtoPoolArc
 {
-	const PageAlignment: usize = 4096;
-	
 	/// Used in conjunction with `CtoSafe.cto_pool_opened()` to make sure that old references to persistent objects are discarded.
 	#[inline(always)]
 	pub fn write(&self, location: &mut Self)
@@ -182,15 +180,23 @@ impl CtoPoolArc
 		self.pool_pointer().allocate(initializer, self)
 	}
 	
-	#[inline(always)]
-	fn page_aligned_allocate<T>(&self) -> Result<NonNull<T>, PmdkError>
-	{
-		match self.pool_pointer().aligned_alloc(Self::PageAlignment, size_of::<T>())
-		{
-			Ok(void_pointer) => Ok(unsafe { NonNull::new_unchecked(void_pointer as *mut T) }),
-			Err(pmdk_error) => Err(pmdk_error)
-		}
-	}
+// const PageAlignment: usize = 4096;
+//
+//	#[inline(always)]
+//	fn page_aligned_allocate<T>(&self) -> Result<NonNull<T>, PmdkError>
+//	{
+//		match self.pool_pointer().aligned_alloc(Self::PageAlignment, size_of::<T>())
+//		{
+//			Ok(void_pointer) => Ok(unsafe { NonNull::new_unchecked(void_pointer as *mut T) }),
+//			Err(pmdk_error) => Err(pmdk_error)
+//		}
+//	}
+//
+//	#[inline(always)]
+//	fn free_non_null<T>(&self, non_null: NonNull<T>)
+//	{
+//		self.free_pointer(non_null.as_ptr())
+//	}
 	
 	#[inline(always)]
 	fn aligned_allocate_or_panic(&self, alignment: usize, size: usize) -> NonNull<u8>
@@ -202,12 +208,6 @@ impl CtoPoolArc
 	fn aligned_allocate_or_panic_of_type<T>(&self, alignment: usize, size: usize) -> NonNull<T>
 	{
 		unsafe { NonNull::new_unchecked(self.pool_pointer().aligned_alloc(alignment, size).unwrap() as *mut T) }
-	}
-	
-	#[inline(always)]
-	fn free_non_null<T>(&self, non_null: NonNull<T>)
-	{
-		self.free_pointer(non_null.as_ptr())
 	}
 	
 	#[inline(always)]
