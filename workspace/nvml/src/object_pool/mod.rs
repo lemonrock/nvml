@@ -16,7 +16,7 @@ use ::libc::size_t;
 use ::libc::timespec;
 use ::Configuration;
 use ::nvml_sys::*;
-use ::nvml_sys::pobj_tx_param::TX_PARAM_NONE;
+use ::nvml_sys::pobj_tx_param_TX_PARAM_NONE;
 use ::rust_extra::likely;
 use ::rust_extra::unlikely;
 use ::std::any::Any;

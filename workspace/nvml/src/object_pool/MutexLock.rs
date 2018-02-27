@@ -31,7 +31,7 @@ impl<'a, T: Persistable> MutexLock<'a, T>
 	#[inline(always)]
 	pub fn mutex_in_transaction(self, transaction: Transaction)
 	{
-		let result = unsafe { pmemobj_tx_lock(pobj_tx_param::TX_PARAM_MUTEX, self.mutex as *mut c_void) };
+		let result = unsafe { pmemobj_tx_lock(pobj_tx_param_TX_PARAM_MUTEX, self.mutex as *mut c_void) };
 		if likely(result == 0)
 		{
 			return;

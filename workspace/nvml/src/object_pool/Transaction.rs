@@ -37,7 +37,7 @@ impl Transaction
 				// setjmp returns a non-zero value if returning from longjmp()
 				if setjmp(tx_set_jmp_environment) == 0
 				{
-					set_error_number_if_necessary(pmemobj_tx_begin(pop, tx_set_jmp_environment, TX_PARAM_NONE, TX_PARAM_NONE));
+					set_error_number_if_necessary(pmemobj_tx_begin(pop, tx_set_jmp_environment, pobj_tx_param_TX_PARAM_NONE, pobj_tx_param_TX_PARAM_NONE));
 				}
 				else
 				{
@@ -48,12 +48,12 @@ impl Transaction
 				while
 				{
 					stage = pmemobj_tx_stage();
-					stage != pobj_tx_stage::TX_STAGE_NONE
+					stage != pobj_tx_stage_TX_STAGE_NONE
 				}
 				{
 					match stage
 					{
-						pobj_tx_stage::TX_STAGE_WORK =>
+						pobj_tx_stage_TX_STAGE_WORK =>
 						{
 							let panic_os_error_nummber: c_int = E::ENOTSUP;
 							
@@ -80,7 +80,7 @@ impl Transaction
 							pmemobj_tx_process();
 						},
 						
-						pobj_tx_stage::TX_STAGE_ONCOMMIT =>
+						pobj_tx_stage_TX_STAGE_ONCOMMIT =>
 						{
 							match catch_unwind(AssertUnwindSafe(|| on_commit()))
 							{
@@ -101,7 +101,7 @@ impl Transaction
 							pmemobj_tx_process();
 						},
 						
-						pobj_tx_stage::TX_STAGE_ONABORT =>
+						pobj_tx_stage_TX_STAGE_ONABORT =>
 						{
 							match catch_unwind(AssertUnwindSafe(|| on_abort()))
 							{
@@ -122,7 +122,7 @@ impl Transaction
 							pmemobj_tx_process();
 						},
 						
-						pobj_tx_stage::TX_STAGE_FINALLY =>
+						pobj_tx_stage_TX_STAGE_FINALLY =>
 						{
 							pmemobj_tx_process();
 						},

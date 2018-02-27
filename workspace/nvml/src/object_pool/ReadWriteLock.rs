@@ -96,7 +96,7 @@ impl<'a, T: Persistable> ReadWriteLock<'a, T>
 	#[inline(always)]
 	pub fn write_in_transaction(self, transaction: Transaction)
 	{
-		let result = unsafe { pmemobj_tx_lock(pobj_tx_param::TX_PARAM_RWLOCK, self.read_write_lock as *mut c_void) };
+		let result = unsafe { pmemobj_tx_lock(pobj_tx_param_TX_PARAM_RWLOCK, self.read_write_lock as *mut c_void) };
 		if likely(result == 0)
 		{
 			return;

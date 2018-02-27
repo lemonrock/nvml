@@ -26,7 +26,7 @@ impl<'a, T: CtoSafe> Placer<T> for CtoVecPlaceBack<'a, T>
 	}
 }
 
-impl<'a, T: CtoSafe> Place<T> for CtoVecPlaceBack<'a, T>
+unsafe impl<'a, T: CtoSafe> Place<T> for CtoVecPlaceBack<'a, T>
 {
 	#[inline(always)]
 	fn pointer(&mut self) -> *mut T

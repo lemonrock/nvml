@@ -8,7 +8,7 @@
 
 In preference order (also happens to be newest first order):-
 0. (nothing)
-1. `clwb`
+1. `clwb` (CLWB is also ordered with respect to SFENCE, and thus a pfence()).
 2. `clflushopt`. (Skylake onwards)
 3. `clflush`.
 
@@ -32,7 +32,7 @@ In preference order (also happens to be newest first order):-
 /// 5. Do nothing for `load`.
 /// 6. Before taking any I/O action, issue a `psync()` to ensure all changes have reached persistent storage.
 /// 7. Pedro Ramalhete & Andreia Correia argue that (4) does not require a `pfence()` before and a `pfence()` after on x86_64 because read-modify-write instructions (CAS, fetch_add, exchange, etc) ensure order for CLFLUSHOPT and CLWB.
-pub trait SubtlePersistence
+pub trait PersistentMemory
 {
 	/// Persistent-write-back: `pwb(addr) => CLWB(addr)`.
 	/// Initiates write-back of a specified location to persistent memory.
@@ -54,10 +54,11 @@ pub trait SubtlePersistence
 
 
 
+
 /// Rust implementation of a persistent variant of <https://github.com/pramalhe/ConcurrencyFreaks/blob/master/CPP/queues/array/FAAArrayQueue.hpp>.
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe, P: SubtlePersistence>
+pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe, P: PersistentMemory>
 {
 	// head and tail should never be null.
 	head: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
@@ -70,7 +71,7 @@ pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe, P: SubtlePersistence>
 	phantom_data: PhantomData<P>,
 }
 
-impl<Value: CtoSafe, P: SubtlePersistence> CtoSafe for PersistentFetchAndAddArrayQueue<Value, P>
+impl<Value: CtoSafe, P: PersistentMemory> CtoSafe for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
@@ -90,7 +91,7 @@ impl<Value: CtoSafe, P: SubtlePersistence> CtoSafe for PersistentFetchAndAddArra
 	}
 }
 
-impl<Value: CtoSafe, P: SubtlePersistence> Drop for PersistentFetchAndAddArrayQueue<Value, P>
+impl<Value: CtoSafe, P: PersistentMemory> Drop for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -109,7 +110,7 @@ impl<Value: CtoSafe, P: SubtlePersistence> Drop for PersistentFetchAndAddArrayQu
 	}
 }
 
-impl<Value: CtoSafe, P: SubtlePersistence> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value, P>
+impl<Value: CtoSafe, P: PersistentMemory> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn reference_counter(&self) -> &AtomicUsize
@@ -118,7 +119,7 @@ impl<Value: CtoSafe, P: SubtlePersistence> CtoStrongArcInner for PersistentFetch
 	}
 }
 
-impl<Value: CtoSafe, P: SubtlePersistence> PersistentFetchAndAddArrayQueue<Value, P>
+impl<Value: CtoSafe, P: PersistentMemory> PersistentFetchAndAddArrayQueue<Value, P>
 {
 	/// Creates a new instance.
 	#[inline(always)]

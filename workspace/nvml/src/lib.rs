@@ -25,7 +25,6 @@
 #![feature(placement_new_protocol)]
 #![feature(platform_intrinsics)]
 #![feature(pointer_methods)]
-#![feature(repr_align)]
 #![feature(shared)]
 #![feature(specialization)]
 #![feature(stmt_expr_attributes)]
