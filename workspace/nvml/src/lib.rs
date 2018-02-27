@@ -81,6 +81,9 @@ include!("use_path.rs");
 /// Block pools are similar to persistent arrays.
 pub mod block_pool;
 
+/// This module contains logic to support algorithms which need to know which hyper thread they are running on,
+pub mod hyper_thread;
+
 /// CTO pools are equivalent to multiple `malloc`-like (Heap) allocators.
 /// Get started with the struct `CtoPool`.
 /// Use the method `CtoPool::new()` to create a new instance, and `self.allocator()` to access an allocator that can construct CTO equivalents of Box, Rc, Arc, Mutex, etc.
