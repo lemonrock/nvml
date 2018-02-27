@@ -29,17 +29,16 @@ impl<Value: CtoSafe> CtoSafe for Node<Value>
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
 	{
-		let mut dequeue_index_in_items = self.dequeue_index_in_items();
-		let enqueue_index_in_items = self.dequeue_index_in_items();
-		let maximum = min(Self::ExclusiveMaximumNumberOfItems as u32, enqueue_index_in_items + 1);
+		// enqueue_index_in_items is really 'next_enqueue_index_in_items'.
+		// It can also equal or exceed ExclusiveMaximumIndex.
+		let enqueue_index_in_items = self.enqueue_index_in_items();
+		let exclusive_maximum_index = min(enqueue_index_in_items, u32::ExclusiveMaximumIndex);
 		
-		while dequeue_index_in_items < maximum
+		let mut dequeue_index_in_items = self.dequeue_index_in_items();
+		while dequeue_index_in_items < exclusive_maximum_index
 		{
 			let item = self.item(dequeue_index_in_items).load(Relaxed);
-			if item.is_not_null()
-			{
-				item.to_non_null().mutable_reference().cto_pool_opened(cto_pool_arc)
-			}
+			item.to_non_null().mutable_reference().cto_pool_opened(cto_pool_arc);
 			dequeue_index_in_items += 1
 		}
 		
@@ -54,8 +53,6 @@ impl<Value: CtoSafe> CtoSafe for Node<Value>
 impl<Value: CtoSafe> Node<Value>
 {
 	const ExclusiveMaximumNumberOfItems: usize = ExclusiveMaximumNumberOfItems;
-	
-	const MaximumIndex: u32 = (Self::ExclusiveMaximumNumberOfItems - 1) as u32;
 	
 	const TakenSentinel: *mut Value = !0 as *mut Value;
 	
@@ -94,18 +91,6 @@ impl<Value: CtoSafe> Node<Value>
 	}
 	
 	#[inline(always)]
-	fn is_node_full(next_enqueue_index: u32) -> bool
-	{
-		next_enqueue_index > Self::MaximumIndex
-	}
-	
-	#[inline(always)]
-	fn is_node_drained(next_dequeue_index: u32) -> bool
-	{
-		next_dequeue_index > Self::MaximumIndex
-	}
-	
-	#[inline(always)]
 	fn enqueue_index_in_items(&self) -> u32
 	{
 		self.enqueue_index_in_items.load(SeqCst)
@@ -136,9 +121,9 @@ impl<Value: CtoSafe> Node<Value>
 	}
 	
 	#[inline(always)]
-	fn next_compare_and_swap_strong_sequentially_consistent(&self, compare: *mut FreeListElement<Node<Value>>, value: *mut FreeListElement<Node<Value>>) -> bool
+	fn next_compare_and_swap_strong_sequentially_consistent_if_next_is_still_null(&self, value: NonNull<FreeListElement<Node<Value>>>) -> bool
 	{
-		self.next.compare_and_swap_strong_sequentially_consistent(compare, value)
+		self.next.compare_and_swap_strong_sequentially_consistent(null_mut(), value.as_ptr())
 	}
 	
 	#[inline(always)]

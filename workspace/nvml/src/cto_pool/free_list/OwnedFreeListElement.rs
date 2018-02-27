@@ -84,10 +84,4 @@ impl<T> OwnedFreeListElement<T>
 	{
 		self.0
 	}
-	
-	#[inline(always)]
-	pub(crate) fn as_ptr(&self) -> *mut FreeListElement<T>
-	{
-		self.0.as_ptr()
-	}
 }

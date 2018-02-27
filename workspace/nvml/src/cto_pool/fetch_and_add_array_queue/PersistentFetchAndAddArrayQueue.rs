@@ -2,10 +2,62 @@
 // Copyright © 2017 The developers of nvml. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/lemonrock/nvml/master/COPYRIGHT.
 
 
+
+
+/*
+
+In preference order (also happens to be newest first order):-
+0. (nothing)
+1. `clwb`
+2. `clflushopt`. (Skylake onwards)
+3. `clflush`.
+
+
+#define pmem_clflushopt(addr)\
+	asm volatile(".byte 0x66; clflush %0" : "+m" \
+		(*(volatile char *)(addr)));
+#define pmem_clwb(addr)\
+	asm volatile(".byte 0x66; xsaveopt %0" : "+m" \
+(*(volatile char *)(addr)));
+*/
+
+/// 1. Immediately after a `store`, write back the written value by issuing a pwb().
+/// 2.a. Immediately before a `store-release` issue a `pfence()`.
+/// 2.b. Immediately after a `store-release` write-back the written value by issuing a `pwb()`.
+/// 3. Immediately after a `load-acquire` write-back the loaded value by issuing a `pwb()` followed by a `pfence()`.
+/// 4a. Handle `CAS-acquire-release` as a combination of `store-release` and `load-acquire`:-
+/// 	- immediately before the CAS, issue a `pfence()`
+///  - immediately after the CAS,  write-back the loaded value by issuing a `pwb()` followed by a `pfence()`.
+/// 4b. As for 4a, but also for `fetch_add` and `exchange` and probably all other read-modify-write instructions.
+/// 5. Do nothing for `load`.
+/// 6. Before taking any I/O action, issue a `psync()` to ensure all changes have reached persistent storage.
+/// 7. Pedro Ramalhete & Andreia Correia argue that (4) does not require a `pfence()` before and a `pfence()` after on x86_64 because read-modify-write instructions (CAS, fetch_add, exchange, etc) ensure order for CLFLUSHOPT and CLWB.
+pub trait SubtlePersistence
+{
+	/// Persistent-write-back: `pwb(addr) => CLWB(addr)`.
+	/// Initiates write-back of a specified location to persistent memory.
+	/// Non-blocking.
+	#[inline(always)]
+	fn persistent_write_back(address: *mut u8);
+	
+	/// Persistent-fence: `pfence() => SFENCE()`.
+	/// Enforces an ordering between previous and subsequent persistent-write-backs in the current thread.
+	#[inline(always)]
+	fn persistent_fence();
+	
+	/// Persistent-sync: `psync() => SFENCE()`
+	/// Blocking.
+	/// Finishes when all preceding `persistent_fence()` in this thread have completed.
+	#[inline(always)]
+	fn persistent_sync();
+}
+
+
+
 /// Rust implementation of a persistent variant of <https://github.com/pramalhe/ConcurrencyFreaks/blob/master/CPP/queues/array/FAAArrayQueue.hpp>.
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
 #[cfg_attr(target_pointer_width = "64", repr(C, align(128)))]
-pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe>
+pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe, P: SubtlePersistence>
 {
 	// head and tail should never be null.
 	head: DoubleCacheAligned<AtomicPtr<FreeListElement<Node<Value>>>>,
@@ -15,9 +67,10 @@ pub struct PersistentFetchAndAddArrayQueue<Value: CtoSafe>
 	free_list: CtoStrongArc<FreeList<Node<Value>>>,
 	reference_counter: AtomicUsize,
 	cto_pool_arc: CtoPoolArc,
+	phantom_data: PhantomData<P>,
 }
 
-impl<Value: CtoSafe> CtoSafe for PersistentFetchAndAddArrayQueue<Value>
+impl<Value: CtoSafe, P: SubtlePersistence> CtoSafe for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn cto_pool_opened(&mut self, cto_pool_arc: &CtoPoolArc)
@@ -32,10 +85,12 @@ impl<Value: CtoSafe> CtoSafe for PersistentFetchAndAddArrayQueue<Value>
 		OwnedFreeListElement::from_non_null(self.head()).cto_pool_opened(cto_pool_arc);
 		
 		// We do not need to the same as above from tail, as tail should be reachable from head via .next on Node instances.
+		
+		P::persistent_sync()
 	}
 }
 
-impl<Value: CtoSafe> Drop for PersistentFetchAndAddArrayQueue<Value>
+impl<Value: CtoSafe, P: SubtlePersistence> Drop for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn drop(&mut self)
@@ -54,7 +109,7 @@ impl<Value: CtoSafe> Drop for PersistentFetchAndAddArrayQueue<Value>
 	}
 }
 
-impl<Value: CtoSafe> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value>
+impl<Value: CtoSafe, P: SubtlePersistence> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value, P>
 {
 	#[inline(always)]
 	fn reference_counter(&self) -> &AtomicUsize
@@ -63,7 +118,7 @@ impl<Value: CtoSafe> CtoStrongArcInner for PersistentFetchAndAddArrayQueue<Value
 	}
 }
 
-impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
+impl<Value: CtoSafe, P: SubtlePersistence> PersistentFetchAndAddArrayQueue<Value, P>
 {
 	/// Creates a new instance.
 	#[inline(always)]
@@ -96,6 +151,8 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			this.mutable_reference().initialize(maximum_hyper_threads, free_list, cto_pool_arc, initial_free_list_element)
 		}
 		
+		P::persistent_sync();
+		
 		Ok(CtoStrongArc::new(this))
 	}
 	
@@ -122,16 +179,18 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	}
 	
 	/// Enqueue an item.
+	/// Returns an error if out-of-memory when trying to enqueue; the queue is left in a safe state.
 	#[inline(always)]
-	pub fn enqueue(&self, item: NonNull<Value>)
+	pub fn enqueue(&self, item: NonNull<Value>) -> Result<(), OutOfMemoryError>
 	{
 		self.enqueue_faster(hyper_thread_index(), item)
 	}
 	
 	/// Enqueue an item.
+	/// Returns an error if out-of-memory when trying to enqueue; the queue is left in a safe state.
 	/// Slightly faster as no need to look up `hyper_thread_index`.
 	#[inline(always)]
-	pub fn enqueue_faster(&self, hyper_thread_index: usize, item: NonNull<Value>)
+	pub fn enqueue_faster(&self, hyper_thread_index: usize, item: NonNull<Value>) -> Result<(), OutOfMemoryError>
 	{
 		debug_assert!(hyper_thread_index < self.maximum_hyper_threads, "hyper_thread_index is too large");
 		
@@ -142,9 +201,9 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			
 			let next_enqueue_index = tail.fetch_then_increment_enqueue_index_in_items();
 			
-			if Node::<Value>::is_node_full(next_enqueue_index)
+			if next_enqueue_index.is_node_full()
 			{
-				if self.tail_is_no_longer(tail_non_null)
+				if self.has_tail_changed(tail_non_null)
 				{
 					continue;
 				}
@@ -152,16 +211,19 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 				let next = tail.next();
 				if next.is_null()
 				{
-					// TODO: Handle out-of-memory
-					let mut new_node = self.free_list.pop().expect("OUT OF MEMORY");
-					new_node.initialize_for_next(item);
-					if tail.next_compare_and_swap_strong_sequentially_consistent(null_mut(), new_node.as_ptr())
+					let mut new_tail = match self.free_list.pop()
 					{
-						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_node.to_non_null());
+						Some(new_tail) => new_tail,
+						None => return Err(OutOfMemoryError::FreeList),
+					};
+					new_tail.initialize_for_next(item);
+					if tail.next_compare_and_swap_strong_sequentially_consistent_if_next_is_still_null(new_tail.to_non_null())
+					{
+						self.tail_compare_and_swap_strong_sequentially_consistent(tail, new_tail.to_non_null());
 						self.clear(hyper_thread_index);
-						return
+						return Ok(())
 					}
-					self.free_list.push(new_node)
+					self.free_list.push(new_tail)
 				}
 				else
 				{
@@ -173,7 +235,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			if tail.compare_and_swap_strong_sequentially_consistent_item(next_enqueue_index, item)
 			{
 				self.clear(hyper_thread_index);
-				return
+				return Ok(())
 			}
 		}
 	}
@@ -203,7 +265,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 			}
 			
 			let next_dequeue_index = head.fetch_then_increment_dequeue_index_in_items();
-			if Node::<Value>::is_node_drained(next_dequeue_index)
+			if next_dequeue_index.is_node_drained()
 			{
 				let next = head.next();
 				
@@ -288,7 +350,7 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	}
 	
 	#[inline(always)]
-	fn tail_is_no_longer(&self, original_tail: NonNull<FreeListElement<Node<Value>>>) -> bool
+	fn has_tail_changed(&self, original_tail: NonNull<FreeListElement<Node<Value>>>) -> bool
 	{
 		original_tail.as_ptr() != self.tail().as_ptr()
 	}
