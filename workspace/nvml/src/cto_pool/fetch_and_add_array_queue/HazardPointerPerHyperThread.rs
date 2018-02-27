@@ -106,11 +106,11 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	pub(crate) fn retire(&self, maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Hazardous>>, hyper_thread_index: usize, retire_this_object: NonNull<FreeListElement<Hazardous>>)
 	{
 		let length =
-			{
-				let retired_list_for_hyper_thread = self.retired_list_for_hyper_thread_mut(hyper_thread_index);
-				free_list.push(OwnedFreeListElement::from_non_null(retire_this_object));
-				retired_list_for_hyper_thread.len()
-			};
+		{
+			let retired_list_for_hyper_thread = self.retired_list_for_hyper_thread_mut(hyper_thread_index);
+			free_list.push(OwnedFreeListElement::from_non_null(retire_this_object));
+			retired_list_for_hyper_thread.len()
+		};
 		
 		if length >= Self::ReclamationThreshold
 		{
@@ -167,16 +167,16 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	{
 		let our_retired_object = our_retired_object.as_ptr();
 		
-		let mut othercurrent_hyper_thread_index = 0;
-		while othercurrent_hyper_thread_index < maximum_hyper_threads
+		let mut other_current_hyper_thread_index = 0;
+		while other_current_hyper_thread_index < maximum_hyper_threads
 		{
-			if self.hazard_pointer_for_hyper_thread(othercurrent_hyper_thread_index).load(SeqCst) == our_retired_object
+			if self.hazard_pointer_for_hyper_thread(other_current_hyper_thread_index).load(SeqCst) == our_retired_object
 			{
 				// Another hyper thread is using a reference to `our_retired_object`, so return early and try the next our_retired_object_index
 				return false
 			}
 			
-			othercurrent_hyper_thread_index += 1;
+			other_current_hyper_thread_index += 1;
 		}
 		true
 	}

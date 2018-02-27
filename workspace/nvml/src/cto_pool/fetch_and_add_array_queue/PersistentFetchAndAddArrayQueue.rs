@@ -75,19 +75,19 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 		{
 			None => return Err(OutOfMemoryError::FreeList),
 			Some(mut initial_free_list_element) =>
-				{
-					initial_free_list_element.initialize_for_initial();
-					initial_free_list_element
-				},
+			{
+				initial_free_list_element.initialize_for_initial();
+				initial_free_list_element
+			},
 		};
 		
 		let mut this = match cto_pool_arc.pool_pointer().malloc::<Self>()
 		{
 			Err(pmdk_error) =>
-				{
-					free_list.push(initial_free_list_element);
-					return Err(OutOfMemoryError::CtoPoolArc(pmdk_error))
-				},
+			{
+				free_list.push(initial_free_list_element);
+				return Err(OutOfMemoryError::CtoPoolArc(pmdk_error))
+			},
 			Ok(pointer) => pointer.to_non_null(),
 		};
 		
