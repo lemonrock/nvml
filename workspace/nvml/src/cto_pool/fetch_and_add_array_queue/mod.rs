@@ -22,11 +22,244 @@ use ::std::ops::DerefMut;
 use ::std::ptr::null_mut;
 use ::std::ptr::write;
 use ::std::sync::atomic::AtomicU32;
+use ::std::sync::atomic::AtomicUsize;
 use ::std::sync::atomic::AtomicPtr;
 use ::std::sync::atomic::Ordering::Relaxed;
 use ::std::sync::atomic::Ordering::Release;
 use ::std::sync::atomic::Ordering::SeqCst;
 
+
+const MaximumSupportedHyperThreads: usize = 256;
+
+// NOTE: We do not use the `num_cpus` crate, because it gets the number of CPUs from thread affinity - and our thread may already have had its affinity set.
+// On Linux glibc & musl, there are also the functions `get_nprocs()` and `get_nprocs_conf()` but these either use `/sys` (glibc) or delegate to `sysconf()` (musl).
+/// Maximum number of hyper threads.
+/// Stays constant throughout program execution.
+#[inline(always)]
+pub fn maximum_number_of_hyper_threads() -> usize
+{
+	#[cfg(target_os = "windows")]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		use ::winapi::um::sysinfoapi::GetSystemInfo;
+		use ::winapi::um::sysinfoapi::SYSTEM_INFO;
+		
+		let mut lpSystemInfo: SYSTEM_INFO = unsafe { uninitialized() };
+		unsafe { GetSystemInfo(&mut lpSystemInfo) };
+		
+		lpSystemInfo.dwNumberOfProcessors as usize
+	}
+	
+	#[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "ios", target_os = "linux", target_os = "macos", target_os = "nacl", target_os = "solaris"))]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		let result = sysconf_current_number_of_hyper_threads();
+		if result > 0
+		{
+			return result as usize;
+		}
+		else
+		{
+			1
+		}
+	}
+	
+	#[cfg(any(target_os = "bitrig", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd"))]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		let result = sysconf_maximum_number_of_hyper_threads();
+		if result > 0
+		{
+			return result as usize;
+		}
+		else
+		{
+			sysctl_current_number_of_hyper_threads()
+		}
+	}
+	
+	#[cfg(target_os = "openbsd")]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		sysctl_maximum_number_of_hyper_threads()
+	}
+	
+	#[cfg(any(target_os = "emscripten", target_os = "haiku", target_os = "redox"))]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		1
+	}
+	
+	#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))]
+	fn current_number_of_hyper_threads() -> usize
+	{
+		1
+	}
+	
+	#[cfg(any(target_os = "android", target_os = "bitrig", target_os = "dragonfly", target_os = "freebsd", target_os = "fuchsia", target_os = "ios", target_os = "linux", target_os = "macos",target_os = "nacl", target_os = "netbsd", target_os = "openbsd", target_os = "solaris"))]
+	fn sysconf_current_number_of_hyper_threads() -> ::libc::c_long
+	{
+		use ::libc::c_int;
+		use ::libc::sysconf;
+		
+		// On ARM targets, processors can be temporarily turned off to save power.
+		// On other platforms, this is unlikely to be the case.
+		#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+		const SysConfKey: c_int = ::libc::_SC_NPROCESSORS_CONF;
+		
+		#[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+		const SysConfKey: c_int = ::libc::_SC_NPROCESSORS_ONLN;
+		
+		unsafe { sysconf(SysConfKey) }
+	}
+	
+	#[cfg(any(target_os = "bitrig", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+	fn sysctl_current_number_of_hyper_threads() -> usize
+	{
+		use ::libc::c_uint;
+		use ::libc::CTL_HW;
+		use ::libc::HW_NCPU;
+		use ::libc::sysctl;
+		use ::std::size_of;
+		
+		let mut mib = [CTL_HW, HW_NCPU, 0, 0];
+		let mut cpus: c_uint = unsafe { unintialized() };
+		let mut cpus_size = size_of::<c_uint>();
+		unsafe { sysctl(mib.as_mut_ptr(), 2, &mut cpus as *mut _ as *mut _, &mut cpus_size as *mut _ as *mut _, 0 as *mut _, 0) };
+		if cpus > 0
+		{
+			cpus as usize
+		}
+		else
+		{
+			1
+		}
+	}
+	
+	const UninitializedMaximumNumberOfHyperThreads: usize = ::std::usize::MAX;
+	
+	static MaximumNumberOfHyperThreads: AtomicUsize = AtomicUsize::new(UninitializedMaximumNumberOfHyperThreads);
+	
+	let maximum_number_of_hyper_threads = MaximumNumberOfHyperThreads.load(Relaxed);
+	if maximum_number_of_hyper_threads == UninitializedMaximumNumberOfHyperThreads
+	{
+		let current_number_of_hyper_threads = current_number_of_hyper_threads();
+		debug_assert_ne!(current_number_of_hyper_threads, 0, "The current_number_of_hyper_threads is zero");
+		debug_assert_ne!(current_number_of_hyper_threads, UninitializedMaximumNumberOfHyperThreads, "The current_number_of_hyper_threads is bonkers");
+		assert!(current_number_of_hyper_threads <= MaximumSupportedHyperThreads, "The current_number_of_hyper_threads '{}' exceeds the compiled maximum MaximumSupportedHyperThreads '{}'", current_number_of_hyper_threads, MaximumSupportedHyperThreads);
+		MaximumNumberOfHyperThreads.compare_and_swap(UninitializedMaximumNumberOfHyperThreads, current_number_of_hyper_threads, Relaxed)
+	}
+	else
+	{
+		maximum_number_of_hyper_threads
+	}
+}
+
+
+// NOTE: Mac OS X does not support fixed thread affinity.
+// NOTE: FreeBSD, NetBSD, OpenBSD and BitRig seem to have no equivalent of `sched_getcpu()`.
+// NOTE: Fuschia, Haiku and Redox haven't been investigated.
+// NOTE: For all modern x86_64 / x86 CPUs, it is probably possible to use CPUID but it's not straightforward. For example, RocksDb does it but there is not certainty that it handles CPUs newer than Westmere correctly: [See PhysiclCoreID](https://github.com/facebook/rocksdb/blob/aba34097405f076529072fc4cffcba27dd41e73a/port/port_posix.cc) or <https://stackoverflow.com/questions/33745364/sched-getcpu-equivalent-for-os-x>
+// NOTE: Also <https://trac.wildfiregames.com/browser/ps/trunk/source/lib/sysdep/arch/x86_x64/topology.cpp>
+/// Attempts to return a hyper thread's index.
+/// Useful only for algorithms requiring a hyper thread index which starts at zero.
+/// Does not necessarily map to a CPU number, eg Linux's `sched_getcpu()`.
+/// Once assigned for a thread, never changes.
+/// Thread death will cause all sorts of problems...
+#[inline(always)]
+pub fn hyper_thread_index() -> usize
+{
+//	// AIX: `mycpu()`.
+//
+//	// BlueGene/Q: `Kernel_ProcessorID()`.
+//
+//	//noinspection SpellCheckingInspection
+//	#[cfg(any(target_os = "android", target_os = "linux"))]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		use ::libc::sched_getcpu;
+//
+//		let result = unsafe { sched_getcpu() };
+//		debug_assert!(result >= 0, "sched_getcpu() was negative");
+//		result as usize
+//	}
+//
+//	// NOTE: Not present in Rust libc as of this time
+//	//noinspection SpellCheckingInspection
+//	#[cfg(any(target_os = "dragonfly"))]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		extern "C"
+//		{
+//			fn sched_getcpu() -> ::libc::c_int;
+//		}
+//
+//		let result = unsafe { sched_getcpu() };
+//		debug_assert!(result >= 0, "sched_getcpu() was negative");
+//		result as usize
+//	}
+//
+//	//noinspection SpellCheckingInspection
+//	#[cfg(target_os = "solaris")]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		// sys/processor.h
+//		type processorid_t = ::libc::c_int;
+//		extern "C"
+//		{
+//			fn getcpuid() -> processorid_t;
+//		}
+//
+//		let result = unsafe { getcpuid() };
+//		debug_assert!(result >= 0, "getcpuid() was negative");
+//		result as usize
+//	}
+//
+//	#[cfg(target_os = "windows")]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		use ::kernel32::GetCurrentProcessorNumberEx;
+//		use ::winapi::winnt::PROCESSOR_NUMBER;
+//
+//		let mut processor_number: PROCESSOR_NUMBER = unsafe { uninitialized() };
+//		unsafe { GetCurrentProcessorNumberEx(&mut processor_number) };
+//
+//		(processor_number.GROUP * 64 + (processor_number.Number as u16)) as usize
+//	}
+//
+//	#[cfg(any(target_os = "emscripten", target_os = "haiku", target_os = "redox"))]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		0
+//	}
+//
+//	#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))]
+//	fn current_hyper_thread_index() -> usize
+//	{
+//		0
+//	}
+	
+	const UninitializedHyperThreadIndex: usize = ::std::usize::MAX;
+	
+	static NextHyperThreadIndex: AtomicUsize = AtomicUsize::new(0);
+	#[thread_local] static mut HyperThreadIndex: usize = UninitializedHyperThreadIndex;
+	
+	let hyper_thread_index = unsafe { HyperThreadIndex };
+	
+	if hyper_thread_index == UninitializedHyperThreadIndex
+	{
+		let current_hyper_thread_index = NextHyperThreadIndex.fetch_add(1, Relaxed);;
+		debug_assert_ne!(current_hyper_thread_index, UninitializedHyperThreadIndex, "Too many hyper threads");
+		assert!(current_hyper_thread_index < MaximumSupportedHyperThreads, "The current_hyper_thread_index '{}' equals or exceeds the compiled maximum MaximumSupportedHyperThreads '{}'", current_hyper_thread_index, MaximumSupportedHyperThreads);
+		assert!(current_hyper_thread_index < MaximumSupportedHyperThreads, "The current_hyper_thread_index '{}' equals or exceeds the maximum_number_of_hyper_threads '{}'", current_hyper_thread_index, maximum_number_of_hyper_threads());
+		unsafe { HyperThreadIndex = current_hyper_thread_index };
+		current_hyper_thread_index
+	}
+	else
+	{
+		hyper_thread_index
+	}
+}
 
 trait ExtendedAtomic<T>
 {
@@ -101,8 +334,6 @@ impl<T> DoubleCacheAligned<T>
 	}
 }
 
-const MaximumSupportedHyperThreads: usize = 256;
-
 
 // Implementation based on the paper (Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects)[http://web.cecs.pdx.edu/~walpole/class/cs510/papers/11.pdf] by Maged M Michael.
 #[cfg_attr(target_pointer_width = "32", repr(C, align(64)))]
@@ -127,8 +358,6 @@ impl<Hazardous: CtoSafe> Debug for HazardPointerPerHyperThread<Hazardous>
 
 impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 {
-	const MaximumSupportedHyperThreads: usize = MaximumSupportedHyperThreads;
-	
 	// This is 'R' in the paper (Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects)[http://web.cecs.pdx.edu/~walpole/class/cs510/papers/11.pdf].
 	// With a ReclamationThreshold of 1, this will always be true... as `retired_list_for_hyper_thread.push()` occurred above.
 	const ReclamationThreshold: usize = 1;
@@ -271,16 +500,16 @@ impl<Hazardous: CtoSafe> HazardPointerPerHyperThread<Hazardous>
 	{
 		let our_retired_object = our_retired_object.as_ptr();
 		
-		let mut other_hyper_thread_index = 0;
-		while other_hyper_thread_index < maximum_hyper_threads
+		let mut othercurrent_hyper_thread_index = 0;
+		while othercurrent_hyper_thread_index < maximum_hyper_threads
 		{
-			if self.hazard_pointer_for_hyper_thread(other_hyper_thread_index).load(SeqCst) == our_retired_object
+			if self.hazard_pointer_for_hyper_thread(othercurrent_hyper_thread_index).load(SeqCst) == our_retired_object
 			{
 				// Another hyper thread is using a reference to `our_retired_object`, so return early and try the next our_retired_object_index
 				return false
 			}
 			
-			other_hyper_thread_index += 1;
+			othercurrent_hyper_thread_index += 1;
 		}
 		true
 	}
@@ -518,6 +747,7 @@ impl<Value: CtoSafe> CtoSafe for PersistentFetchAndAddArrayQueue<Value>
 		self.free_list.cto_pool_opened(cto_pool_arc);
 		cto_pool_arc.write(&mut self.cto_pool_arc);
 		
+		self.reinitialize_maximum_hyper_threads();
 		self.reinitialize_hazard_pointers();
 		
 		// head is never null.
@@ -532,10 +762,8 @@ impl<Value: CtoSafe> Drop for PersistentFetchAndAddArrayQueue<Value>
 	#[inline(always)]
 	fn drop(&mut self)
 	{
-		const ArbitraryHyperThreadIndex: usize = 0;
-		
 		// Drain the queue.
-		while self.dequeue(ArbitraryHyperThreadIndex).is_some()
+		while self.dequeue_faster(hyper_thread_index()).is_some()
 		{
 		}
 		
@@ -561,10 +789,9 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 {
 	/// Creates a new instance.
 	#[inline(always)]
-	pub fn new(maximum_hyper_threads: usize, free_list: &CtoStrongArc<FreeList<Node<Value>>>, cto_pool_arc: &CtoPoolArc) -> Result<CtoStrongArc<Self>, OutOfMemoryError>
+	pub fn new(free_list: &CtoStrongArc<FreeList<Node<Value>>>, cto_pool_arc: &CtoPoolArc) -> Result<CtoStrongArc<Self>, OutOfMemoryError>
 	{
-		debug_assert_ne!(maximum_hyper_threads, 0);
-		debug_assert!(maximum_hyper_threads <= HazardPointerPerHyperThread::<Value>::MaximumSupportedHyperThreads);
+		let maximum_hyper_threads = maximum_number_of_hyper_threads();
 		
 		let initial_free_list_element = match free_list.pop()
 		{
@@ -618,7 +845,15 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	
 	/// Enqueue an item.
 	#[inline(always)]
-	pub fn enqueue(&self, hyper_thread_index: usize, item: NonNull<Value>)
+	pub fn enqueue(&self, item: NonNull<Value>)
+	{
+		self.enqueue_faster(hyper_thread_index(), item)
+	}
+	
+	/// Enqueue an item.
+	/// Slightly faster as no need to look up `hyper_thread_index`.
+	#[inline(always)]
+	pub fn enqueue_faster(&self, hyper_thread_index: usize, item: NonNull<Value>)
 	{
 		debug_assert!(hyper_thread_index < self.maximum_hyper_threads, "hyper_thread_index is too large");
 		
@@ -667,7 +902,15 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	
 	/// Dequeue an item.
 	#[inline(always)]
-	pub fn dequeue(&self, hyper_thread_index: usize) -> Option<NonNull<Value>>
+	pub fn dequeue(&self) -> Option<NonNull<Value>>
+	{
+		self.dequeue_faster(hyper_thread_index())
+	}
+	
+	/// Dequeue an item.
+	/// Slightly faster as no need to look up `hyper_thread_index`.
+	#[inline(always)]
+	pub fn dequeue_faster(&self, hyper_thread_index: usize) -> Option<NonNull<Value>>
 	{
 		debug_assert!(hyper_thread_index < self.maximum_hyper_threads, "hyper_thread_index is too large");
 		
@@ -716,6 +959,12 @@ impl<Value: CtoSafe> PersistentFetchAndAddArrayQueue<Value>
 	{
 		self.clear(hyper_thread_index);
 		dequeued_item
+	}
+	
+	#[inline(always)]
+	fn reinitialize_maximum_hyper_threads(&mut self)
+	{
+		unsafe { write(&mut self.maximum_hyper_threads, maximum_number_of_hyper_threads()) }
 	}
 	
 	#[inline(always)]

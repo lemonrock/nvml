@@ -60,6 +60,7 @@
 extern crate alloc;
 #[macro_use] extern crate bitflags;
 extern crate errno;
+#[cfg(target_os = "windows")] extern crate kernel32;
 extern crate libc;
 extern crate nvml_sys;
 pub extern crate parking_lot;
@@ -71,6 +72,7 @@ extern crate serde;
 extern crate spin_locks;
 extern crate std_unicode;
 extern crate syscall_alt;
+#[cfg(target_os = "windows")] extern crate winapi;
 
 
 include!("use_path.rs");

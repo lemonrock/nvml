@@ -91,6 +91,8 @@
       <w>strdup</w>
       <w>structs</w>
       <w>sundell</w>
+      <w>sysconf</w>
+      <w>sysctl</w>
       <w>toid</w>
       <w>tsigas</w>
       <w>unbagged</w>
